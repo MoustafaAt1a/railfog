@@ -1010,7 +1010,21 @@ if (import.meta.main) {
 
   const port = parseInt(Deno.env.get("PORT") || "8081", 10);
   const host = Deno.env.get("HOST") || "0.0.0.0";
-  const storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR") || ".railfog/objects";
+  let storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR");
+  if (!storageDir) {
+    try {
+      await Deno.mkdir(".railfog/objects", { recursive: true });
+      storageDir = ".railfog/objects";
+    } catch {
+      // Fallback to /tmp/railfog/objects if current directory is not writable (e.g. unprivileged Docker container)
+      storageDir = "/tmp/railfog/objects";
+      try {
+        await Deno.mkdir(storageDir, { recursive: true });
+      } catch {
+        // Best effort
+      }
+    }
+  }
   const storage = new LocalFSProvider(storageDir);
 
   const databaseUrl = Deno.env.get("DATABASE_URL");

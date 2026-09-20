@@ -25,6 +25,10 @@ RUN addgroup -g 10001 railfog && \
 # Copy project files with unprivileged ownership
 COPY --chown=10001:10001 --from=builder /app /app
 
+RUN mkdir -p /app/.railfog/objects /tmp/railfog/objects && \
+    chown -R 10001:10001 /app /tmp/railfog && \
+    chmod -R 775 /app/.railfog /tmp/railfog
+
 # spec: contracts/platform.contract.md#PLAT-1 — Control plane port (8081)
 EXPOSE 8081
 
