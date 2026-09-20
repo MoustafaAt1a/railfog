@@ -51,6 +51,7 @@ import {
 } from "../../sdk/typescript/helpers.ts";
 
 import {
+  createRpcClient,
   normalizeError,
   wrapContext,
   wrapEnvBinding,
@@ -1668,4 +1669,51 @@ Deno.test("Q-5: withRetry executes synchronous action callbacks seamlessly", asy
 
   assertEquals(result, "success_sync");
   assertEquals(attempts, 3);
+});
+
+Deno.test("RPC Client: createRpcClient handles GET, POST, and typed error normalization", async () => {
+  const mockFetch = async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => {
+    await Promise.resolve();
+    const urlStr = String(input);
+    const method = init?.method ?? "GET";
+
+    if (urlStr.includes("/api/hello")) {
+      return Response.json({ message: "Hello from RPC" }, { status: 200 });
+    }
+    if (urlStr.includes("/api/echo") && method === "POST") {
+      const parsed = JSON.parse(String(init?.body));
+      return Response.json({ echoed: parsed }, { status: 201 });
+    }
+    if (urlStr.includes("/api/not-found")) {
+      return Response.json({
+        error: { code: "RESOURCE_NOT_FOUND", message: "Item missing" },
+      }, { status: 404 });
+    }
+    return new Response("Unknown", { status: 404 });
+  };
+
+  const client = createRpcClient("https://example.railfog.internal", {
+    fetch: mockFetch as unknown as typeof fetch,
+  });
+
+  // Test GET
+  const getRes = await client.get<{ message: string }>("/api/hello");
+  assertEquals(getRes.message, "Hello from RPC");
+
+  // Test POST
+  const postRes = await client.post<{ echoed: { count: number } }>(
+    "/api/echo",
+    { count: 42 },
+  );
+  assertEquals(postRes.echoed.count, 42);
+
+  // Test Error Normalization
+  await assertRejects(
+    () => client.get("/api/not-found"),
+    ResourceNotFoundError,
+    "Item missing",
+  );
 });

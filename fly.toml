@@ -1,0 +1,27 @@
+# Fly.io deployment configuration for RailFog
+# Spec reference: contracts/platform.contract.md#PLAT-1, PLAT-17
+
+app = "railfog"
+primary_region = "iad"
+
+[build]
+  dockerfile = "infra/Dockerfile.runtime"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 1000
+    soft_limit = 800
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "15s"
+  method = "GET"
+  timeout = "2s"
+  path = "/healthz"

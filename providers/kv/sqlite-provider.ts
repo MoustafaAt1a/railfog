@@ -24,6 +24,7 @@ export class SQLiteKVProvider implements KVProvider {
   }
 
   public encodeKeyPath(key: string[]): string {
+    if (key.length === 0) return "";
     return key.map((seg) => encodeURIComponent(seg)).join("/") + "/";
   }
 

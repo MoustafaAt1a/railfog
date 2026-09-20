@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://railfog.dev/schemas/railfog.schema.json",
+  "title": "RailFog Project Configuration",
+  "description": "Configuration schema for railfog.toml projects defining Functions, Routes, and Capability Permissions",
+  "type": "object",
+  "required": ["name", "functions", "routes"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URI pointing to this JSON Schema for IDE validation and autocomplete"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+      "description": "Project identifier. Must start with an alphanumeric character and contain only alphanumeric, underscore, dot, or hyphen characters (PLAT-18)."
+    },
+    "functions": {
+      "type": "object",
+      "description": "Map of function identifiers to their code entry points, capability permissions, triggers, and resource limits (FN-1, PLAT-6, PLAT-18).",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["entry"],
+        "additionalProperties": false,
+        "properties": {
+          "entry": {
+            "type": "string",
+            "description": "Relative path to the TypeScript handler module (e.g. functions/api.ts) within the project root (FN-1, PLAT-6)."
+          },
+          "permissions": {
+            "type": "object",
+            "description": "Strict capability scopes injected into the function's context (PLAT-6, PLAT-15).",
+            "additionalProperties": false,
+            "properties": {
+              "kv": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Array of KV namespace identifiers accessible via c.kv (KV-2, PLAT-6)."
+              },
+              "objects": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Array of Object bucket identifiers accessible via c.objects (OBJ-2, PLAT-6)."
+              },
+              "queues": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Array of Queue identifiers accessible via c.queues (Q-2, PLAT-6)."
+              },
+              "network": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Outbound network allowlist patterns (host:port or domain). SSRF-blocked IP ranges are strictly prohibited (PLAT-5)."
+              },
+              "secrets": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                "description": "Encrypted secret identifiers accessible via c.env (PLAT-15)."
+              }
+            }
+          },
+          "triggers": {
+            "type": "object",
+            "description": "Background triggers activating this function (FN-2).",
+            "additionalProperties": false,
+            "properties": {
+              "queue": {
+                "type": "string",
+                "description": "Queue identifier this function consumes messages from (FN-2, Q-2)."
+              },
+              "schedule": {
+                "type": "string",
+                "description": "Standard 5-field cron expression for recurring scheduled invocations (FN-2)."
+              }
+            }
+          },
+          "limits": {
+            "type": "object",
+            "description": "Per-invocation resource limit ceilings (FN-5).",
+            "additionalProperties": false,
+            "properties": {
+              "memory_mb": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1024,
+                "default": 128,
+                "description": "Memory ceiling in megabytes (1 to 1024 MB, default: 128 MB) (FN-5)."
+              },
+              "timeout_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 900000,
+                "default": 10000,
+                "description": "Wall-clock timeout in milliseconds. Max 30,000ms for HTTP triggers, 900,000ms for background triggers (FN-5)."
+              },
+              "cpu_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "CPU time limit in milliseconds (FN-5)."
+              }
+            }
+          }
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "description": "HTTP route declarations mapping URL patterns to function names (PLAT-11). Evaluated by specificity score.",
+      "items": {
+        "type": "object",
+        "required": ["pattern", "function"],
+        "additionalProperties": false,
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "URL pattern matching incoming request paths (e.g. '/api/*', '/users/:id') (PLAT-11)."
+          },
+          "function": {
+            "type": "string",
+            "description": "Target function name defined in [functions] (PLAT-11)."
+          }
+        }
+      }
+    },
+    "kv": {
+      "type": "object",
+      "description": "Global KV configuration options (KV-5).",
+      "additionalProperties": false,
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["strong", "eventual"],
+          "description": "Required consistency tier. Strong tier requires CAS-capable backing provider (KV-5)."
+        }
+      }
+    }
+  }
+}

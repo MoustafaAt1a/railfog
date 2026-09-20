@@ -359,3 +359,156 @@ export function wrapContext(ctx: RailFogContext): RailFogContext {
     env: wrapEnvBinding(ctx.env),
   };
 }
+
+export interface RpcClientOptions {
+  headers?: Record<string, string>;
+  fetch?: typeof fetch;
+}
+
+export interface RpcClient {
+  fetch(path: string, init?: RequestInit): Promise<Response>;
+  get<T = unknown>(
+    path: string,
+    options?: {
+      headers?: Record<string, string>;
+      query?: Record<string, string>;
+    },
+  ): Promise<T>;
+  post<T = unknown>(
+    path: string,
+    body?: unknown,
+    options?: { headers?: Record<string, string> },
+  ): Promise<T>;
+  put<T = unknown>(
+    path: string,
+    body?: unknown,
+    options?: { headers?: Record<string, string> },
+  ): Promise<T>;
+  delete<T = unknown>(
+    path: string,
+    options?: { headers?: Record<string, string> },
+  ): Promise<T>;
+}
+
+/**
+ * Creates a type-safe RPC client targeting a RailFog deployment or local dev server.
+ * Automatically handles JSON serialization, query parameter formatting, and PLAT-12 error normalization.
+ *
+ * @spec contracts/platform.contract.md#PLAT-12 — Canonical error normalization
+ */
+export function createRpcClient(
+  baseUrl: string,
+  options?: RpcClientOptions,
+): RpcClient {
+  const url = baseUrl.replace(/\/+$/, "");
+  const customFetch = options?.fetch ?? fetch;
+
+  async function request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+    query?: Record<string, string>,
+  ): Promise<T> {
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    let targetUrl = `${url}${cleanPath}`;
+    if (query && Object.keys(query).length > 0) {
+      const sp = new URLSearchParams(query);
+      targetUrl += `?${sp.toString()}`;
+    }
+
+    const headers = new Headers(options?.headers);
+    if (extraHeaders) {
+      for (const [k, v] of Object.entries(extraHeaders)) {
+        headers.set(k, v);
+      }
+    }
+
+    let bodyPayload: BodyInit | undefined;
+    if (body !== undefined) {
+      if (
+        typeof body === "string" ||
+        body instanceof Uint8Array ||
+        body instanceof Blob ||
+        body instanceof FormData
+      ) {
+        bodyPayload = body as BodyInit;
+      } else {
+        bodyPayload = JSON.stringify(body);
+        if (!headers.has("content-type")) {
+          headers.set("content-type", "application/json");
+        }
+      }
+    }
+
+    const res = await customFetch(targetUrl, {
+      method,
+      headers,
+      body: bodyPayload,
+    });
+
+    if (!res.ok) {
+      let bodyText = "";
+      try {
+        bodyText = await res.text();
+      } catch {
+        // ignore
+      }
+      try {
+        const parsed = JSON.parse(bodyText);
+        throw normalizeError(
+          parsed,
+          res.headers.get("x-request-id") ?? undefined,
+        );
+      } catch (err) {
+        if (err instanceof RailFogError) throw err;
+        throw normalizeError(
+          { code: "INTERNAL", message: bodyText || res.statusText },
+          res.headers.get("x-request-id") ?? undefined,
+        );
+      }
+    }
+
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      return (await res.json()) as T;
+    }
+    return (await res.text()) as unknown as T;
+  }
+
+  return {
+    async fetch(path: string, init?: RequestInit): Promise<Response> {
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      return await customFetch(`${url}${cleanPath}`, init);
+    },
+    get<T = unknown>(
+      path: string,
+      opts?: {
+        headers?: Record<string, string>;
+        query?: Record<string, string>;
+      },
+    ): Promise<T> {
+      return request<T>("GET", path, undefined, opts?.headers, opts?.query);
+    },
+    post<T = unknown>(
+      path: string,
+      body?: unknown,
+      opts?: { headers?: Record<string, string> },
+    ): Promise<T> {
+      return request<T>("POST", path, body, opts?.headers);
+    },
+    put<T = unknown>(
+      path: string,
+      body?: unknown,
+      opts?: { headers?: Record<string, string> },
+    ): Promise<T> {
+      return request<T>("PUT", path, body, opts?.headers);
+    },
+    delete<T = unknown>(
+      path: string,
+      opts?: { headers?: Record<string, string> },
+    ): Promise<T> {
+      return request<T>("DELETE", path, undefined, opts?.headers);
+    },
+  };
+}

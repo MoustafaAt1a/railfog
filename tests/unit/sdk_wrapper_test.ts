@@ -1010,3 +1010,44 @@ Deno.test("T-0810 / Ergonomics: api() provides c.params containing URLPattern ro
   const data = await res.json();
   assertEquals(data, { userId: "usr_100", postId: "pst_200" });
 });
+
+Deno.test("T-0810 / Ergonomics: c.stream() emits chunked byte stream", async () => {
+  const handler = handle((c) => {
+    return c.stream(async (writer) => {
+      await writer.write("chunk-1;");
+      await writer.write("chunk-2;");
+      await writer.close();
+    });
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/stream");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("content-type"), "application/octet-stream");
+  const bodyText = await res.text();
+  assertEquals(bodyText, "chunk-1;chunk-2;");
+});
+
+Deno.test("T-0810 / Ergonomics: c.sse() emits formatted text/event-stream events", async () => {
+  const handler = handle((c) => {
+    return c.sse(async (sse) => {
+      await sse.send({ event: "message", data: { text: "hello" }, id: "1" });
+      await sse.send({ data: "world" });
+      await sse.close();
+    });
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/events");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("content-type"), "text/event-stream");
+  const bodyText = await res.text();
+  assert(bodyText.includes("id: 1\n"));
+  assert(bodyText.includes("event: message\n"));
+  assert(bodyText.includes('data: {"text":"hello"}\n'));
+  assert(bodyText.includes("data: world\n"));
+});

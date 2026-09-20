@@ -678,6 +678,14 @@ export async function main(args: string[] = Deno.args): Promise<void> {
               console.log(`\nOpening ${url} in browser...`);
               await systemOpenBrowser(url);
             }
+            // 'd' / 'D': open dashboard in browser
+            if (char === "d" || char === "D") {
+              const url = `http://${
+                host ?? "localhost"
+              }:${server.port}/__railfog`;
+              console.log(`\nOpening dashboard ${url} in browser...`);
+              await systemOpenBrowser(url);
+            }
             // 'c' / 'C': clear console and reprint banner
             if (char === "c" || char === "C") {
               console.clear();

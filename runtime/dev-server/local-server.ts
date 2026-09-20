@@ -47,6 +47,7 @@ import {
   type RouteConfig,
   specificityScore,
 } from "../router/route-matcher.ts";
+import { handleDashboardRequest } from "./dashboard.ts";
 import { ProjectWatcher } from "./watcher.ts";
 
 function isColorSupported(): boolean {
@@ -125,6 +126,7 @@ export function formatStartupBanner(
   const host = options?.host ?? "localhost";
   const lines: string[] = [
     `RailFog dev server running on http://${host}:${port}`,
+    `Dashboard on http://${host}:${port}/__railfog`,
     "",
     "Local providers (PLAT-17 parity):",
     "  KV & Queues: SQLite",
@@ -148,7 +150,9 @@ export function formatStartupBanner(
   }
 
   lines.push("");
-  lines.push("Ready for requests. [b] browser  [c] clear  [q] quit");
+  lines.push(
+    "Ready for requests. [b] browser  [d] dashboard  [c] clear  [q] quit",
+  );
 
   return lines.join("\n");
 }
@@ -300,6 +304,24 @@ export async function startLocalServer(
         }));
       }
     };
+
+    // Embedded Local Dev Dashboard (PLAT-17 / PLAT-19)
+    if (
+      url.pathname === "/__railfog" || url.pathname.startsWith("/__railfog/")
+    ) {
+      finalRequestId = generateUlid();
+      const dashRes = await handleDashboardRequest(req, url, currentConfig, {
+        orgId,
+        projectId,
+        kvProvider,
+        objectsProvider,
+        queuesProvider,
+        routes,
+      });
+      finalStatus = dashRes.status;
+      logCompletedRequest();
+      return dashRes;
+    }
 
     // spec: docs/contracts/platform.contract.md#PLAT-11 — Route matching with specificity score
     const matchedRoute = matchRoute(routes, url.pathname);

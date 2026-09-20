@@ -15,6 +15,32 @@ import {
 } from "../../packages/errors/mod.ts";
 
 /**
+ * Stream writer interface for chunked and streaming HTTP responses.
+ */
+export interface StreamWriter {
+  write(chunk: Uint8Array | string): Promise<void>;
+  close(): Promise<void>;
+}
+
+/**
+ * Server-Sent Events (SSE) event shape.
+ */
+export interface SseEvent {
+  data: unknown;
+  event?: string;
+  id?: string;
+  retry?: number;
+}
+
+/**
+ * Server-Sent Events (SSE) writer interface.
+ */
+export interface SseWriter {
+  send(event: SseEvent): Promise<void>;
+  close(): Promise<void>;
+}
+
+/**
  * Augmented context provided to ergonomic function handlers.
  * Extends RailFogContext with convenient request accessors and response builders.
  *
@@ -27,6 +53,14 @@ export interface HandlerContext extends RailFogContext {
   body<T = unknown>(): Promise<T>;
   json(data: unknown, status?: number): Response;
   text(str: string, status?: number): Response;
+  stream(
+    fn: (writer: StreamWriter) => Promise<void> | void,
+    options?: { status?: number; headers?: HeadersInit },
+  ): Response;
+  sse(
+    fn: (sse: SseWriter) => Promise<void> | void,
+    options?: { status?: number; headers?: HeadersInit },
+  ): Response;
 }
 
 /**
@@ -166,6 +200,109 @@ export function handle(fn: HandlerFn): FunctionHandler {
         return new Response(str, {
           status,
           headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      },
+      stream(
+        fn: (writer: StreamWriter) => Promise<void> | void,
+        options?: { status?: number; headers?: HeadersInit },
+      ): Response {
+        const transform = new TransformStream<Uint8Array, Uint8Array>();
+        const sink = transform.writable.getWriter();
+        const encoder = new TextEncoder();
+
+        const writer: StreamWriter = {
+          async write(chunk: Uint8Array | string) {
+            const bytes = typeof chunk === "string"
+              ? encoder.encode(chunk)
+              : chunk;
+            await sink.write(bytes);
+          },
+          async close() {
+            try {
+              await sink.close();
+            } catch {
+              // ignore if already closed
+            }
+          },
+        };
+
+        (async () => {
+          try {
+            await fn(writer);
+          } catch (err) {
+            console.error("Stream producer error:", err);
+          } finally {
+            try {
+              await sink.close();
+            } catch {
+              // already closed
+            }
+          }
+        })();
+
+        const headers = new Headers(options?.headers);
+        if (!headers.has("content-type")) {
+          headers.set("content-type", "application/octet-stream");
+        }
+        return new Response(transform.readable, {
+          status: options?.status ?? 200,
+          headers,
+        });
+      },
+      sse(
+        fn: (sse: SseWriter) => Promise<void> | void,
+        options?: { status?: number; headers?: HeadersInit },
+      ): Response {
+        const transform = new TransformStream<Uint8Array, Uint8Array>();
+        const sink = transform.writable.getWriter();
+        const encoder = new TextEncoder();
+
+        const sseWriter: SseWriter = {
+          async send(event: SseEvent) {
+            let payload = "";
+            if (event.id !== undefined) payload += `id: ${event.id}\n`;
+            if (event.event !== undefined) payload += `event: ${event.event}\n`;
+            if (event.retry !== undefined) payload += `retry: ${event.retry}\n`;
+            const dataStr = typeof event.data === "string"
+              ? event.data
+              : JSON.stringify(event.data);
+            for (const line of dataStr.split("\n")) {
+              payload += `data: ${line}\n`;
+            }
+            payload += "\n";
+            await sink.write(encoder.encode(payload));
+          },
+          async close() {
+            try {
+              await sink.close();
+            } catch {
+              // ignore if already closed
+            }
+          },
+        };
+
+        (async () => {
+          try {
+            await fn(sseWriter);
+          } catch (err) {
+            console.error("SSE producer error:", err);
+          } finally {
+            try {
+              await sink.close();
+            } catch {
+              // already closed
+            }
+          }
+        })();
+
+        const headers = new Headers(options?.headers);
+        headers.set("content-type", "text/event-stream");
+        headers.set("cache-control", "no-cache");
+        headers.set("connection", "keep-alive");
+
+        return new Response(transform.readable, {
+          status: options?.status ?? 200,
+          headers,
         });
       },
     };
