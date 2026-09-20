@@ -185,15 +185,28 @@ export function resolvePermissions(
           opts?: { limit?: number; cursor?: string },
         ) => {
           validateObjectKey(queryPrefix);
+          const providerOpts = opts
+            ? {
+              ...opts,
+              cursor: opts.cursor
+                ? (opts.cursor.startsWith(prefix)
+                  ? opts.cursor
+                  : prefix + opts.cursor)
+                : undefined,
+            }
+            : undefined;
           const res = await providers.objects.list(
             prefix + queryPrefix,
-            opts,
+            providerOpts,
           );
+          const nextCursor = res.cursor && res.cursor.startsWith(prefix)
+            ? res.cursor.slice(prefix.length)
+            : res.cursor;
           return {
-            ...res,
             keys: res.keys
               .filter((k) => k.startsWith(prefix))
               .map((k) => k.slice(prefix.length)),
+            cursor: nextCursor,
           };
         },
         presign: (

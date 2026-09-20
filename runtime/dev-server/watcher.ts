@@ -54,6 +54,7 @@ export class ProjectWatcher {
   private pendingEvents: WatchEvent[] = [];
   private stopped = false;
   private callback: WatcherCallback | null = null;
+  private abortHandler: (() => void) | null = null;
 
   constructor(options: WatchOptions) {
     this.options = options;
@@ -69,7 +70,8 @@ export class ProjectWatcher {
         this.stop();
         return;
       }
-      this.options.signal.addEventListener("abort", () => this.stop(), {
+      this.abortHandler = () => this.stop();
+      this.options.signal.addEventListener("abort", this.abortHandler, {
         once: true,
       });
     }
@@ -135,6 +137,14 @@ export class ProjectWatcher {
 
   stop(): void {
     this.stopped = true;
+    if (this.options.signal && this.abortHandler) {
+      try {
+        this.options.signal.removeEventListener("abort", this.abortHandler);
+      } catch {
+        // Ignore
+      }
+      this.abortHandler = null;
+    }
     if (this.debounceTimer !== null) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;

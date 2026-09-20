@@ -231,12 +231,17 @@ export function handle(fn: HandlerFn): FunctionHandler {
             await fn(writer);
           } catch (err) {
             console.error("Stream producer error:", err);
-          } finally {
             try {
-              await sink.close();
+              await sink.abort(err);
             } catch {
-              // already closed
+              // ignore
             }
+            return;
+          }
+          try {
+            await sink.close();
+          } catch {
+            // already closed
           }
         })();
 
@@ -286,12 +291,17 @@ export function handle(fn: HandlerFn): FunctionHandler {
             await fn(sseWriter);
           } catch (err) {
             console.error("SSE producer error:", err);
-          } finally {
             try {
-              await sink.close();
+              await sink.abort(err);
             } catch {
-              // already closed
+              // ignore
             }
+            return;
+          }
+          try {
+            await sink.close();
+          } catch {
+            // already closed
           }
         })();
 

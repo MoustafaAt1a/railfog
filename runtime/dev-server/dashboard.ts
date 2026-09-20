@@ -383,13 +383,21 @@ export async function handleDashboardRequest(
     if (req.method === "POST") {
       try {
         const body = await req.json();
-        if (typeof body.key === "string" && body.value !== undefined) {
-          const keyArr = body.key.includes(":")
-            ? body.key.split(":")
-            : [body.key];
-          await ctx.kvProvider.set(keyArr, body.value);
-          return Response.json({ ok: true });
+        if (
+          typeof body.key !== "string" ||
+          body.key.trim() === "" ||
+          body.value === undefined
+        ) {
+          return Response.json(
+            { ok: false, error: "VALIDATION_FAILED: key and value required" },
+            { status: 400 },
+          );
         }
+        const keyArr = body.key.includes(":")
+          ? body.key.split(":")
+          : [body.key];
+        await ctx.kvProvider.set(keyArr, body.value);
+        return Response.json({ ok: true });
       } catch {
         return Response.json({ ok: false }, { status: 400 });
       }

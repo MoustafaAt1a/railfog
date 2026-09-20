@@ -12,6 +12,15 @@ export class SQLiteKVProvider implements KVProvider {
 
   constructor(path: string = ":memory:") {
     this.db = new DatabaseSync(path);
+    // Reduce lock contention across concurrent requests and processes (PLAT-17)
+    this.db.exec("PRAGMA busy_timeout = 5000;");
+    if (path !== ":memory:" && !path.startsWith(":memory:")) {
+      try {
+        this.db.exec("PRAGMA journal_mode = WAL;");
+      } catch {
+        // Ignore if WAL unsupported in current environment
+      }
+    }
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS kv_entries (
         key_path TEXT PRIMARY KEY,
@@ -264,7 +273,11 @@ class SQLiteKVAtomicBuilder implements KVAtomicBuilder {
         version: highestNewVersion > 0 ? highestNewVersion : undefined,
       };
     } catch (err) {
-      this.db.exec("ROLLBACK;");
+      try {
+        this.db.exec("ROLLBACK;");
+      } catch {
+        // Rollback error must not mask the original transaction failure
+      }
       throw err;
     }
   }

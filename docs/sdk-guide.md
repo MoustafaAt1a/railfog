@@ -340,3 +340,43 @@ export default async function consume(
   await ctx.kv.set(dedupeKey, true, { ttl: 14 * 24 * 3600 });          // Q-4, mandatory 14-day retention TTL
 }
 ```
+
+---
+
+## 7. Streaming, SSE, and RPC Client
+
+### 7.1 Chunked Streaming (`c.stream`)
+Emit low-latency chunked responses via Web Streams:
+```typescript
+import { handle } from "@railfog/sdk";
+
+export default handle((c) => {
+  return c.stream(async (writer) => {
+    await writer.write("Header\n");
+    await writer.write("Data payload\n");
+    await writer.close();
+  });
+});
+```
+
+### 7.2 Server-Sent Events (`c.sse`)
+Stream real-time SSE frames with automatic event framing and headers:
+```typescript
+import { handle } from "@railfog/sdk";
+
+export default handle((c) => {
+  return c.sse(async (sse) => {
+    await sse.send({ event: "message", data: { text: "hello" } });
+    await sse.close();
+  });
+});
+```
+
+### 7.3 End-to-End Type-Safe RPC Client (`createRpcClient`)
+Call RailFog services from frontends, microservices, or CLI scripts with typed PLAT-12 error handling:
+```typescript
+import { createRpcClient } from "@railfog/sdk";
+
+const client = createRpcClient("https://api.my-app.railfog.app");
+const data = await client.get<{ total: number }>("/api/metrics");
+```

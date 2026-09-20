@@ -248,6 +248,8 @@ export async function startLocalServer(
   const host = options?.host;
 
   // spec: docs/contracts/platform.contract.md#PLAT-16 and #PLAT-17 (Local providers with full API parity)
+  const ownsKv = !options?.providers?.kv;
+  const ownsQueues = !options?.providers?.queues;
   const kvProvider = options?.providers?.kv ?? new SQLiteKVProvider();
   const objectsProvider = options?.providers?.objects ??
     new LocalFSProvider(join(cwd, ".railfog", "objects"));
@@ -310,17 +312,36 @@ export async function startLocalServer(
       url.pathname === "/__railfog" || url.pathname.startsWith("/__railfog/")
     ) {
       finalRequestId = generateUlid();
-      const dashRes = await handleDashboardRequest(req, url, currentConfig, {
-        orgId,
-        projectId,
-        kvProvider,
-        objectsProvider,
-        queuesProvider,
-        routes,
-      });
-      finalStatus = dashRes.status;
-      logCompletedRequest();
-      return dashRes;
+      try {
+        const dashRes = await handleDashboardRequest(req, url, currentConfig, {
+          orgId,
+          projectId,
+          kvProvider,
+          objectsProvider,
+          queuesProvider,
+          routes,
+        });
+        finalStatus = dashRes.status;
+        logCompletedRequest();
+        return dashRes;
+      } catch (err) {
+        console.error(`[${finalRequestId}] Dashboard error:`, err);
+        finalStatus = 500;
+        const internalErr = new InternalError(
+          err instanceof Error ? err.message : String(err),
+          finalRequestId,
+        );
+        const res = Response.json(toErrorResponseBody(internalErr), {
+          status: 500,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": finalRequestId,
+            "request-id": finalRequestId,
+          },
+        });
+        logCompletedRequest();
+        return res;
+      }
     }
 
     // spec: docs/contracts/platform.contract.md#PLAT-11 — Route matching with specificity score
@@ -638,6 +659,26 @@ export async function startLocalServer(
     async close(): Promise<void> {
       watcher?.stop();
       await server.shutdown();
+      if (
+        ownsKv && "close" in kvProvider &&
+        typeof (kvProvider as { close?: () => void }).close === "function"
+      ) {
+        try {
+          (kvProvider as { close: () => void }).close();
+        } catch {
+          // Ignore if already closed
+        }
+      }
+      if (
+        ownsQueues && "close" in queuesProvider &&
+        typeof (queuesProvider as { close?: () => void }).close === "function"
+      ) {
+        try {
+          (queuesProvider as { close: () => void }).close();
+        } catch {
+          // Ignore if already closed
+        }
+      }
     },
   };
 

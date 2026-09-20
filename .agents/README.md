@@ -14,6 +14,9 @@ here's the map.
 | `implementer` | Claude Opus 4.6 (Thinking) | Writes minimum code to pass tests | Widen scope, approve own work |
 | `reviewer` | Claude Opus 4.6 (Thinking) | Independent re-derivation of correctness | Trust the implementer's summary |
 | `security-auditor` | Claude Opus 4.6 (Thinking) | Adversarial pass on PLAT-4/5/6/7/15, FN-6/7 tasks | Approve from reading code alone |
+| `tester` | Claude Opus 4.6 (Thinking) | Exhaustive line-by-line verification, fuzzing, stress tests | Write production code |
+| `debugger` | Claude Opus 4.6 (Thinking) | Forensic root cause analysis, minimal repros, surgical fixes | Patch symptoms or weaken contracts |
+| `technical-writer` | Claude Opus 4.6 (Thinking) | Crystal-clear DX documentation, guides, API manuals | Modify production code or contracts |
 
 See `MODEL-CONFIG.md` if you need to change the model strings.
 
@@ -34,6 +37,8 @@ registration gap, not a hidden feature.
 | `tdd-atomic-protocol` | Start of any `/implement-task` |
 | `atomic-task-decomposition` | Breaking work into task files |
 | `skill-authoring` | Noticing a recurring pattern with no existing skill — or before adding one, to check it's not a duplicate |
+| `deep-system-testing` | Exhaustive boundary, stress, concurrency, and leak testing |
+| `root-cause-debugging` | Forensic defect diagnosis, stack-trace dissection, and surgical bugfixes |
 | `use-railway` | Operating Railway infrastructure, deployments, and IaC |
 
 ## Workflows (`workflows/`) — slash commands

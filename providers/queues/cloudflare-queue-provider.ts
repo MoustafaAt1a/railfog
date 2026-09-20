@@ -422,6 +422,12 @@ export class CloudflareQueueProvider implements QueueProvider {
 
     const msg = messages[0];
     if (msg.lease_id) {
+      if (this.#leaseMap.size >= 10_000) {
+        const oldestKey = this.#leaseMap.keys().next().value;
+        if (oldestKey) {
+          this.#leaseMap.delete(oldestKey);
+        }
+      }
       this.#leaseMap.set(msg.id, msg.lease_id);
     }
     return {

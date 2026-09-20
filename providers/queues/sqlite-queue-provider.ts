@@ -18,6 +18,7 @@ import {
  */
 export class SQLiteQueueProvider implements QueueProvider {
   private db: DatabaseSync;
+  private readonly dbPath: string;
 
   private readonly defaultVisibilityTimeoutMs = 30000;
   private readonly maxReceives = 5;
@@ -30,6 +31,7 @@ export class SQLiteQueueProvider implements QueueProvider {
   public readonly deadLetter: QueueProvider;
 
   constructor(dbPath: string = ":memory:") {
+    this.dbPath = dbPath;
     this.db = new DatabaseSync(dbPath);
     this.initDb();
 
@@ -42,6 +44,15 @@ export class SQLiteQueueProvider implements QueueProvider {
   }
 
   private initDb() {
+    // Reduce lock contention across concurrent requests and processes (PLAT-17)
+    this.db.exec("PRAGMA busy_timeout = 5000;");
+    if (this.dbPath !== ":memory:" && !this.dbPath.startsWith(":memory:")) {
+      try {
+        this.db.exec("PRAGMA journal_mode = WAL;");
+      } catch {
+        // Ignore if WAL unsupported in current environment
+      }
+    }
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
@@ -55,10 +66,15 @@ export class SQLiteQueueProvider implements QueueProvider {
 
   send(body: unknown, opts?: { delay?: number }): Promise<{ id: string }> {
     if (opts?.delay !== undefined) {
-      if (opts.delay > this.MAX_DELAY_SECONDS) {
+      if (
+        typeof opts.delay !== "number" ||
+        !Number.isFinite(opts.delay) ||
+        opts.delay < 0 ||
+        opts.delay > this.MAX_DELAY_SECONDS
+      ) {
         return Promise.reject(
           new ValidationFailedError(
-            "VALIDATION_FAILED: Delay exceeds 900s cap. Use a schedule trigger instead per FN-2",
+            "VALIDATION_FAILED: Delay must be a non-negative number <= 900s cap. Use a schedule trigger instead per FN-2",
           ),
         );
       }
@@ -100,47 +116,50 @@ export class SQLiteQueueProvider implements QueueProvider {
   ): Promise<QueueMessage | null> {
     const visibilityTimeoutMs = opts?.visibilityTimeoutMs ??
       this.defaultVisibilityTimeoutMs;
-    const now = Date.now();
 
-    const stmt = this.db.prepare(`
-      UPDATE messages 
-      SET 
-        attempts = attempts + 1,
-        visible_after = ?
-      WHERE id = (
-        SELECT id FROM messages 
-        WHERE visible_after <= ? AND is_dlq = 0 
-        ORDER BY visible_after ASC 
-        LIMIT 1
-      )
-      RETURNING id, body, attempts
-    `);
+    while (true) {
+      const now = Date.now();
 
-    const nextVisible = now + visibilityTimeoutMs;
-    const result = stmt.get(nextVisible, now) as {
-      id: string;
-      body: string;
-      attempts: number;
-    } | undefined;
+      const stmt = this.db.prepare(`
+        UPDATE messages 
+        SET 
+          attempts = attempts + 1,
+          visible_after = ?
+        WHERE id = (
+          SELECT id FROM messages 
+          WHERE visible_after <= ? AND is_dlq = 0 
+          ORDER BY visible_after ASC 
+          LIMIT 1
+        )
+        RETURNING id, body, attempts
+      `);
 
-    if (!result) {
-      return Promise.resolve(null);
+      const nextVisible = now + visibilityTimeoutMs;
+      const result = stmt.get(nextVisible, now) as {
+        id: string;
+        body: string;
+        attempts: number;
+      } | undefined;
+
+      if (!result) {
+        return Promise.resolve(null);
+      }
+
+      if (result.attempts > this.maxReceives) {
+        const dlqStmt = this.db.prepare(
+          "UPDATE messages SET is_dlq = 1, visible_after = 0 WHERE id = ?",
+        );
+        dlqStmt.run(result.id);
+
+        continue;
+      }
+
+      return Promise.resolve({
+        id: result.id,
+        body: JSON.parse(result.body),
+        attempts: result.attempts,
+      });
     }
-
-    if (result.attempts > this.maxReceives) {
-      const dlqStmt = this.db.prepare(
-        "UPDATE messages SET is_dlq = 1, visible_after = 0 WHERE id = ?",
-      );
-      dlqStmt.run(result.id);
-
-      return this.receive(opts);
-    }
-
-    return Promise.resolve({
-      id: result.id,
-      body: JSON.parse(result.body),
-      attempts: result.attempts,
-    });
   }
 
   ack(id: string): Promise<void> {

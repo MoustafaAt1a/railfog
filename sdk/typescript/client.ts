@@ -469,9 +469,17 @@ export function createRpcClient(
       }
     }
 
+    if (res.status === 204 || res.status === 205) {
+      return undefined as unknown as T;
+    }
+
     const contentType = res.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      return (await res.json()) as T;
+      const text = await res.text();
+      if (!text.trim()) {
+        return undefined as unknown as T;
+      }
+      return JSON.parse(text) as T;
     }
     return (await res.text()) as unknown as T;
   }

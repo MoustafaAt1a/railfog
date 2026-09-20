@@ -78,6 +78,9 @@ Every unit of work is an atomic task file (`tasks/TASK-TEMPLATE.md`). Rules:
 | `implementer` | Claude Opus 4.6 (Thinking) | Yes — minimum code to satisfy the task |
 | `reviewer` | Claude Opus 4.6 (Thinking) | No — re-derives correctness independently |
 | `security-auditor` | Claude Opus 4.6 (Thinking) | No — adversarial only, triggered by PLAT-4/5/6/7/15, FN-6, or FN-7 changes |
+| `tester` | Claude Opus 4.6 (Thinking) | Tests only — exhaustive line-by-line verification, fuzzing, concurrency stress |
+| `debugger` | Claude Opus 4.6 (Thinking) | Yes — forensic root-cause analysis, minimal reproductions, surgical anti-slop fixes |
+| `technical-writer` | Claude Opus 4.6 (Thinking) | Docs only — crystal-clear DX guides, API references, configuration manuals |
 
 Adjust the literal model strings in `.agents/agents/*.md` to match whatever
 your Antigravity model picker actually lists — the routing logic is what
@@ -111,6 +114,9 @@ Skills auto-trigger by description, but here's the map (full detail in
 - `atomic-task-decomposition` — sizing heuristic for splitting work.
 - `skill-authoring` — how to draft, get approved, and register a new skill
   when one of these doesn't cover a recurring pattern (`/new-skill`).
+- `deep-system-testing` — exhaustive boundary, concurrency, and leak testing methodology.
+- `root-cause-debugging` — 6-step hypothesis-driven forensic debugging and surgical bug fixing.
+- `use-railway` — Railway deployment, environments, services, buckets, and CLI operation.
 
 This list is expected to grow. If you find a skill under `.agents/skills/`
 that isn't listed here, that's a registration gap — fix it per

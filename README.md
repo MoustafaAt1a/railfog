@@ -330,6 +330,7 @@ rail update -l
 
 ## Documentation Links
 
+- [Developer Experience (DX) & Operations Guide](docs/DX-GUIDE.md) — Comprehensive guide to the CLI, TUI, local dev dashboard, streaming responses, type-safe RPC client, and cloud deployments.
 - [Architecture & Modular Monolith Guide](ARCHITECTURE.md) — Comprehensive guide
   to layers, dependency directions, and process topology.
 - [Configuration Reference (`railfog.toml`)](docs/configuration-reference.md) —
@@ -340,3 +341,4 @@ rail update -l
   typed handler signatures, and error codes (`PLAT-12`).
 - [Platform Contracts](docs/contracts/) — Formal platform specification and
   invariant definitions.
+

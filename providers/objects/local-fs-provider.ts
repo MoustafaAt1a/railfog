@@ -57,10 +57,14 @@ export class LocalFSProvider implements ObjectProvider {
     if (data instanceof ReadableStream) {
       const chunks: Uint8Array[] = [];
       const reader = data.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) chunks.push(value);
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
       }
       const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
       buffer = new Uint8Array(totalLength);
@@ -106,6 +110,9 @@ export class LocalFSProvider implements ObjectProvider {
     try {
       const filePath = this.getPath(key);
       const stat = await Deno.stat(filePath);
+      if (stat.isDirectory) {
+        return null;
+      }
       const data = await Deno.readFile(filePath);
       const hashBuffer = await computeSha256(data);
       const etag = encodeHex(hashBuffer);
@@ -197,14 +204,14 @@ export class LocalFSProvider implements ObjectProvider {
       if (!token) return false;
 
       const sig = urlObj.searchParams.get("sig");
-      if (sig) {
-        const expectedSigBytes = await computeSha256(
-          new TextEncoder().encode(`${token}:${this.hmacSecret}`),
-        );
-        const expectedSig = encodeHex(expectedSigBytes);
-        if (sig !== expectedSig) {
-          return false;
-        }
+      if (!sig) return false;
+
+      const expectedSigBytes = await computeSha256(
+        new TextEncoder().encode(`${token}:${this.hmacSecret}`),
+      );
+      const expectedSig = encodeHex(expectedSigBytes);
+      if (sig !== expectedSig) {
+        return false;
       }
 
       const payloadStr = new TextDecoder().decode(decodeBase64(token));
