@@ -40,6 +40,7 @@ import {
   runLogs,
 } from "./logs.ts";
 import { formatUsageReport, runUsage, type UsageCliOptions } from "./usage.ts";
+import { runLogin, runLogout, runWhoami } from "./login.ts";
 import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
 
 export {
@@ -52,9 +53,12 @@ export {
   rollbackCommand,
   runCheck,
   runInit,
+  runLogin,
+  runLogout,
   runLogs,
   runSecrets,
   runUsage,
+  runWhoami,
 };
 export type {
   CheckResult,
@@ -222,9 +226,24 @@ Commands:
   logs      Stream and filter structured runtime logs
   usage     Display resource usage and itemized cost breakdown
   cost      Alias for usage subcommand
+  login     Authenticate your session via web browser and API key
+  logout    Log out and remove local credentials
+  whoami    Display currently authenticated organization and key
 
 Options:
   -h, --help    Show help information`);
+}
+
+function printLoginHelp(): void {
+  console.log(`RailFog CLI - Login
+
+Usage:
+  rail login [options]
+
+Options:
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_URL or http://localhost:8081)
+  --token <key>          Directly provide API key (non-interactive / CI)
+  -h, --help             Show help for login command`);
 }
 
 function printCheckHelp(): void {
@@ -442,6 +461,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
     case "deploy": {
       let controlPlaneUrl: string | undefined;
       let project: string | undefined;
+      let token: string | undefined;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -469,6 +489,11 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
+        } else if (arg === "--token" && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
         }
       }
 
@@ -477,6 +502,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           cwd: Deno.cwd(),
           controlPlaneUrl,
           project,
+          token,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -860,14 +886,64 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+    case "login": {
+      let controlUrl: string | undefined;
+      let token: string | undefined;
+
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printLoginHelp();
+          return;
+        }
+        if (arg === "--control-url" && args[i + 1]) {
+          controlUrl = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--control-url=")) {
+          controlUrl = arg.slice("--control-url=".length);
+        } else if (arg === "--token" && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
+        }
+      }
+
+      const res = await runLogin({ controlUrl, token });
+      if (!res.ok) {
+        Deno.exit(1);
+      }
+      break;
+    }
+    case "logout": {
+      await runLogout();
+      break;
+    }
+    case "whoami": {
+      let controlUrl: string | undefined;
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "--control-url" && args[i + 1]) {
+          controlUrl = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--control-url=")) {
+          controlUrl = arg.slice("--control-url=".length);
+        }
+      }
+      const res = await runWhoami({ controlUrl });
+      if (!res.authenticated) {
+        Deno.exit(1);
+      }
+      break;
+    }
     default:
       if (!command) {
         console.error(
-          "Error: No command specified. Available commands: init, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost",
+          "Error: No command specified. Available commands: init, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami",
         );
       } else {
         console.error(
-          `Error: Unknown command "${command}". Available commands: init, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost`,
+          `Error: Unknown command "${command}". Available commands: init, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami`,
         );
       }
       Deno.exit(1);

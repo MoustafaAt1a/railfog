@@ -1,6 +1,6 @@
 # T-0754 — Implement API Key Authentication Middleware for Control and Runtime Servers
 
-Status: Not started
+Status: Done
 Milestone: 0.75 Backing Services and Auth
 Depends on: T-0753
 Blocks: T-0755
@@ -53,20 +53,20 @@ export function createAuthMiddleware(
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/packages_auth_middleware_test.ts`: Health check bypass, Bearer header parsing, `x-api-key` header parsing, project scope matching, and canonical PLAT-12 error response format.
-- [ ] Security — Verify `PLAT-15` secret redaction on invalid auth attempts.
+- [x] Unit — `tests/unit/packages_auth_middleware_test.ts`: Health check bypass, Bearer header parsing, `x-api-key` header parsing, project scope matching, and canonical PLAT-12 error response format.
+- [x] Security — Verify `PLAT-15` secret redaction on invalid auth attempts.
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`PLAT-1`, `PLAT-6`, `PLAT-12`, `PLAT-14`, `PLAT-15`)
-- [ ] Spec-anchor comments present at each RailFog-specific decision point
-- [ ] Unit tests written first (red), then implementation (green)
-- [ ] `deno check` run, real output attached, zero errors
-- [ ] `deno test` run, real output attached, all required tests passing
-- [ ] `deno lint` run, real output attached, zero warnings
-- [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Security-auditor pass complete for PLAT-6 and PLAT-15 compliance
-- [ ] Nothing outside "In scope" touched
+- [x] Implementation matches every cited clause ID exactly (`PLAT-1`, `PLAT-6`, `PLAT-12`, `PLAT-14`, `PLAT-15`)
+- [x] Spec-anchor comments present at each RailFog-specific decision point
+- [x] Unit tests written first (red), then implementation (green)
+- [x] `deno check` run, real output attached, zero errors
+- [x] `deno test` run, real output attached, all required tests passing
+- [x] `deno lint` run, real output attached, zero warnings
+- [x] No item from `docs/ANTI-SLOP.md` violated
+- [x] Security-auditor pass complete for PLAT-6 and PLAT-15 compliance
+- [x] Nothing outside "In scope" touched
 
 ## Assumptions made
 

@@ -15,6 +15,7 @@ import {
   ResourceNotFoundError,
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
+import { resolveAuthHeader } from "./auth-config.ts";
 
 export interface RollbackCommandOptions {
   cwd?: string;
@@ -23,6 +24,7 @@ export interface RollbackCommandOptions {
   functionName: string;
   targetRevisionId: string;
   deploymentService?: DeploymentService;
+  token?: string;
 }
 
 export interface RollbackCommandResult {
@@ -98,10 +100,11 @@ export async function rollbackCommand(
       Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
       DEFAULT_CONTROL_PLANE_URL;
     const baseUrl = rawUrl.replace(/\/+$/, "");
+    const authHeaders = await resolveAuthHeader(options);
 
     const res = await fetch(`${baseUrl}/rollback`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...authHeaders },
       body: JSON.stringify({
         project: projectName,
         functionName: options.functionName,

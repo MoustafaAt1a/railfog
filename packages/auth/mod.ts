@@ -6,3 +6,5 @@
 
 export * from "./token.ts";
 export * from "./verifier.ts";
+export * from "./store.ts";
+export * from "./middleware.ts";

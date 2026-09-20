@@ -18,12 +18,14 @@ import {
 } from "../packages/core/artifact/packager.ts";
 import { DeployDiagnosticsAnalyzer } from "../packages/core/diagnostics/deploy-analyzer.ts";
 import { ValidationFailedError } from "../packages/errors/mod.ts";
+import { resolveAuthHeader } from "./auth-config.ts";
 
 export interface DeployCommandOptions {
   cwd?: string;
   controlPlaneUrl?: string;
   project?: string;
   deploymentService?: DeploymentService;
+  token?: string;
 }
 
 export interface DeployCommandResult {
@@ -282,11 +284,12 @@ export async function deployCommand(
       Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
       DEFAULT_CONTROL_PLANE_URL;
     const baseUrl = rawUrl.replace(/\/+$/, "");
+    const authHeaders = await resolveAuthHeader(options);
 
     for (const item of packagedFunctions) {
       const res = await fetch(`${baseUrl}/deploy`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...authHeaders },
         body: JSON.stringify({
           project: projectName,
           functionName: item.name,

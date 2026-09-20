@@ -1,6 +1,6 @@
 # T-0752 — Implement PostgreSQL KV Provider with Transactional CAS
 
-Status: Not started
+Status: Done
 Milestone: 0.75 Backing Services and Auth
 Depends on: none
 Blocks: T-0753, T-0755
@@ -58,20 +58,20 @@ export class PostgresKVProvider implements KVProvider {
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/providers_kv_postgres_provider_test.ts`: Key validation, SQL generation, statement parameterization, TTL expiration logic, and atomic CAS simulation.
-- [ ] Integration — PostgreSQL wire protocol test verifying queries against real or test database instance.
+- [x] Unit — `tests/unit/providers_kv_postgres_provider_test.ts`: Key validation, SQL generation, statement parameterization, TTL expiration logic, and atomic CAS simulation.
+- [x] Integration — PostgreSQL wire protocol test verifying queries against real or test database instance.
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`KV-1`..`KV-5`, `PLAT-16`)
-- [ ] Spec-anchor comments present at each RailFog-specific decision point
-- [ ] Unit tests written first (red), then implementation (green)
-- [ ] `deno check` run, real output attached, zero errors
-- [ ] `deno test` run, real output attached, all required tests passing
-- [ ] `deno lint` run, real output attached, zero warnings
-- [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
-- [ ] Nothing outside "In scope" touched
+- [x] Implementation matches every cited clause ID exactly (`KV-1`..`KV-5`, `PLAT-16`)
+- [x] Spec-anchor comments present at each RailFog-specific decision point
+- [x] Unit tests written first (red), then implementation (green)
+- [x] `deno check` run, real output attached, zero errors
+- [x] `deno test` run, real output attached, all required tests passing
+- [x] `deno lint` run, real output attached, zero warnings
+- [x] No item from `docs/ANTI-SLOP.md` violated
+- [x] Reviewer pass complete
+- [x] Nothing outside "In scope" touched
 
 ## Assumptions made
 

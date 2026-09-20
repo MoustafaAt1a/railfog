@@ -1,6 +1,6 @@
 # T-0753 — Implement Persistent API Key Store with Redis Caching
 
-Status: Not started
+Status: Done
 Milestone: 0.75 Backing Services and Auth
 Depends on: T-0751, T-0752
 Blocks: T-0754, T-0755
@@ -68,20 +68,20 @@ export class ApiKeyStore {
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/packages_auth_store_test.ts`: Key creation, deterministic hashing, verification, cache hit/miss behavior, revocation, and listing.
-- [ ] Security — Verify that raw secrets are never present in stored KV values or serialized cache records (`PLAT-15`).
+- [x] Unit — `tests/unit/packages_auth_store_test.ts`: Key creation, deterministic hashing, verification, cache hit/miss behavior, revocation, and listing.
+- [x] Security — Verify that raw secrets are never present in stored KV values or serialized cache records (`PLAT-15`).
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`PLAT-6`, `PLAT-9`, `PLAT-15`)
-- [ ] Spec-anchor comments present at each RailFog-specific decision point
-- [ ] Unit tests written first (red), then implementation (green)
-- [ ] `deno check` run, real output attached, zero errors
-- [ ] `deno test` run, real output attached, all required tests passing
-- [ ] `deno lint` run, real output attached, zero warnings
-- [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Security-auditor pass complete for PLAT-6 and PLAT-15 compliance
-- [ ] Nothing outside "In scope" touched
+- [x] Implementation matches every cited clause ID exactly (`PLAT-6`, `PLAT-9`, `PLAT-15`)
+- [x] Spec-anchor comments present at each RailFog-specific decision point
+- [x] Unit tests written first (red), then implementation (green)
+- [x] `deno check` run, real output attached, zero errors
+- [x] `deno test` run, real output attached, all required tests passing
+- [x] `deno lint` run, real output attached, zero warnings
+- [x] No item from `docs/ANTI-SLOP.md` violated
+- [x] Security-auditor pass complete for PLAT-6 and PLAT-15 compliance
+- [x] Nothing outside "In scope" touched
 
 ## Assumptions made
 

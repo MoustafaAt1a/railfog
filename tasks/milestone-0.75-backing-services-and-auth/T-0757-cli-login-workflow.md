@@ -1,6 +1,6 @@
 # T-0757 — Implement CLI Interactive Login Flow and Credential Management
 
-Status: Not started
+Status: Done
 Milestone: 0.75 Backing Services and Auth
 Depends on: T-0756
 Blocks: T-0758
@@ -60,20 +60,20 @@ export function runWhoami(options?: { controlUrl?: string }): Promise<{ authenti
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/cli_login_test.ts`: Verify config serialization, stdin prompt handling, browser launcher command formation, and header injection.
-- [ ] Integration — End-to-end simulated CLI login against a running control plane mock.
+- [x] Unit — `tests/unit/cli_login_test.ts`: Verify config serialization, stdin prompt handling, browser launcher command formation, and header injection.
+- [x] Integration — End-to-end simulated CLI login against a running control plane mock.
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`PLAT-1`, `PLAT-6`, `PLAT-12`, `PLAT-15`, `PLAT-17`)
-- [ ] Spec-anchor comments present at each RailFog-specific decision point
-- [ ] Unit tests written first (red), then implementation (green)
-- [ ] `deno check` run, real output attached, zero errors
-- [ ] `deno test` run, real output attached, all required tests passing
-- [ ] `deno lint` run, real output attached, zero warnings
-- [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
-- [ ] Nothing outside "In scope" touched
+- [x] Implementation matches every cited clause ID exactly (`PLAT-1`, `PLAT-6`, `PLAT-12`, `PLAT-15`, `PLAT-17`)
+- [x] Spec-anchor comments present at each RailFog-specific decision point
+- [x] Unit tests written first (red), then implementation (green)
+- [x] `deno check` run, real output attached, zero errors
+- [x] `deno test` run, real output attached, all required tests passing
+- [x] `deno lint` run, real output attached, zero warnings
+- [x] No item from `docs/ANTI-SLOP.md` violated
+- [x] Reviewer pass complete
+- [x] Nothing outside "In scope" touched
 
 ## Assumptions made
 

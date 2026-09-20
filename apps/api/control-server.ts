@@ -42,6 +42,13 @@ import type {
   PackagedArtifact,
 } from "../../packages/core/artifact/packager.ts";
 import type { StateBackupArchive } from "../../packages/core/backup/archive-schema.ts";
+import { renderLoginPageHtml } from "./login-page.ts";
+import type { ApiKeyStore } from "../../packages/auth/store.ts";
+import {
+  type AuthResult,
+  createAuthMiddleware,
+} from "../../packages/auth/middleware.ts";
+import { extractBearerToken } from "../../packages/auth/verifier.ts";
 
 export type { ProjectSnapshot };
 
@@ -80,6 +87,8 @@ export interface ControlServerOptions {
   host?: string;
   deploymentService: DeploymentService;
   stateBackupService: StateBackupService;
+  apiKeyStore?: ApiKeyStore;
+  authMiddleware?: (req: Request, requestId: string) => Promise<AuthResult>;
   signal?: AbortSignal;
 }
 
@@ -262,6 +271,19 @@ export function startControlServer(
 ): Promise<ControlServer> {
   const snapshotStates = new Map<string, ProjectSnapshotState>();
 
+  const authMiddleware = options.authMiddleware ??
+    (options.apiKeyStore
+      ? createAuthMiddleware({
+        apiKeyStore: options.apiKeyStore,
+        allowAnonymousPaths: [
+          "/healthz",
+          "/login",
+          "/v1/auth/keys",
+          "/v1/auth/verify",
+        ],
+      })
+      : undefined);
+
   /**
    * Retrieves or builds the current snapshot for a project.
    * If active revisions have changed, advances snapshot version.
@@ -357,6 +379,137 @@ export function startControlServer(
             "request-id": requestId,
           },
         });
+      }
+
+      // AC: GET /login — Web authentication page (T-0756)
+      if (pathname === "/login") {
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for /login (PLAT-12)`,
+            requestId,
+          );
+        }
+        const html = renderLoginPageHtml({
+          serviceName: "RailFog Cloud",
+        });
+        return new Response(html, {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // AC: POST /v1/auth/keys — Generate API key (T-0756, PLAT-15)
+      if (pathname === "/v1/auth/keys") {
+        if (req.method !== "POST") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for /v1/auth/keys (PLAT-12)`,
+            requestId,
+          );
+        }
+        if (!options.apiKeyStore) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: ApiKeyStore is not configured on control server.",
+            requestId,
+          );
+        }
+        const body = await parseJsonBody(req);
+        const orgId = typeof body.orgId === "string" && body.orgId.trim() !== ""
+          ? body.orgId.trim()
+          : DEFAULT_ORG_ID;
+        const name = typeof body.name === "string" && body.name.trim() !== ""
+          ? body.name.trim()
+          : "cli-key";
+        const projectId =
+          typeof body.projectId === "string" && body.projectId.trim() !== ""
+            ? body.projectId.trim()
+            : undefined;
+
+        const result = await options.apiKeyStore.createKey({
+          orgId,
+          name,
+          projectId,
+        });
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            id: result.id,
+            rawToken: result.rawToken,
+            record: result.record,
+            request_id: requestId,
+          }),
+          {
+            status: HTTP_STATUS_OK,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          },
+        );
+      }
+
+      // AC: GET /v1/auth/verify — Validate API token (T-0756, PLAT-6)
+      if (pathname === "/v1/auth/verify") {
+        if (!options.apiKeyStore) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              identity: {
+                callerId: "anonymous",
+                orgId: DEFAULT_ORG_ID,
+                callerType: "anonymous",
+              },
+              request_id: requestId,
+            }),
+            {
+              status: HTTP_STATUS_OK,
+              headers: {
+                "content-type": "application/json",
+                "x-request-id": requestId,
+                "request-id": requestId,
+              },
+            },
+          );
+        }
+        const token = extractBearerToken(req.headers.get("authorization")) ||
+          req.headers.get("x-api-key")?.trim();
+        if (!token) {
+          throw new PermissionDeniedError(
+            "PERMISSION_DENIED: Missing authorization credentials (PLAT-12)",
+            requestId,
+          );
+        }
+        const identity = await options.apiKeyStore.verifyRawToken(token);
+        if (!identity) {
+          throw new PermissionDeniedError(
+            "PERMISSION_DENIED: Invalid or revoked API token (PLAT-12)",
+            requestId,
+          );
+        }
+        return new Response(
+          JSON.stringify({ ok: true, identity, request_id: requestId }),
+          {
+            status: HTTP_STATUS_OK,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          },
+        );
+      }
+
+      // Enforce authentication on all protected management endpoints (PLAT-6)
+      if (authMiddleware) {
+        const authRes = await authMiddleware(req, requestId);
+        if (!authRes.ok) {
+          return authRes.response;
+        }
       }
 
       // Customer Code Rejection (PLAT-1)
@@ -744,6 +897,13 @@ if (import.meta.main) {
   const { SQLiteKVProvider } = await import(
     "../../providers/kv/sqlite-provider.ts"
   );
+  const { PostgresKVProvider } = await import(
+    "../../providers/kv/postgres-provider.ts"
+  );
+  const { RedisKVProvider } = await import(
+    "../../providers/kv/redis-provider.ts"
+  );
+  const { ApiKeyStore } = await import("../../packages/auth/store.ts");
   const { createStateBackupService } = await import(
     "./state-backup-service.ts"
   );
@@ -752,7 +912,45 @@ if (import.meta.main) {
   const host = Deno.env.get("HOST") || "0.0.0.0";
   const storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR") || ".railfog/objects";
   const storage = new LocalFSProvider(storageDir);
-  const kv = new SQLiteKVProvider();
+
+  const databaseUrl = Deno.env.get("DATABASE_URL");
+  const redisUrl = Deno.env.get("REDIS_URL");
+
+  let kv: import("../../primitives/kv/kv-provider.ts").KVProvider;
+  if (databaseUrl && databaseUrl.trim().length > 0) {
+    const pgKv = new PostgresKVProvider({ connectionString: databaseUrl });
+    await pgKv.initSchema();
+    kv = pgKv;
+    console.log("[railfog-control] using PostgreSQL KV provider");
+  } else {
+    kv = new SQLiteKVProvider();
+    console.log("[railfog-control] using SQLite KV provider");
+  }
+
+  let cacheProvider: import("../../primitives/kv/kv-provider.ts").KVProvider | undefined;
+  if (redisUrl && redisUrl.trim().length > 0) {
+    cacheProvider = new RedisKVProvider({ url: redisUrl });
+    console.log("[railfog-control] using Redis cache provider");
+  }
+
+  const apiKeyStore = new ApiKeyStore({
+    storageProvider: kv,
+    cacheProvider,
+  });
+
+  const bootstrapKey = Deno.env.get("RAILFOG_API_KEY");
+  if (bootstrapKey) {
+    const hash = await (await import("../../packages/auth/token.ts")).hashApiToken(bootstrapKey);
+    await kv.set(["_auth", "tokens", hash], {
+      id: "bootstrap-id",
+      tokenHash: hash,
+      name: "bootstrap-key",
+      orgId: "default-org",
+      createdAt: new Date().toISOString(),
+    });
+    console.log("[railfog-control] initialized bootstrap API key from RAILFOG_API_KEY");
+  }
+
   const deploymentService = new DeploymentService(storage);
   const stateBackupService = createStateBackupService(
     deploymentService,
@@ -765,6 +963,7 @@ if (import.meta.main) {
     host,
     deploymentService,
     stateBackupService,
+    apiKeyStore,
   });
 
   console.log(`[railfog-control] listening on http://${host}:${server.port}`);

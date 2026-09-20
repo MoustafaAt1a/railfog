@@ -1,6 +1,6 @@
 # T-0751 — Implement Redis KV and Cache Provider
 
-Status: Not started
+Status: Done
 Milestone: 0.75 Backing Services and Auth
 Depends on: none
 Blocks: T-0753, T-0755
@@ -57,20 +57,20 @@ export class RedisKVProvider implements KVProvider {
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/providers_kv_redis_provider_test.ts`: Key encoding/validation, GET/SET with TTL, DELETE, SCAN-based LIST with cursor, and optimistic atomic transaction execution.
-- [ ] Integration — Real Redis connection or wire-level mock verifying RESP command exchange.
+- [x] Unit — `tests/unit/providers_kv_redis_provider_test.ts`: Key encoding/validation, GET/SET with TTL, DELETE, SCAN-based LIST with cursor, and optimistic atomic transaction execution.
+- [x] Integration — Real Redis connection or wire-level mock verifying RESP command exchange.
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`KV-1`..`KV-5`, `PLAT-16`)
-- [ ] Spec-anchor comments present at each RailFog-specific decision point
-- [ ] Unit tests written first (red), then implementation (green)
-- [ ] `deno check` run, real output attached, zero errors
-- [ ] `deno test` run, real output attached, all required tests passing
-- [ ] `deno lint` run, real output attached, zero warnings
-- [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
-- [ ] Nothing outside "In scope" touched
+- [x] Implementation matches every cited clause ID exactly (`KV-1`..`KV-5`, `PLAT-16`)
+- [x] Spec-anchor comments present at each RailFog-specific decision point
+- [x] Unit tests written first (red), then implementation (green)
+- [x] `deno check` run, real output attached, zero errors
+- [x] `deno test` run, real output attached, all required tests passing
+- [x] `deno lint` run, real output attached, zero warnings
+- [x] No item from `docs/ANTI-SLOP.md` violated
+- [x] Reviewer pass complete
+- [x] Nothing outside "In scope" touched
 
 ## Assumptions made
 

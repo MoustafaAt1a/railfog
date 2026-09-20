@@ -1,6 +1,6 @@
 # T-0756 — Implement Control Plane Web Login Page and API Key Issuance UI
 
-Status: Not started
+Status: Done
 Milestone: 0.75 Backing Services and Auth
 Depends on: T-0753, T-0754, T-0755
 Blocks: T-0757, T-0758
@@ -51,20 +51,20 @@ export interface AuthVerifyResult {
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/apps_control_server_login_test.ts`: Verify `GET /login` HTML generation, `POST /v1/auth/keys` API key creation, and `GET /v1/auth/verify` token validation.
-- [ ] Integration — HTTP browser fetch simulating login and token issuance roundtrip.
+- [x] Unit — `tests/unit/apps_control_server_login_test.ts`: Verify `GET /login` HTML generation, `POST /v1/auth/keys` API key creation, and `GET /v1/auth/verify` token validation.
+- [x] Integration — HTTP browser fetch simulating login and token issuance roundtrip.
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`PLAT-1`, `PLAT-6`, `PLAT-12`, `PLAT-14`, `PLAT-15`)
-- [ ] Spec-anchor comments present at each RailFog-specific decision point
-- [ ] Unit tests written first (red), then implementation (green)
-- [ ] `deno check` run, real output attached, zero errors
-- [ ] `deno test` run, real output attached, all required tests passing
-- [ ] `deno lint` run, real output attached, zero warnings
-- [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
-- [ ] Nothing outside "In scope" touched
+- [x] Implementation matches every cited clause ID exactly (`PLAT-1`, `PLAT-6`, `PLAT-12`, `PLAT-14`, `PLAT-15`)
+- [x] Spec-anchor comments present at each RailFog-specific decision point
+- [x] Unit tests written first (red), then implementation (green)
+- [x] `deno check` run, real output attached, zero errors
+- [x] `deno test` run, real output attached, all required tests passing
+- [x] `deno lint` run, real output attached, zero warnings
+- [x] No item from `docs/ANTI-SLOP.md` violated
+- [x] Reviewer pass complete
+- [x] Nothing outside "In scope" touched
 
 ## Assumptions made
 

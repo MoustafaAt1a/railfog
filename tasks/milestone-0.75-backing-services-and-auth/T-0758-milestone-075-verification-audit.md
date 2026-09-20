@@ -1,6 +1,6 @@
 # T-0758 — Milestone 0.75 Verification and Security Integrity Audit
 
-Status: Not started
+Status: Done
 Milestone: 0.75 Backing Services and Auth
 Depends on: T-0751, T-0752, T-0753, T-0754, T-0755, T-0756, T-0757
 Blocks: none
@@ -33,20 +33,20 @@ None — this is the verification and audit task for Milestone 0.75.
 
 ## Tests required
 
-- [ ] Unit — All unit tests in `tests/unit/` pass.
-- [ ] Integration — `tests/integration/backing_services_auth_test.ts`: Full backing services, web login, and CLI login integration flow.
-- [ ] Security — `tests/security/api_key_redaction_audit_test.ts`: Adversarial secret leakage and capability boundary test (`PLAT-6`, `PLAT-15`).
+- [x] Unit — All unit tests in `tests/unit/` pass.
+- [x] Integration — `tests/integration/backing_services_auth_test.ts`: Full backing services, web login, and CLI login integration flow.
+- [x] Security — `tests/security/api_key_redaction_audit_test.ts`: Adversarial secret leakage and capability boundary test (`PLAT-6`, `PLAT-15`).
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly
-- [ ] Spec-anchor comments verified across all new modules
-- [ ] `deno check **/*.ts` run, real output attached, zero errors
-- [ ] `deno test` run, real output attached, all test suites passing
-- [ ] `deno lint` run, real output attached, zero warnings
-- [ ] Security-auditor pass completed for PLAT-6 and PLAT-15 compliance
-- [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] All milestone tasks marked Done with verified DoD checklists
+- [x] Implementation matches every cited clause ID exactly
+- [x] Spec-anchor comments verified across all new modules
+- [x] `deno check **/*.ts` run, real output attached, zero errors
+- [x] `deno test` run, real output attached, all test suites passing
+- [x] `deno lint` run, real output attached, zero warnings
+- [x] Security-auditor pass completed for PLAT-6 and PLAT-15 compliance
+- [x] No item from `docs/ANTI-SLOP.md` violated
+- [x] All milestone tasks marked Done with verified DoD checklists
 
 ## Assumptions made
 
