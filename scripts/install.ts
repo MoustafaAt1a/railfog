@@ -222,9 +222,9 @@ export async function runInstaller(options: InstallerOptions): Promise<{
     }
 
     // spec: contracts/platform.contract.md#PLAT-19 — Subprocess execution via Deno.execPath
-    const args = ["install", "-g", "-A"];
+    const args = ["install", "-g", "-A", "--no-lock"];
     if (options.force) {
-      args.push("-f");
+      args.push("-f", "-r");
     }
     if (options.compile) {
       args.push("--compile");
