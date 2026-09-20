@@ -211,10 +211,43 @@ export async function runInstaller(options: InstallerOptions): Promise<{
         ? resolve(fromFileUrl(import.meta.url), "../..")
         : Deno.cwd();
 
-      try {
-        await Deno.stat(join(localRootDir, "deno.json"));
-      } catch {
-        localRootDir = Deno.cwd();
+      let found = false;
+      let dir = localRootDir;
+      for (let i = 0; i < 5; i++) {
+        try {
+          const statDeno = await Deno.stat(join(dir, "deno.json"));
+          const statCli = await Deno.stat(join(dir, "cli", "main.ts"));
+          if (statDeno.isFile && statCli.isFile) {
+            localRootDir = dir;
+            found = true;
+            break;
+          }
+        } catch {
+          // continue upwards
+        }
+        const parent = resolve(dir, "..");
+        if (parent === dir) break;
+        dir = parent;
+      }
+
+      if (!found) {
+        dir = Deno.cwd();
+        for (let i = 0; i < 5; i++) {
+          try {
+            const statDeno = await Deno.stat(join(dir, "deno.json"));
+            const statCli = await Deno.stat(join(dir, "cli", "main.ts"));
+            if (statDeno.isFile && statCli.isFile) {
+              localRootDir = dir;
+              found = true;
+              break;
+            }
+          } catch {
+            // continue upwards
+          }
+          const parent = resolve(dir, "..");
+          if (parent === dir) break;
+          dir = parent;
+        }
       }
 
       configPath = join(localRootDir, "deno.json");

@@ -414,6 +414,7 @@ Usage:
 Options:
   --check               Check for newer versions without installing
   -f, --force           Force reinstallation even if already up to date
+  -l, --local           Sync directly from local repository sources
   --version <version>   Upgrade to a specific semantic version
   --ref <ref>           Upgrade to a specific git branch or tag (default: main)
   --compile             Compile into a standalone native binary
@@ -1056,6 +1057,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let version: string | undefined;
       let ref: string | undefined;
       let compile = false;
+      let local = false;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1067,6 +1069,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           checkOnly = true;
         } else if (arg === "-f" || arg === "--force") {
           force = true;
+        } else if (arg === "-l" || arg === "--local") {
+          local = true;
         } else if (arg === "--compile") {
           compile = true;
         } else if (arg === "--version" && args[i + 1]) {
@@ -1089,6 +1093,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         version,
         ref,
         compile,
+        local,
       });
 
       if (!res.ok) {

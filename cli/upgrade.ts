@@ -19,6 +19,7 @@ export interface UpgradeOptions {
   root?: string;
   compile?: boolean;
   repo?: string;
+  local?: boolean;
 }
 
 /**
@@ -71,7 +72,8 @@ export async function checkLatestVersion(options?: {
     throw new Error(`Invalid git ref format: "${ref}"`);
   }
 
-  const url = `https://raw.githubusercontent.com/${repo}/${ref}/cli/version.ts`;
+  const url =
+    `https://raw.githubusercontent.com/${repo}/${ref}/cli/version.ts?_t=${Date.now()}`;
 
   let response: Response;
   try {
@@ -101,7 +103,7 @@ export async function checkLatestVersion(options?: {
 
   // spec: PLAT-19 — Fallback version check via repository deno.json
   const fallbackUrl =
-    `https://raw.githubusercontent.com/${repo}/${ref}/deno.json`;
+    `https://raw.githubusercontent.com/${repo}/${ref}/deno.json?_t=${Date.now()}`;
   let fallbackRes: Response;
   try {
     fallbackRes = await fetch(fallbackUrl, {
@@ -268,6 +270,7 @@ export async function runUpgrade(
 
   // spec: PLAT-19, T-0814 AC 3 — Skip upgrade if already on target version and force is false
   if (
+    !options?.local &&
     targetVersion === currentVersion && !options?.force && targetRef !== "main"
   ) {
     const message = `RailFog CLI is already up to date (${currentVersion}).`;
@@ -281,7 +284,7 @@ export async function runUpgrade(
     };
   }
 
-  if (!options?.force && targetRef === "main") {
+  if (!options?.local && !options?.force && targetRef === "main") {
     try {
       const latest = await checkLatestVersion({
         repo: options?.repo,
@@ -307,7 +310,11 @@ export async function runUpgrade(
 
   // spec: PLAT-19, T-0814 AC 4, 5 — Execute installer with progress spinner
   const spinner = createSpinner();
-  spinner.start(`Upgrading RailFog CLI (${currentVersion} -> ${targetRef})...`);
+  spinner.start(
+    options?.local
+      ? "Syncing RailFog CLI from local repository..."
+      : `Upgrading RailFog CLI (${currentVersion} -> ${targetRef})...`,
+  );
 
   const res = await runInstaller({
     root: options?.root,
@@ -315,6 +322,7 @@ export async function runUpgrade(
     force: true,
     ref: targetRef,
     repo: options?.repo ?? "MoustafaAt1a/railfog",
+    local: options?.local,
   });
 
   if (!res.ok) {
@@ -328,15 +336,18 @@ export async function runUpgrade(
     };
   }
 
-  spinner.succeed(`RailFog CLI upgraded successfully to ${targetRef}`);
-  printUpgradeBox(res.installedPath, targetRef);
+  const successMessage = options?.local
+    ? "RailFog CLI synchronized successfully from local repository."
+    : `RailFog CLI upgraded successfully to ${targetRef}`;
+  spinner.succeed(successMessage);
+  printUpgradeBox(res.installedPath, options?.local ? "local" : targetRef);
 
   return {
     ok: true,
     upToDate: false,
     currentVersion,
-    targetVersion: targetRef,
+    targetVersion: options?.local ? "local" : targetRef,
     installedPath: res.installedPath,
-    message: "RailFog CLI upgraded successfully.",
+    message: successMessage,
   };
 }

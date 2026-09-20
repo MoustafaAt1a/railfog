@@ -565,6 +565,47 @@ Deno.test(
   },
 );
 
+Deno.test(
+  "runUpgrade: local sync installs from local repository into root and bypasses version equality check",
+  async () => {
+    const tempRoot = await Deno.makeTempDir({ prefix: "railfog-upgrade-local-" });
+    try {
+      const result = await runUpgrade({
+        root: tempRoot,
+        local: true,
+      });
+
+      assertEquals(result.ok, true, `Local upgrade should succeed: ${result.message}`);
+      assertEquals(result.targetVersion, "local");
+      assert(result.installedPath !== undefined, "installedPath should be returned");
+
+      const isWindows = Deno.build.os === "windows";
+      const expectedBinary = join(tempRoot, "bin", isWindows ? "rail.cmd" : "rail");
+      assertEquals(result.installedPath, expectedBinary);
+
+      const execResult = await executeInstalledBinary(result.installedPath, ["--version"]);
+      assertEquals(execResult.code, 0, `Installed binary should run: ${execResult.stderr}`);
+      assertStringIncludes(execResult.stdout, `rail ${CLI_VERSION}`);
+    } finally {
+      try {
+        await Deno.remove(tempRoot, { recursive: true });
+      } catch {
+        // cleanup
+      }
+    }
+  },
+);
+
+Deno.test(
+  "CLI command dispatch: 'rail update --help' documents -l, --local flag",
+  async () => {
+    const res = await runCli(["update", "--help"]);
+    assertEquals(res.code, 0);
+    assertStringIncludes(res.stdout, "-l, --local");
+    assertStringIncludes(res.stdout, "local repository");
+  },
+);
+
 // =============================================================================
 // 6. Security Adversarial Tests (PLAT-15, PLAT-19)
 // =============================================================================

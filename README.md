@@ -319,6 +319,11 @@ rail update --version 0.8.0
 
 # Compile into a standalone native binary
 rail update --compile
+
+# Synchronize directly from local repository working directory (for developers)
+rail update --local
+# or -l
+rail update -l
 ```
 
 ---
