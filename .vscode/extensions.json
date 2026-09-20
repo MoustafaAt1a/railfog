@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "denoland.vscode-deno",
+    "tamasfe.even-better-toml",
+    "editorconfig.editorconfig"
+  ]
+}

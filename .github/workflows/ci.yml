@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify:
+    name: Lint, Format, and Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.x
+
+      - name: Verify Code Formatting
+        run: deno fmt --check
+
+      - name: Lint Workspace
+        run: deno lint
+
+      - name: Type Check Workspace
+        run: deno task check
+
+  test:
+    name: Test Suite
+    runs-on: ${{ matrix.os }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.x
+
+      - name: Run Unit Tests
+        run: deno task test:unit
+
+      - name: Run Contract Tests
+        run: deno task test:contract
+
+      - name: Run Security Tests
+        run: deno task test:security
+
+      - name: Run Integration Tests
+        run: deno task test:integration
+
+      - name: Run Load Tests
+        run: deno task test:load
+
+      - name: Run End-to-End Tests
+        run: deno task test:e2e

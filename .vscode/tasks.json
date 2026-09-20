@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "command": "deno",
+      "args": ["task", "check"],
+      "problemMatcher": ["$deno"],
+      "label": "deno: typecheck",
+      "group": "build"
+    },
+    {
+      "type": "shell",
+      "command": "deno",
+      "args": ["task", "test:unit"],
+      "problemMatcher": ["$deno"],
+      "label": "deno: test:unit",
+      "group": "test"
+    },
+    {
+      "type": "shell",
+      "command": "deno",
+      "args": ["task", "test"],
+      "problemMatcher": ["$deno"],
+      "label": "deno: test:all",
+      "group": "test"
+    },
+    {
+      "type": "shell",
+      "command": "deno",
+      "args": ["task", "lint"],
+      "problemMatcher": ["$deno"],
+      "label": "deno: lint"
+    },
+    {
+      "type": "shell",
+      "command": "deno",
+      "args": ["task", "fmt:check"],
+      "problemMatcher": ["$deno"],
+      "label": "deno: format check"
+    }
+  ]
+}

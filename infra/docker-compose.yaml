@@ -1,0 +1,59 @@
+# spec: contracts/platform.contract.md#PLAT-1 — Stage 1 deployment topology: two processes (railfog-control on 8081, railfog-runtime on 8080)
+# spec: contracts/platform.contract.md#PLAT-4 — Isolation, defense in depth, unprivileged execution, capability dropping
+# spec: contracts/platform.contract.md#PLAT-19 — Repository packaging structure: infra/
+# spec: tasks/milestone-0.6-public-beta/T-0603-production-packaging-spec.md
+
+version: "3.8"
+
+networks:
+  # spec: contracts/platform.contract.md#PLAT-1 — Internal isolated bridge network connecting control and runtime
+  railfog-internal:
+    driver: bridge
+
+services:
+  # spec: contracts/platform.contract.md#PLAT-1 — Control plane process (deploys, identity, routing config)
+  railfog-control:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.control
+    networks:
+      - railfog-internal
+    # spec: contracts/platform.contract.md#PLAT-1 — Internal exposure only, not published to host interface
+    expose:
+      - "8081"
+    # spec: contracts/platform.contract.md#PLAT-4 — Non-root unprivileged execution
+    user: "10001:10001"
+    # spec: contracts/platform.contract.md#PLAT-4 — Capability dropping and privilege escalation prevention
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - DENO_ENV=production
+      - PORT=8081
+
+  # spec: contracts/platform.contract.md#PLAT-1 — Data plane process (serves live requests, runs untrusted functions in sandbox)
+  railfog-runtime:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.runtime
+    networks:
+      - railfog-internal
+    # spec: contracts/platform.contract.md#PLAT-1 — Data plane ingress exposed to host/public
+    ports:
+      - "8080:8080"
+    # spec: contracts/platform.contract.md#PLAT-1 — Runtime references control plane via internal network
+    environment:
+      - RAILFOG_CONTROL_URL=http://railfog-control:8081
+      - DENO_ENV=production
+      - PORT=8080
+    # spec: contracts/platform.contract.md#PLAT-4 — Non-root unprivileged execution
+    user: "10001:10001"
+    # spec: contracts/platform.contract.md#PLAT-4 — Drop all capabilities for defense in depth
+    cap_drop:
+      - ALL
+    # spec: contracts/platform.contract.md#PLAT-4 — Prevent gaining new privileges
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - railfog-control

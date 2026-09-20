@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+# spec: contracts/platform.contract.md#PLAT-1 — Stage 1 deployment topology: data plane on 8080
+# spec: contracts/platform.contract.md#PLAT-4 — Isolation, defense in depth, unprivileged execution, capability dropping
+# spec: contracts/platform.contract.md#PLAT-19 — Repository packaging structure: infra/
+# spec: tasks/milestone-0.6-public-beta/T-0603-production-packaging-spec.md
+
+# Stage 1: Build and dependency caching stage
+FROM denoland/deno:alpine AS builder
+WORKDIR /app
+COPY deno.json* ./
+COPY . .
+RUN deno cache --allow-import runtime/dev-server/local-server.ts cli/main.ts || true
+
+# Stage 2: Minimal runtime image for railfog-runtime
+FROM denoland/deno:alpine AS runner
+WORKDIR /app
+
+# spec: contracts/platform.contract.md#PLAT-4 — Create unprivileged user (UID 10001) for defense in depth
+RUN addgroup -g 10001 railfog && \
+    adduser -u 10001 -G railfog -s /bin/sh -D railfog && \
+    apk add --no-cache curl
+
+# Copy project files with unprivileged ownership
+COPY --chown=10001:10001 --from=builder /app /app
+
+# spec: contracts/platform.contract.md#PLAT-1 — Data plane port (8080)
+EXPOSE 8080
+
+# spec: contracts/platform.contract.md#PLAT-4 — Switch to unprivileged non-root user
+USER 10001:10001
+
+# spec: contracts/platform.contract.md#PLAT-1 — Native healthcheck probing data plane /healthz
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD curl -f http://localhost:8080/healthz || exit 1
+
+# spec: contracts/platform.contract.md#PLAT-1 — Launch data plane runtime daemon
+CMD ["run", "--allow-all", "runtime/dev-server/local-server.ts"]

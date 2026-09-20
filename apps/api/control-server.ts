@@ -1,0 +1,737 @@
+/**
+ * Standalone Control Plane Daemon Server (railfog-control).
+ *
+ * Exposes management REST endpoints for project health, immutable versioned
+ * configuration snapshot distribution, revision deployment and rollback, and
+ * state backup export/import. Never executes customer code.
+ *
+ * Spec references:
+ * - PLAT-1: Control plane vs data plane separation (never executes customer code).
+ * - PLAT-3: Deployment pipeline (validation, CAS storage, health check gating, atomic cutover, instant rollback).
+ * - PLAT-8: Fail-static snapshot distribution and ETag caching.
+ * - PLAT-12: Error model taxonomy (RESOURCE_NOT_FOUND, VALIDATION_FAILED, PERMISSION_DENIED, CONFLICT, request_id).
+ * - PLAT-14: ULID monotonic identifier format for request_id, revisions, and snapshots.
+ * - PLAT-18: Resource hierarchy Org -> Project -> { Function, KV, Object, Queue } -> Revision.
+ * - FN-3: Function lifecycle, immutable revisions, instant pointer-flip rollback without rebuilding.
+ * - ADR-0002: State backup and disaster recovery archive specification.
+ * - tasks/milestone-0.6-public-beta/T-0605-control-plane-server.md
+ */
+
+import type {
+  DeploymentResult,
+  DeploymentService,
+  RevisionRecord,
+} from "./deployment-service.ts";
+import type {
+  ImportProjectResult,
+  StateBackupService,
+} from "./state-backup-service.ts";
+import {
+  type RoutingSnapshot as ProjectSnapshot,
+  SnapshotDistributor,
+} from "../../packages/protocol/snapshot.ts";
+import { generateUlid } from "../../packages/core/id/ulid.ts";
+import {
+  PermissionDeniedError,
+  RailFogError,
+  type RailFogErrorCode,
+  ValidationFailedError,
+} from "../../packages/errors/mod.ts";
+import type {
+  Manifest,
+  PackagedArtifact,
+} from "../../packages/core/artifact/packager.ts";
+import type { StateBackupArchive } from "../../packages/core/backup/archive-schema.ts";
+
+export type { ProjectSnapshot };
+
+// spec: contracts/platform.contract.md#PLAT-1 — Service identifier
+const CONTROL_PLANE_SERVICE_NAME = "railfog-control";
+
+// spec: contracts/platform.contract.md#PLAT-19 — Default network binding parameters
+const DEFAULT_CONTROL_PORT = 8081;
+const DEFAULT_CONTROL_HOST = "127.0.0.1";
+
+// spec: contracts/platform.contract.md#PLAT-7, #PLAT-18 — Default tenant fallback
+const DEFAULT_ORG_ID = "default-org";
+
+// spec: contracts/platform.contract.md#PLAT-12 — Canonical HTTP status codes
+const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_NOT_MODIFIED = 304;
+const HTTP_STATUS_BAD_REQUEST = 400;
+const HTTP_STATUS_FORBIDDEN = 403;
+const HTTP_STATUS_NOT_FOUND = 404;
+const HTTP_STATUS_CONFLICT = 409;
+const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
+const HTTP_STATUS_RATE_LIMITED = 429;
+const HTTP_STATUS_INTERNAL_ERROR = 500;
+const HTTP_STATUS_UNAVAILABLE = 503;
+const HTTP_STATUS_GATEWAY_TIMEOUT = 504;
+
+// spec: contracts/platform.contract.md#PLAT-12 — Canonical error codes
+const ERROR_INTERNAL = "INTERNAL";
+
+/**
+ * Configuration options for starting the control plane server.
+ * spec: tasks/milestone-0.6-public-beta/T-0605-control-plane-server.md
+ */
+export interface ControlServerOptions {
+  port?: number;
+  host?: string;
+  deploymentService: DeploymentService;
+  stateBackupService: StateBackupService;
+  signal?: AbortSignal;
+}
+
+/**
+ * Active control plane server handle.
+ * spec: tasks/milestone-0.6-public-beta/T-0605-control-plane-server.md
+ */
+export interface ControlServer {
+  port: number;
+  close(): Promise<void>;
+}
+
+/**
+ * Cached snapshot state for a project to maintain version continuity.
+ * spec: contracts/platform.contract.md#PLAT-8
+ */
+interface ProjectSnapshotState {
+  distributor: SnapshotDistributor;
+  snapshot: ProjectSnapshot;
+  revisionFingerprint: string;
+}
+
+/**
+ * Resolves or generates the canonical request identifier.
+ * Preserves incoming client ID or generates a fresh Crockford Base32 ULID.
+ *
+ * spec: contracts/platform.contract.md#PLAT-14 — 128-bit monotonic Crockford Base32 ULID
+ * spec: contracts/platform.contract.md#PLAT-12 — request_id propagated unchanged
+ */
+function resolveRequestId(req: Request): string {
+  return (
+    req.headers.get("x-request-id") ||
+    req.headers.get("request-id") ||
+    generateUlid()
+  );
+}
+
+/**
+ * Maps RailFogErrorCode to canonical HTTP status codes.
+ * spec: contracts/platform.contract.md#PLAT-12
+ */
+function statusFromErrorCode(code: RailFogErrorCode): number {
+  switch (code) {
+    case "VALIDATION_FAILED":
+      return HTTP_STATUS_BAD_REQUEST;
+    case "PERMISSION_DENIED":
+      return HTTP_STATUS_FORBIDDEN;
+    case "RESOURCE_NOT_FOUND":
+      return HTTP_STATUS_NOT_FOUND;
+    case "CONFLICT":
+      return HTTP_STATUS_CONFLICT;
+    case "PAYLOAD_TOO_LARGE":
+      return HTTP_STATUS_PAYLOAD_TOO_LARGE;
+    case "RATE_LIMITED":
+    case "CALL_DEPTH_EXCEEDED":
+      return HTTP_STATUS_RATE_LIMITED;
+    case "UNAVAILABLE":
+      return HTTP_STATUS_UNAVAILABLE;
+    case "TIMEOUT":
+      return HTTP_STATUS_GATEWAY_TIMEOUT;
+    case "INTERNAL":
+    default:
+      return HTTP_STATUS_INTERNAL_ERROR;
+  }
+}
+
+/**
+ * Builds standard error response adhering to PLAT-12 error schema.
+ * spec: contracts/platform.contract.md#PLAT-12
+ */
+function buildErrorResponse(err: unknown, requestId: string): Response {
+  if (err instanceof RailFogError) {
+    const status = statusFromErrorCode(err.code);
+    const body = {
+      error: {
+        code: err.code,
+        message: err.message,
+        request_id: requestId,
+      },
+    };
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": requestId,
+        "request-id": requestId,
+      },
+    });
+  }
+
+  const message = err instanceof Error ? err.message : String(err);
+  const body = {
+    error: {
+      code: ERROR_INTERNAL,
+      message,
+      request_id: requestId,
+    },
+  };
+  return new Response(JSON.stringify(body), {
+    status: HTTP_STATUS_INTERNAL_ERROR,
+    headers: {
+      "content-type": "application/json",
+      "x-request-id": requestId,
+      "request-id": requestId,
+    },
+  });
+}
+
+/**
+ * Safely parses request body as JSON object.
+ * spec: contracts/platform.contract.md#PLAT-12
+ */
+async function parseJsonBody(req: Request): Promise<Record<string, unknown>> {
+  const text = await req.text();
+  if (!text || text.trim().length === 0) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (
+      typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ) {
+      return parsed as Record<string, unknown>;
+    }
+    throw new ValidationFailedError(
+      "VALIDATION_FAILED: Request body must be a JSON object",
+    );
+  } catch (err) {
+    if (err instanceof RailFogError) {
+      throw err;
+    }
+    throw new ValidationFailedError(
+      `VALIDATION_FAILED: Malformed JSON payload: ${(err as Error).message}`,
+    );
+  }
+}
+
+/**
+ * Determines whether incoming If-None-Match header matches the current ETag.
+ * Strips weak prefix W/ and quotes for standard comparison.
+ * spec: contracts/platform.contract.md#PLAT-8
+ */
+function isEtagMatch(ifNoneMatchHeader: string, currentEtag: string): boolean {
+  const cleanCurrent = currentEtag
+    .trim()
+    .replace(/^W\//, "")
+    .replace(/^"/, "")
+    .replace(/"$/, "");
+  const parts = ifNoneMatchHeader.split(",").map((p) => p.trim());
+  for (const part of parts) {
+    if (part === "*") {
+      return true;
+    }
+    const cleanPart = part
+      .replace(/^W\//, "")
+      .replace(/^"/, "")
+      .replace(/"$/, "");
+    if (cleanPart === cleanCurrent) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Starts the standalone control plane daemon HTTP server.
+ *
+ * Spec references:
+ * - PLAT-1: Control plane never executes customer code.
+ * - PLAT-3: Deployment pipeline and instant rollback.
+ * - PLAT-8: Fail-static snapshot distribution and ETag caching.
+ * - PLAT-12: Error model and request_id propagation.
+ * - PLAT-14: ULID monotonic identifiers.
+ * - PLAT-18: Org -> Project -> Function hierarchy.
+ * - FN-3: Function lifecycle and pointer flip rollback.
+ * - ADR-0002: State backup export and restore.
+ */
+export function startControlServer(
+  options: ControlServerOptions,
+): Promise<ControlServer> {
+  const snapshotStates = new Map<string, ProjectSnapshotState>();
+
+  /**
+   * Retrieves or builds the current snapshot for a project.
+   * If active revisions have changed, advances snapshot version.
+   * spec: contracts/platform.contract.md#PLAT-8
+   */
+  async function getProjectSnapshot(
+    projectId: string,
+  ): Promise<ProjectSnapshot> {
+    const fnNames = options.deploymentService.listFunctions(projectId).sort();
+    const activeRevisions: Record<string, RevisionRecord> = {};
+
+    for (const fnName of fnNames) {
+      const rev = await options.deploymentService.getActiveRevision(
+        projectId,
+        fnName,
+      );
+      if (rev) {
+        activeRevisions[fnName] = rev;
+      }
+    }
+
+    const fingerprint = Object.entries(activeRevisions)
+      .map(([k, v]) => `${k}:${v.id}:${v.artifactId}:${v.state}`)
+      .sort()
+      .join(";");
+
+    let state = snapshotStates.get(projectId);
+    if (!state) {
+      const distributor = new SnapshotDistributor();
+      const routes = Object.keys(activeRevisions).sort().map((fn) => ({
+        pattern: `/${fn}`,
+        function: fn,
+      }));
+      const snapshot = distributor.createSnapshot(routes, activeRevisions);
+      state = { distributor, snapshot, revisionFingerprint: fingerprint };
+      snapshotStates.set(projectId, state);
+    } else if (state.revisionFingerprint !== fingerprint) {
+      const routes = Object.keys(activeRevisions).sort().map((fn) => ({
+        pattern: `/${fn}`,
+        function: fn,
+      }));
+      state.snapshot = state.distributor.createSnapshot(
+        routes,
+        activeRevisions,
+      );
+      state.revisionFingerprint = fingerprint;
+    }
+
+    return state.snapshot;
+  }
+
+  /**
+   * Marks cached snapshot dirty to ensure re-generation on mutation.
+   * spec: contracts/platform.contract.md#PLAT-8
+   */
+  function invalidateProjectSnapshot(projectId: string): void {
+    const state = snapshotStates.get(projectId);
+    if (state) {
+      state.revisionFingerprint = "";
+    }
+  }
+
+  // HTTP Request Dispatcher
+  const handler = async (req: Request): Promise<Response> => {
+    // spec: contracts/platform.contract.md#PLAT-14 — Request ID resolution
+    const requestId = resolveRequestId(req);
+
+    try {
+      const url = new URL(req.url);
+      let pathname = url.pathname;
+      if (pathname.length > 1 && pathname.endsWith("/")) {
+        pathname = pathname.slice(0, -1);
+      }
+
+      // AC1: GET /healthz (PLAT-1, PLAT-12, PLAT-14)
+      if (pathname === "/healthz") {
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for /healthz (PLAT-12)`,
+            requestId,
+          );
+        }
+        const body = {
+          status: "ok",
+          service: CONTROL_PLANE_SERVICE_NAME,
+          request_id: requestId,
+        };
+        return new Response(JSON.stringify(body), {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // Customer Code Rejection (PLAT-1)
+      // Fast check for explicit invocation or customer-facing paths
+      if (
+        pathname === "/invoke" ||
+        pathname === "/run" ||
+        pathname.startsWith("/api/") ||
+        pathname.endsWith("/invoke") ||
+        pathname === "/customer-function"
+      ) {
+        throw new PermissionDeniedError(
+          "PERMISSION_DENIED: Control plane never executes customer code per PLAT-1.",
+          requestId,
+        );
+      }
+
+      // Pattern: /v1/projects/:projectId/:action
+      const projectMatch = pathname.match(
+        /^\/v1\/projects\/([^/]+)\/(snapshot|deploy|rollback|export|import)$/,
+      );
+
+      // AC2: Snapshot Distribution & ETag Caching (PLAT-8)
+      if (projectMatch && projectMatch[2] === "snapshot") {
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for snapshot (PLAT-12)`,
+            requestId,
+          );
+        }
+        const projectId = decodeURIComponent(projectMatch[1]);
+        const snapshot = await getProjectSnapshot(projectId);
+        const currentEtag = `"${snapshot.version}"`;
+
+        const ifNoneMatch = req.headers.get("if-none-match");
+        if (ifNoneMatch && isEtagMatch(ifNoneMatch, currentEtag)) {
+          // spec: contracts/platform.contract.md#PLAT-8 — 304 Not Modified without body payload
+          return new Response(null, {
+            status: HTTP_STATUS_NOT_MODIFIED,
+            headers: {
+              "etag": currentEtag,
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          });
+        }
+
+        return new Response(JSON.stringify(snapshot), {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/json",
+            "etag": currentEtag,
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // AC3: Revision Deployment Pipeline (PLAT-3)
+      if (
+        (projectMatch && projectMatch[2] === "deploy") ||
+        pathname === "/deploy"
+      ) {
+        if (req.method !== "POST") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for deploy (PLAT-12)`,
+            requestId,
+          );
+        }
+
+        const body = await parseJsonBody(req);
+        const projectId =
+          (projectMatch ? decodeURIComponent(projectMatch[1]) : "") ||
+          (typeof body.project === "string" ? body.project : "") ||
+          (typeof body.projectId === "string" ? body.projectId : "");
+
+        if (!projectId || projectId.trim().length === 0) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing project identifier for deployment (PLAT-12)",
+            requestId,
+          );
+        }
+
+        if (
+          !body.functionName ||
+          typeof body.functionName !== "string" ||
+          body.functionName.trim().length === 0
+        ) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing functionName for deployment (PLAT-12)",
+            requestId,
+          );
+        }
+
+        if (
+          !body.artifact ||
+          typeof body.artifact !== "object" ||
+          body.artifact === null
+        ) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing artifact for deployment (PLAT-12)",
+            requestId,
+          );
+        }
+
+        const rawArtifact = body.artifact as Record<string, unknown>;
+        let bytes: Uint8Array;
+        if (rawArtifact.bytes instanceof Uint8Array) {
+          bytes = rawArtifact.bytes;
+        } else if (Array.isArray(rawArtifact.bytes)) {
+          bytes = new Uint8Array(rawArtifact.bytes as number[]);
+        } else if (
+          typeof rawArtifact.bytes === "object" &&
+          rawArtifact.bytes !== null
+        ) {
+          bytes = new Uint8Array(
+            Object.values(rawArtifact.bytes) as number[],
+          );
+        } else {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing or invalid artifact bytes (OBJ-4, PLAT-12)",
+            requestId,
+          );
+        }
+
+        const artifact: PackagedArtifact = {
+          id: String(rawArtifact.id ?? ""),
+          integrity: String(rawArtifact.integrity ?? ""),
+          manifest: (rawArtifact.manifest ?? {}) as Manifest,
+          bytes,
+        };
+
+        const deployResult: DeploymentResult = await options.deploymentService
+          .deploy(projectId, body.functionName.trim(), artifact);
+
+        // spec: contracts/platform.contract.md#PLAT-8 — Advance snapshot version
+        invalidateProjectSnapshot(projectId);
+        await getProjectSnapshot(projectId);
+
+        return new Response(JSON.stringify(deployResult), {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // AC4: Instant Pointer-Flip Rollback (PLAT-3, FN-3)
+      if (
+        (projectMatch && projectMatch[2] === "rollback") ||
+        pathname === "/rollback"
+      ) {
+        if (req.method !== "POST") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for rollback (PLAT-12)`,
+            requestId,
+          );
+        }
+
+        const body = await parseJsonBody(req);
+        const projectId =
+          (projectMatch ? decodeURIComponent(projectMatch[1]) : "") ||
+          (typeof body.project === "string" ? body.project : "") ||
+          (typeof body.projectId === "string" ? body.projectId : "");
+
+        if (!projectId || projectId.trim().length === 0) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing project identifier for rollback (PLAT-12)",
+            requestId,
+          );
+        }
+
+        if (
+          !body.functionName ||
+          typeof body.functionName !== "string" ||
+          body.functionName.trim().length === 0
+        ) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing functionName for rollback (PLAT-12)",
+            requestId,
+          );
+        }
+
+        if (
+          !body.targetRevisionId ||
+          typeof body.targetRevisionId !== "string" ||
+          body.targetRevisionId.trim().length === 0
+        ) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing targetRevisionId for rollback (PLAT-12)",
+            requestId,
+          );
+        }
+
+        const rollbackResult = await options.deploymentService.rollback(
+          projectId,
+          body.functionName.trim(),
+          body.targetRevisionId.trim(),
+        );
+
+        // spec: contracts/platform.contract.md#PLAT-8, FN-3 — Invalidate snapshot
+        invalidateProjectSnapshot(projectId);
+        await getProjectSnapshot(projectId);
+
+        return new Response(JSON.stringify(rollbackResult), {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // AC5: State Backup Export (ADR-0002)
+      if (
+        (projectMatch && projectMatch[2] === "export") ||
+        pathname === "/export"
+      ) {
+        if (req.method !== "POST" && req.method !== "GET") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for export (PLAT-12)`,
+            requestId,
+          );
+        }
+
+        let body: Record<string, unknown> = {};
+        if (req.method === "POST") {
+          try {
+            body = await parseJsonBody(req);
+          } catch {
+            // Body is optional for export if parameters are provided in query or headers
+          }
+        }
+
+        const projectId =
+          (projectMatch ? decodeURIComponent(projectMatch[1]) : "") ||
+          url.searchParams.get("projectId") ||
+          (typeof body.projectId === "string" ? body.projectId : "") ||
+          (typeof body.project === "string" ? body.project : "");
+
+        if (!projectId || projectId.trim().length === 0) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing projectId for export (PLAT-12)",
+            requestId,
+          );
+        }
+
+        const orgId = url.searchParams.get("orgId") ||
+          req.headers.get("x-org-id") ||
+          (typeof body.orgId === "string" ? body.orgId : "") ||
+          DEFAULT_ORG_ID;
+
+        const archive: StateBackupArchive = await options.stateBackupService
+          .exportProject({
+            orgId,
+            projectId,
+          });
+
+        return new Response(JSON.stringify(archive), {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // AC5: State Backup Import (ADR-0002)
+      if (
+        (projectMatch && projectMatch[2] === "import") ||
+        pathname === "/import"
+      ) {
+        if (req.method !== "POST") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for import (PLAT-12)`,
+            requestId,
+          );
+        }
+
+        const body = await parseJsonBody(req);
+        const projectId =
+          (projectMatch ? decodeURIComponent(projectMatch[1]) : "") ||
+          (typeof body.targetProjectId === "string"
+            ? body.targetProjectId
+            : "") ||
+          (typeof body.projectId === "string" ? body.projectId : "") ||
+          (typeof body.project === "string" ? body.project : "");
+
+        if (!projectId || projectId.trim().length === 0) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing targetProjectId for import (PLAT-12)",
+            requestId,
+          );
+        }
+
+        if (
+          !body.archive ||
+          typeof body.archive !== "object" ||
+          body.archive === null
+        ) {
+          throw new ValidationFailedError(
+            "VALIDATION_FAILED: Missing archive payload in import request body (PLAT-12, ADR-0002)",
+            requestId,
+          );
+        }
+
+        const targetOrgId =
+          (typeof body.targetOrgId === "string" ? body.targetOrgId : "") ||
+          url.searchParams.get("orgId") ||
+          req.headers.get("x-org-id") ||
+          (typeof body.orgId === "string" ? body.orgId : "") ||
+          DEFAULT_ORG_ID;
+
+        const overwriteKv = body.overwriteKv === true;
+
+        const importResult: ImportProjectResult = await options
+          .stateBackupService.importProject({
+            targetOrgId,
+            targetProjectId: projectId,
+            archive: body.archive as StateBackupArchive,
+            overwriteKv,
+          });
+
+        // spec: contracts/platform.contract.md#PLAT-8 — Advance snapshot version
+        invalidateProjectSnapshot(projectId);
+        await getProjectSnapshot(projectId);
+
+        return new Response(JSON.stringify(importResult), {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // AC6: Unmatched route rejection per PLAT-1 & PLAT-12
+      // spec: contracts/platform.contract.md#PLAT-1 — Control plane never executes customer code
+      throw new PermissionDeniedError(
+        "PERMISSION_DENIED: Control plane never executes customer code per PLAT-1.",
+        requestId,
+      );
+    } catch (err) {
+      return buildErrorResponse(err, requestId);
+    }
+  };
+
+  // spec: contracts/platform.contract.md#PLAT-19 — Bind HTTP daemon
+  const server = Deno.serve(
+    {
+      port: options.port ?? DEFAULT_CONTROL_PORT,
+      hostname: options.host ?? DEFAULT_CONTROL_HOST,
+      signal: options.signal,
+      onListen: () => {},
+    },
+    handler,
+  );
+
+  const assignedPort = (server.addr as Deno.NetAddr).port;
+  const controlServer: ControlServer = {
+    port: assignedPort,
+    close: async () => {
+      try {
+        await server.shutdown();
+      } catch {
+        // Shutdown may be called after AbortSignal or already closed
+      }
+      snapshotStates.clear();
+    },
+  };
+
+  return Promise.resolve(controlServer);
+}

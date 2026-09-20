@@ -1,0 +1,25 @@
+{
+  "_comment": "Hook event key names (SessionStart, PreToolUse, PostToolUse) match Antigravity CLI's documented hook system as of this writing. Verify against your installed CLI version's schema (e.g. `agy hooks --help`) and adjust key names if they differ - the scripts themselves are the important, portable part.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "description": "Remind the session which spec file is canon before any work starts.",
+        "run": "echo 'RailFog session start: docs/contracts/*.md is canon (derived from the LTS spec). See docs/00-deep-analysis.md #1 before implementing anything the contracts do not cover.'"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "bash",
+        "description": "Block obviously destructive shell commands before execution.",
+        "run": ".agents/hooks/block-destructive-ops.sh \"$TOOL_INPUT\""
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "edit|write",
+        "description": "Run deno fmt/lint/check after any file edit so verification claims are backed by real output.",
+        "run": ".agents/hooks/post-edit-verify.sh"
+      }
+    ]
+  }
+}

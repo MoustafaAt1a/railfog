@@ -1,0 +1,42 @@
+# Deno
+.deno/
+deno.lock.bak
+coverage/
+*.lcov
+bin/
+*.exe
+
+# Local dev data (SQLite-backed local providers, T-0104/T-0106)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.railfog/
+.railfog/local/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Editor & IDE
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+
+# Environment variables & secrets (PLAT-15)
+.env
+.env.*
+!.env.example
+
+# Temporary and scratch artifacts
+tmp/
+.tmp/
+scratch/
+*.log
+.serena/
+
