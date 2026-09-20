@@ -49,7 +49,7 @@
     "fmt:check": "deno fmt --check",
     "verify": "deno task check && deno lint && deno fmt --check && deno task test:unit && deno task test:contract && deno task test:security",
     "build": "deno compile --allow-read --allow-write --allow-net --allow-run --allow-env --output bin/rail.exe cli/main.ts",
-    "install": "deno run -A scripts/install.ts --local --compile -f"
+    "install": "deno install -g -A -f --config deno.json -n rail cli/main.ts"
   },
   "fmt": {
     "include": [
