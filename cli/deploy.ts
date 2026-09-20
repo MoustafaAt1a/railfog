@@ -263,6 +263,85 @@ export async function runDeploy(
     );
   }
 
+  // Normalize per-function routes, capabilities, and global limits
+  const extractedRoutes: Array<{ pattern?: string; function?: string }> = [];
+  if (Array.isArray(parsed.routes)) {
+    for (const r of parsed.routes) {
+      if (r && typeof r === "object" && r.pattern && r.function) {
+        extractedRoutes.push({ pattern: r.pattern, function: r.function });
+      }
+    }
+  }
+
+  const globalLimits = (parsed as Record<string, unknown>).limits as
+    | FunctionConfig["limits"]
+    | undefined;
+
+  for (const [fnName, fnConfig] of Object.entries(parsed.functions)) {
+    if (!fnConfig || typeof fnConfig !== "object") continue;
+    const anyFn = fnConfig as Record<string, unknown>;
+
+    // 1. Normalize capabilities -> permissions
+    if (!fnConfig.permissions && anyFn.capabilities) {
+      if (Array.isArray(anyFn.capabilities)) {
+        const caps = anyFn.capabilities as unknown[];
+        const synth: Record<string, string[]> = {};
+        for (const c of caps) {
+          if (typeof c !== "string") continue;
+          const lower = c.toLowerCase().trim();
+          if (lower.startsWith("kv") || lower === "kv") {
+            synth.kv = synth.kv ?? ["default"];
+          } else if (
+            lower.startsWith("object") || lower.startsWith("s3") ||
+            lower === "objects"
+          ) {
+            synth.objects = synth.objects ?? ["default"];
+          } else if (lower.startsWith("queue") || lower === "queues") {
+            synth.queues = synth.queues ?? ["default"];
+          }
+        }
+        fnConfig.permissions = synth;
+      } else if (
+        typeof anyFn.capabilities === "object" &&
+        anyFn.capabilities !== null && !Array.isArray(anyFn.capabilities)
+      ) {
+        fnConfig.permissions = anyFn
+          .capabilities as unknown as typeof fnConfig.permissions;
+      }
+    }
+
+    // 2. Normalize global limits -> fn limits
+    if (!fnConfig.limits && globalLimits) {
+      fnConfig.limits = globalLimits;
+    }
+
+    // 3. Normalize per-function routes
+    if (Array.isArray(anyFn.routes)) {
+      for (const p of anyFn.routes) {
+        if (typeof p === "string") {
+          extractedRoutes.push({ pattern: p, function: fnName });
+        } else if (typeof p === "object" && p !== null) {
+          const r = p as Record<string, unknown>;
+          if (typeof r.pattern === "string") {
+            extractedRoutes.push({
+              pattern: r.pattern,
+              function: (r.function as string) ?? fnName,
+            });
+          }
+        }
+      }
+    } else if (typeof anyFn.routes === "string") {
+      extractedRoutes.push({ pattern: anyFn.routes, function: fnName });
+    }
+    if (typeof anyFn.route === "string") {
+      extractedRoutes.push({ pattern: anyFn.route, function: fnName });
+    }
+  }
+
+  if (extractedRoutes.length > 0) {
+    parsed.routes = extractedRoutes;
+  }
+
   // spec: docs/contracts/platform.contract.md#PLAT-18 — Resolve project name
   const configuredName =
     typeof parsed.name === "string" && parsed.name.trim() !== ""
@@ -724,10 +803,11 @@ export async function runDeploy(
   const routes = parsed.routes ?? [];
   const summaryFunctions: Array<{ name: string; route?: string }> = [];
   for (const fnName of Object.keys(parsed.functions)) {
-    const matchedRoute = routes.find((r) => r.function === fnName);
+    const matchedRoutes = routes.filter((r) => r.function === fnName);
     summaryFunctions.push({
       name: fnName,
-      route: matchedRoute?.pattern,
+      route: matchedRoutes.map((r) => r.pattern).filter(Boolean).join(", ") ||
+        undefined,
     });
   }
 

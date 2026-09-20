@@ -1492,3 +1492,62 @@ function = "api"
     }
   }
 });
+
+Deno.test("PLAT-3, PLAT-11: Per-function routes array without top-level routes table passes validation", async () => {
+  const toml = `
+name = "per-function-routes-app"
+
+[limits]
+memory_mb = 128
+timeout_ms = 5000
+
+[functions.api]
+entry = "api.ts"
+routes = ["/api/hello", "/api/data", "/api/counter"]
+capabilities = ["kv:read", "kv:write"]
+`;
+
+  const dir = await createTempProject(toml, { "api.ts": DEFAULT_HANDLER_TS });
+  try {
+    const result = await checkProject(dir);
+    assertEquals(result.valid, true, "Per-function routes must validate successfully");
+    assertEquals(result.errors.length, 0);
+    assertExists(result.routeSummary);
+    assertEquals(result.routeSummary.length, 3);
+    assertEquals(result.routeSummary.map((r) => r.pattern).sort(), [
+      "/api/counter",
+      "/api/data",
+      "/api/hello",
+    ]);
+
+    const exitCode = await runCheck(dir);
+    assertEquals(exitCode, 0);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FN-5: Global limits table validates invalid limits and cascades valid limits", async () => {
+  const badToml = `
+name = "bad-global-limits-app"
+
+[limits]
+memory_mb = -64
+timeout_ms = 0
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+`;
+
+  const dir = await createTempProject(badToml, { "api.ts": DEFAULT_HANDLER_TS });
+  try {
+    const result = await checkProject(dir);
+    assertEquals(result.valid, false);
+    assert(result.errors.some((e) => e.path === "limits.memory_mb"));
+    assert(result.errors.some((e) => e.path === "limits.timeout_ms"));
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+

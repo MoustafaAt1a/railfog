@@ -115,6 +115,46 @@ export function formatRequestLine(info: RequestLogLineInfo): string {
   }ms\x1b[0m`;
 }
 
+/**
+ * Normalizes routes from top-level routes array and per-function routes/route declarations.
+ */
+export function normalizeRoutes(config: RailfogConfig): RouteConfig[] {
+  const result: RouteConfig[] = [];
+  if (Array.isArray(config.routes)) {
+    for (const r of config.routes) {
+      if (r && r.pattern && r.function) {
+        result.push({ pattern: r.pattern, function: r.function });
+      }
+    }
+  }
+  if (config.functions) {
+    for (const [fnName, fnConfig] of Object.entries(config.functions)) {
+      const anyFn = fnConfig as Record<string, unknown>;
+      if (Array.isArray(anyFn.routes)) {
+        for (const p of anyFn.routes) {
+          if (typeof p === "string") {
+            result.push({ pattern: p, function: fnName });
+          } else if (typeof p === "object" && p !== null) {
+            const r = p as Record<string, unknown>;
+            if (typeof r.pattern === "string") {
+              result.push({
+                pattern: r.pattern,
+                function: (r.function as string) ?? fnName,
+              });
+            }
+          }
+        }
+      } else if (typeof anyFn.routes === "string") {
+        result.push({ pattern: anyFn.routes, function: fnName });
+      }
+      if (typeof anyFn.route === "string") {
+        result.push({ pattern: anyFn.route, function: fnName });
+      }
+    }
+  }
+  return result;
+}
+
 // spec: docs/contracts/platform.contract.md#PLAT-11 — Specificity algorithm
 // spec: docs/contracts/platform.contract.md#PLAT-17 — Local SQLite and LocalFS providers
 // spec: tasks/milestone-0.5-developer-experience/T-0508-local-dev-server-reload.md AC2
@@ -135,7 +175,7 @@ export function formatStartupBanner(
     "Routes:",
   ];
 
-  const routes = config.routes ?? [];
+  const routes = normalizeRoutes(config);
   if (routes.length === 0) {
     lines.push("  (no routes configured)");
   } else {
@@ -257,17 +297,43 @@ export async function startLocalServer(
     new SQLiteQueueProvider();
 
   let currentConfig = config;
-  let routes: RouteConfig[] = currentConfig.routes ?? [];
+  let routes: RouteConfig[] = normalizeRoutes(currentConfig);
 
   // spec: docs/contracts/functions.contract.md#FN-8 — Pre-resolve permission snapshot at server startup
   const cachedPermissions = new Map<string, ResolvedBindings>();
   const updateCachedPermissions = (cfg: RailfogConfig) => {
     cachedPermissions.clear();
     for (const [fnName, fnConfig] of Object.entries(cfg.functions ?? {})) {
+      const anyFn = fnConfig as Record<string, unknown>;
+      let permissions = fnConfig.permissions;
+      if (!permissions && anyFn.capabilities) {
+        if (Array.isArray(anyFn.capabilities)) {
+          const caps = anyFn.capabilities as unknown[];
+          const synth: {
+            kv?: string[];
+            objects?: string[];
+            queues?: string[];
+          } = {};
+          for (const c of caps) {
+            if (typeof c !== "string") continue;
+            const lower = c.toLowerCase().trim();
+            if (lower.startsWith("kv")) synth.kv = ["default"];
+            if (lower.startsWith("object") || lower.startsWith("s3")) {
+              synth.objects = ["default"];
+            }
+            if (lower.startsWith("queue")) synth.queues = ["default"];
+          }
+          permissions = synth;
+        } else if (
+          typeof anyFn.capabilities === "object" && anyFn.capabilities !== null
+        ) {
+          permissions = anyFn.capabilities as typeof fnConfig.permissions;
+        }
+      }
       const declared = {
-        kv: fnConfig.permissions?.kv,
-        objects: fnConfig.permissions?.objects,
-        queues: fnConfig.permissions?.queues,
+        kv: permissions?.kv,
+        objects: permissions?.objects,
+        queues: permissions?.queues,
       };
       const resolved = resolvePermissions(declared, orgId, projectId, {
         kv: kvProvider,
@@ -631,7 +697,7 @@ export async function startLocalServer(
           try {
             const tomlContent = await Deno.readTextFile(tomlPath);
             currentConfig = parse(tomlContent) as unknown as RailfogConfig;
-            routes = currentConfig.routes ?? [];
+            routes = normalizeRoutes(currentConfig);
             updateCachedPermissions(currentConfig);
             console.log("Reloaded railfog.toml");
           } catch (err) {

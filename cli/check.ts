@@ -239,9 +239,142 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
     });
   }
 
-  // spec: contracts/platform.contract.md#PLAT-3 — Routing table required
-  const routesRaw = parsed.routes;
-  if (!Array.isArray(routesRaw)) {
+  const declaredFnNames = hasFunctions
+    ? Object.keys(functionsRaw as Record<string, unknown>)
+    : [];
+
+  const candidateRoutes: Array<{
+    path: string;
+    pattern: unknown;
+    functionName: unknown;
+  }> = [];
+
+  // spec: contracts/platform.contract.md#PLAT-3 — Top-level routes
+  if (parsed.routes !== undefined) {
+    if (Array.isArray(parsed.routes)) {
+      for (let i = 0; i < parsed.routes.length; i++) {
+        const item = parsed.routes[i];
+        if (typeof item === "object" && item !== null) {
+          const r = item as Record<string, unknown>;
+          candidateRoutes.push({
+            path: `routes[${i}]`,
+            pattern: r.pattern,
+            functionName: r.function ??
+              (declaredFnNames.length === 1 ? declaredFnNames[0] : undefined),
+          });
+        } else if (typeof item === "string") {
+          candidateRoutes.push({
+            path: `routes[${i}]`,
+            pattern: item,
+            functionName: declaredFnNames.length === 1
+              ? declaredFnNames[0]
+              : undefined,
+          });
+        } else {
+          errors.push({
+            severity: "error",
+            code: "VALIDATION_FAILED",
+            path: `routes[${i}]`,
+            message: `Route at index ${i} must be a table (PLAT-3)`,
+          });
+        }
+      }
+    } else if (typeof parsed.routes === "object" && parsed.routes !== null) {
+      for (
+        const [pattern, targetFn] of Object.entries(
+          parsed.routes as Record<string, unknown>,
+        )
+      ) {
+        candidateRoutes.push({
+          path: `routes["${pattern}"]`,
+          pattern,
+          functionName: targetFn,
+        });
+      }
+    } else {
+      errors.push({
+        severity: "error",
+        code: "VALIDATION_FAILED",
+        path: "routes",
+        message: "Project must declare 'routes' array (PLAT-3)",
+      });
+    }
+  }
+
+  // spec: contracts/platform.contract.md#PLAT-3 — Per-function routes
+  if (hasFunctions) {
+    for (
+      const [fnName, fnConfigRaw] of Object.entries(
+        functionsRaw as Record<string, unknown>,
+      )
+    ) {
+      if (typeof fnConfigRaw !== "object" || fnConfigRaw === null) continue;
+      const fn = fnConfigRaw as Record<string, unknown>;
+
+      if (fn.routes !== undefined) {
+        if (Array.isArray(fn.routes)) {
+          for (let i = 0; i < fn.routes.length; i++) {
+            const item = fn.routes[i];
+            if (typeof item === "string") {
+              candidateRoutes.push({
+                path: `functions.${fnName}.routes[${i}]`,
+                pattern: item,
+                functionName: fnName,
+              });
+            } else if (typeof item === "object" && item !== null) {
+              const r = item as Record<string, unknown>;
+              candidateRoutes.push({
+                path: `functions.${fnName}.routes[${i}]`,
+                pattern: r.pattern,
+                functionName: r.function ?? fnName,
+              });
+            } else {
+              errors.push({
+                severity: "error",
+                code: "VALIDATION_FAILED",
+                path: `functions.${fnName}.routes[${i}]`,
+                message: `Route pattern must be a string (PLAT-3)`,
+              });
+            }
+          }
+        } else if (typeof fn.routes === "string") {
+          candidateRoutes.push({
+            path: `functions.${fnName}.routes`,
+            pattern: fn.routes,
+            functionName: fnName,
+          });
+        }
+      }
+
+      if (fn.route !== undefined) {
+        if (typeof fn.route === "string") {
+          candidateRoutes.push({
+            path: `functions.${fnName}.route`,
+            pattern: fn.route,
+            functionName: fnName,
+          });
+        } else {
+          errors.push({
+            severity: "error",
+            code: "VALIDATION_FAILED",
+            path: `functions.${fnName}.route`,
+            message: `Route pattern must be a string (PLAT-3)`,
+          });
+        }
+      }
+    }
+  }
+
+  const hasBackgroundTriggers = hasFunctions &&
+    Object.values(functionsRaw as Record<string, unknown>).some((f) => {
+      if (typeof f !== "object" || f === null) return false;
+      const triggers = (f as Record<string, unknown>).triggers;
+      return typeof triggers === "object" && triggers !== null &&
+        (Boolean((triggers as Record<string, unknown>).queue) ||
+          Boolean((triggers as Record<string, unknown>).schedule));
+    });
+
+  if (candidateRoutes.length === 0 && !hasBackgroundTriggers) {
     errors.push({
       severity: "error",
       code: "VALIDATION_FAILED",
@@ -249,10 +382,6 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       message: "Project must declare 'routes' array (PLAT-3)",
     });
   }
-
-  const declaredFnNames = hasFunctions
-    ? Object.keys(functionsRaw as Record<string, unknown>)
-    : [];
 
   // spec: contracts/kv.contract.md#KV-5 — Consistency tier compatibility validation
   if (typeof parsed.kv === "object" && parsed.kv !== null) {
@@ -301,6 +430,73 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
             });
           }
         }
+      }
+    }
+  }
+
+  // Global limits fallback and validation (FN-5)
+  const globalLimits =
+    (typeof parsed.limits === "object" && parsed.limits !== null
+      ? parsed.limits
+      : {}) as Record<string, unknown>;
+
+  if (typeof parsed.limits === "object" && parsed.limits !== null) {
+    if (globalLimits.memory_mb !== undefined) {
+      const mem = globalLimits.memory_mb;
+      if (
+        typeof mem !== "number" || !Number.isFinite(mem) || mem <= 0 ||
+        !Number.isInteger(mem)
+      ) {
+        errors.push({
+          severity: "error",
+          code: "FN-5",
+          path: "limits.memory_mb",
+          message: "memory_mb must be a positive integer (FN-5)",
+        });
+      } else if (mem > MAX_MEMORY_MB) {
+        errors.push({
+          severity: "error",
+          code: "FN-5",
+          path: "limits.memory_mb",
+          message:
+            `memory_mb (${mem}) exceeds maximum allowed ceiling of ${MAX_MEMORY_MB} MB (FN-5)`,
+        });
+      }
+    }
+    if (globalLimits.timeout_ms !== undefined) {
+      const t = globalLimits.timeout_ms;
+      if (typeof t !== "number" || !Number.isFinite(t) || t <= 0) {
+        errors.push({
+          severity: "error",
+          code: "FN-5",
+          path: "limits.timeout_ms",
+          message: "timeout_ms must be a positive integer (FN-5)",
+        });
+      }
+    }
+    if (globalLimits.cpu_ms !== undefined) {
+      const cpu = globalLimits.cpu_ms;
+      if (typeof cpu !== "number" || !Number.isFinite(cpu) || cpu <= 0) {
+        errors.push({
+          severity: "error",
+          code: "FN-5",
+          path: "limits.cpu_ms",
+          message: "cpu_ms must be a positive integer (FN-5)",
+        });
+      }
+    }
+    if (globalLimits.concurrency !== undefined) {
+      const conc = globalLimits.concurrency;
+      if (
+        typeof conc !== "number" || !Number.isFinite(conc) || conc <= 0 ||
+        !Number.isInteger(conc)
+      ) {
+        errors.push({
+          severity: "error",
+          code: "FN-5",
+          path: "limits.concurrency",
+          message: "concurrency must be a positive integer (FN-5)",
+        });
       }
     }
   }
@@ -382,12 +578,15 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       // spec: contracts/functions.contract.md#FN-5 — Resource limits
       const limitsObj = (typeof fn.limits === "object" && fn.limits !== null
         ? fn.limits
-        : {}) as Record<string, unknown>;
+        : globalLimits) as Record<string, unknown>;
 
-      const memoryMb = limitsObj.memory_mb ?? fn.memory_mb;
-      const timeoutMs = limitsObj.timeout_ms ?? fn.timeout_ms;
-      const cpuMs = limitsObj.cpu_ms ?? fn.cpu_ms;
-      const concurrency = limitsObj.concurrency ?? fn.concurrency;
+      const memoryMb = limitsObj.memory_mb ?? fn.memory_mb ??
+        globalLimits.memory_mb;
+      const timeoutMs = limitsObj.timeout_ms ?? fn.timeout_ms ??
+        globalLimits.timeout_ms;
+      const cpuMs = limitsObj.cpu_ms ?? fn.cpu_ms ?? globalLimits.cpu_ms;
+      const concurrency = limitsObj.concurrency ?? fn.concurrency ??
+        globalLimits.concurrency;
 
       if (memoryMb !== undefined) {
         if (
@@ -528,10 +727,45 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       }
 
       // spec: contracts/platform.contract.md#PLAT-5, PLAT-6, PLAT-15 — Permissions
-      const permissions =
-        typeof fn.permissions === "object" && fn.permissions !== null
+      let permissions =
+        typeof fn.permissions === "object" && fn.permissions !== null &&
+          !Array.isArray(fn.permissions)
           ? (fn.permissions as Record<string, unknown>)
           : undefined;
+
+      if (
+        !permissions &&
+        (Array.isArray(fn.capabilities) || Array.isArray(fn.permissions))
+      ) {
+        const caps = (Array.isArray(fn.capabilities)
+          ? fn.capabilities
+          : fn.permissions) as unknown[];
+        const syntheticPermissions: Record<string, string[]> = {};
+        for (const cap of caps) {
+          if (typeof cap !== "string") continue;
+          const lower = cap.toLowerCase().trim();
+          if (lower.startsWith("kv") || lower === "kv") {
+            syntheticPermissions.kv = syntheticPermissions.kv ?? ["default"];
+          } else if (
+            lower.startsWith("object") || lower.startsWith("s3") ||
+            lower === "objects"
+          ) {
+            syntheticPermissions.objects = syntheticPermissions.objects ?? [
+              "default",
+            ];
+          } else if (lower.startsWith("queue") || lower === "queues") {
+            syntheticPermissions.queues = syntheticPermissions.queues ?? [
+              "default",
+            ];
+          }
+        }
+        permissions = syntheticPermissions;
+      } else if (
+        !permissions && typeof fn.capabilities === "object" &&
+        fn.capabilities !== null && !Array.isArray(fn.capabilities)
+      ) {
+        permissions = fn.capabilities as Record<string, unknown>;
+      }
 
       if (permissions) {
         // KV namespace scoping: exactly one declared namespace allowed (PLAT-6)
@@ -701,73 +935,59 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
     | Array<{ pattern: string; functionName: string; score: number }>
     | undefined;
 
-  if (Array.isArray(routesRaw)) {
+  if (candidateRoutes.length > 0) {
     const validRoutes: Array<
       { pattern: string; functionName: string; score: number }
     > = [];
     const seenPatterns = new Set<string>();
 
-    for (let i = 0; i < routesRaw.length; i++) {
-      const route = routesRaw[i];
-      if (typeof route !== "object" || route === null) {
+    for (const c of candidateRoutes) {
+      if (typeof c.pattern !== "string" || c.pattern.trim() === "") {
         errors.push({
           severity: "error",
           code: "VALIDATION_FAILED",
-          path: `routes[${i}]`,
-          message: `Route at index ${i} must be a table (PLAT-3)`,
+          path: `${c.path}.pattern`,
+          message: `Route must have a non-empty 'pattern' (PLAT-3)`,
         });
         continue;
       }
 
-      const r = route as Record<string, unknown>;
-
-      if (typeof r.pattern !== "string" || r.pattern.trim() === "") {
+      if (typeof c.functionName !== "string" || c.functionName.trim() === "") {
         errors.push({
           severity: "error",
           code: "VALIDATION_FAILED",
-          path: `routes[${i}].pattern`,
-          message:
-            `Route at index ${i} must have a non-empty 'pattern' (PLAT-3)`,
+          path: `${c.path}.function`,
+          message: `Route must declare a 'function' target (PLAT-3)`,
         });
+        continue;
+      } else if (!declaredFnNames.includes(c.functionName)) {
+        errors.push({
+          severity: "error",
+          code: "VALIDATION_FAILED",
+          path: `${c.path}.function`,
+          message: `Route targets undeclared function "${c.functionName}" (PLAT-3)`,
+        });
+        continue;
       }
 
-      if (typeof r.function !== "string" || r.function.trim() === "") {
-        errors.push({
-          severity: "error",
-          code: "VALIDATION_FAILED",
-          path: `routes[${i}].function`,
+      const score = calculateRouteScore(c.pattern);
+      validRoutes.push({
+        pattern: c.pattern,
+        functionName: c.functionName,
+        score,
+      });
+
+      // Warn on duplicate or shadowed route pattern (PLAT-11)
+      if (seenPatterns.has(c.pattern)) {
+        warnings.push({
+          severity: "warning",
+          code: "PLAT-11",
+          path: c.path,
           message:
-            `Route at index ${i} must declare a 'function' target (PLAT-3)`,
+            `Duplicate or shadowed route pattern: "${c.pattern}" (PLAT-11)`,
         });
-      } else if (!declaredFnNames.includes(r.function)) {
-        errors.push({
-          severity: "error",
-          code: "VALIDATION_FAILED",
-          path: `routes[${i}].function`,
-          message: `Route targets undeclared function "${r.function}" (PLAT-3)`,
-        });
-      }
-
-      if (typeof r.pattern === "string" && typeof r.function === "string") {
-        const score = calculateRouteScore(r.pattern);
-        validRoutes.push({
-          pattern: r.pattern,
-          functionName: r.function,
-          score,
-        });
-
-        // Warn on duplicate or shadowed route pattern (PLAT-11)
-        if (seenPatterns.has(r.pattern)) {
-          warnings.push({
-            severity: "warning",
-            code: "PLAT-11",
-            path: `routes[${i}]`,
-            message:
-              `Duplicate or shadowed route pattern: "${r.pattern}" (PLAT-11)`,
-          });
-        } else {
-          seenPatterns.add(r.pattern);
-        }
+      } else {
+        seenPatterns.add(c.pattern);
       }
     }
 
