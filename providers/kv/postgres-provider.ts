@@ -131,7 +131,15 @@ export class PostgresKVProvider implements KVProvider {
       if (!rows || rows.length === 0) {
         return null;
       }
-      return rows[0].value_json;
+      const rawVal = rows[0].value_json;
+      if (typeof rawVal === "string") {
+        try {
+          return JSON.parse(rawVal);
+        } catch {
+          return rawVal;
+        }
+      }
+      return rawVal;
     }
 
     this.cleanMemoryExpired();
@@ -256,12 +264,22 @@ export class PostgresKVProvider implements KVProvider {
       const selected = hasMore ? rows.slice(0, limit) : rows;
       const keys = selected.map((
         r: { key_json: unknown; value_json: unknown },
-      ) => ({
-        key: (typeof r.key_json === "string"
-          ? JSON.parse(r.key_json)
-          : r.key_json) as string[],
-        value: r.value_json,
-      }));
+      ) => {
+        let val = r.value_json;
+        if (typeof val === "string") {
+          try {
+            val = JSON.parse(val);
+          } catch {
+            // keep raw
+          }
+        }
+        return {
+          key: (typeof r.key_json === "string"
+            ? JSON.parse(r.key_json)
+            : r.key_json) as string[],
+          value: val,
+        };
+      });
 
       const cursor = hasMore
         ? btoa(selected[selected.length - 1].key_path)

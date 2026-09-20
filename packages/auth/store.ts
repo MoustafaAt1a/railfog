@@ -108,11 +108,24 @@ export class ApiKeyStore {
     // Step 1: Check fast Redis cache if available
     if (this.cache) {
       try {
-        const cached = await this.cache.get(["auth_cache", tokenHash]) as
-          | IdentityContext
-          | null;
-        if (cached) {
-          return cached;
+        const rawCached = await this.cache.get(["auth_cache", tokenHash]);
+        if (rawCached) {
+          let cached = rawCached as IdentityContext;
+          if (typeof cached === "string") {
+            try {
+              cached = JSON.parse(cached);
+            } catch {
+              // ignore
+            }
+          }
+          if (
+            cached &&
+            typeof cached === "object" &&
+            cached.callerId &&
+            cached.orgId
+          ) {
+            return cached;
+          }
         }
       } catch {
         // Cache error: fallback to primary storage
@@ -120,9 +133,29 @@ export class ApiKeyStore {
     }
 
     // Step 2: Check primary persistent storage
-    const record = await this.storage.get(["_auth", "tokens", tokenHash]) as
-      | StoredApiKeyRecord
-      | null;
+    const rawRecord = await this.storage.get(["_auth", "tokens", tokenHash]);
+    if (!rawRecord) {
+      return null;
+    }
+
+    let record: StoredApiKeyRecord;
+    if (typeof rawRecord === "string") {
+      try {
+        record = JSON.parse(rawRecord);
+      } catch {
+        return null;
+      }
+    } else {
+      record = rawRecord as StoredApiKeyRecord;
+    }
+
+    if (typeof record === "string") {
+      try {
+        record = JSON.parse(record);
+      } catch {
+        return null;
+      }
+    }
 
     if (!record || record.revokedAt) {
       return null;
@@ -137,7 +170,7 @@ export class ApiKeyStore {
     };
 
     // Step 3: Populate cache with TTL
-    if (this.cache) {
+    if (this.cache && identity.callerId && identity.orgId) {
       try {
         await this.cache.set(
           ["auth_cache", tokenHash],

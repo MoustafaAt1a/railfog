@@ -124,6 +124,7 @@ async function verifyAndSaveToken(
   controlUrl: string,
   configPath?: string,
   fallbackOrgId?: string,
+  fallbackKeyName?: string,
 ): Promise<LoginResult> {
   try {
     const verifyUrl = `${controlUrl}/v1/auth/verify`;
@@ -144,6 +145,7 @@ async function verifyAndSaveToken(
 
     const data = await res.json();
     const orgId = data.identity?.orgId || fallbackOrgId || "default-org";
+    const keyName = data.identity?.callerId || fallbackKeyName || "cli-key";
 
     // spec: contracts/platform.contract.md#PLAT-15 — Persist credentials with mode 0600 on POSIX
     await saveCliConfig(
@@ -152,6 +154,7 @@ async function verifyAndSaveToken(
         controlUrl,
         orgId,
         projectId: data.identity?.projectId,
+        keyName,
       },
       configPath,
     );
@@ -276,11 +279,13 @@ export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
     // Await token from loopback callback server
     let tokenFromCallback: string | undefined;
     let orgIdFromCallback: string | undefined;
+    let keyNameFromCallback: string | undefined;
 
     try {
       const tokenResult = await session.waitForToken();
       tokenFromCallback = tokenResult.token;
       orgIdFromCallback = tokenResult.orgId;
+      keyNameFromCallback = tokenResult.keyName;
     } catch (err) {
       // spec: contracts/platform.contract.md#PLAT-12 — Fallback to manual stdin prompt on TIMEOUT
       const errCode = (err as { code?: string })?.code;
@@ -329,6 +334,7 @@ export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
       controlUrl,
       options?.configPath,
       orgIdFromCallback,
+      keyNameFromCallback,
     );
   } finally {
     // spec: contracts/platform.contract.md#PLAT-19 — Ensure listener teardown on all exit paths
@@ -391,7 +397,7 @@ export async function runWhoami(options?: {
 
     const data = await res.json();
     const orgId = data.identity?.orgId || config.orgId || "default-org";
-    const callerId = data.identity?.callerId || "cli-user";
+    const callerId = data.identity?.callerId || config.keyName || "cli-user";
 
     // Redacted token display per PLAT-15
     const tokenDisplay = config.token.length > 8

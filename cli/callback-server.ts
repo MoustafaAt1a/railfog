@@ -111,7 +111,7 @@ export interface CallbackServerSession {
   port: number;
   callbackUrl: string;
   state: string;
-  waitForToken(): Promise<{ token: string; orgId?: string }>;
+  waitForToken(): Promise<{ token: string; orgId?: string; keyName?: string }>;
   close(): Promise<void>;
 }
 
@@ -126,10 +126,14 @@ export function startCallbackServer(
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   let shutdownPromise: Promise<void> | null = null;
 
-  let resolveToken!: (value: { token: string; orgId?: string }) => void;
+  let resolveToken!: (
+    value: { token: string; orgId?: string; keyName?: string },
+  ) => void;
   let rejectToken!: (reason?: unknown) => void;
 
-  const tokenPromise = new Promise<{ token: string; orgId?: string }>(
+  const tokenPromise = new Promise<
+    { token: string; orgId?: string; keyName?: string }
+  >(
     (resolve, reject) => {
       resolveToken = resolve;
       rejectToken = reject;
@@ -237,10 +241,14 @@ export function startCallbackServer(
         const orgId = url.searchParams.get("orgId") ??
           url.searchParams.get("org_id") ??
           undefined;
+        const keyName = url.searchParams.get("keyName") ??
+          url.searchParams.get("key_name") ??
+          undefined;
 
         resolveToken({
           token,
           ...(orgId ? { orgId } : {}),
+          ...(keyName ? { keyName } : {}),
         });
 
         // Trigger immediate listener shutdown so subsequent requests fail

@@ -337,12 +337,16 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
 
   <script>
     let activeKey = "";
+    let selectedOrgId = "";
+    let selectedKeyName = "";
     const CALLBACK_URL = ${JSON.stringify(validCallback)};
     const STATE_NONCE = ${JSON.stringify(safeState)};
 
     async function generateApiKey() {
-      const orgId = document.getElementById("orgId").value || "${defaultOrgId}";
-      const keyName = document.getElementById("keyName").value || "cli-session";
+      const orgId = document.getElementById("orgId").value.trim() || "${defaultOrgId}";
+      const keyName = document.getElementById("keyName").value.trim() || "cli-session";
+      selectedOrgId = orgId;
+      selectedKeyName = keyName;
       const btn = document.getElementById("generate-btn");
       btn.disabled = true;
       btn.innerText = "Generating...";
@@ -383,7 +387,13 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
         alert("Session state is missing from URL. Please copy your API key and paste it into your terminal manually.");
         return;
       }
-      const target = CALLBACK_URL + "?token=" + encodeURIComponent(activeKey) + "&state=" + encodeURIComponent(STATE_NONCE);
+      let target = CALLBACK_URL + "?token=" + encodeURIComponent(activeKey) + "&state=" + encodeURIComponent(STATE_NONCE);
+      if (selectedOrgId) {
+        target += "&orgId=" + encodeURIComponent(selectedOrgId);
+      }
+      if (selectedKeyName) {
+        target += "&keyName=" + encodeURIComponent(selectedKeyName);
+      }
       // Use window.location.replace to prevent storing token in browser back-button history (PLAT-15)
       window.location.replace(target);
     }

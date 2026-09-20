@@ -11,6 +11,7 @@ export interface CliAuthConfig {
   controlUrl?: string;
   orgId?: string;
   projectId?: string;
+  keyName?: string;
 }
 
 /**

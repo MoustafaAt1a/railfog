@@ -103,3 +103,77 @@ Deno.test("T-0753: ApiKeyStore lists keys by organization", async () => {
 
   await storage.close();
 });
+
+Deno.test("T-0753: ApiKeyStore handles stringified storage values and recovers from incomplete cache", async () => {
+  const memory = new Map<string, string>();
+  const stringifiedStorage = {
+    get(key: string[]) {
+      const val = memory.get(key.join("/"));
+      return Promise.resolve(val ?? null);
+    },
+    set(key: string[], value: unknown) {
+      memory.set(key.join("/"), JSON.stringify(value));
+      return Promise.resolve();
+    },
+    delete(key: string[]) {
+      memory.delete(key.join("/"));
+      return Promise.resolve();
+    },
+    list() {
+      return Promise.resolve({ keys: [] });
+    },
+    atomic() {
+      throw new Error("unsupported");
+    },
+  };
+
+  const cacheMemory = new Map<string, unknown>();
+  const cacheMock = {
+    get(key: string[]) {
+      return Promise.resolve(cacheMemory.get(key.join("/")) ?? null);
+    },
+    set(key: string[], value: unknown) {
+      cacheMemory.set(key.join("/"), value);
+      return Promise.resolve();
+    },
+    delete(key: string[]) {
+      cacheMemory.delete(key.join("/"));
+      return Promise.resolve();
+    },
+    list() {
+      return Promise.resolve({ keys: [] });
+    },
+    atomic() {
+      throw new Error("unsupported");
+    },
+  };
+
+  const store = new ApiKeyStore({
+    storageProvider: stringifiedStorage,
+    cacheProvider: cacheMock,
+  });
+
+  const { rawToken } = await store.createKey({
+    name: "production-laptop",
+    orgId: "custom-tenant-org",
+  });
+
+  // Verify that stringified storage is successfully parsed into identity with callerId and orgId
+  const identity = await store.verifyRawToken(rawToken);
+  assertEquals(identity !== null, true);
+  assertEquals(identity?.callerId, "production-laptop");
+  assertEquals(identity?.orgId, "custom-tenant-org");
+
+  // Corrupt the cache entry by removing callerId and orgId (simulating previous bug)
+  const tokenHash = identity!.tokenHash!;
+  cacheMemory.set(`auth_cache/${tokenHash}`, {
+    tokenHash,
+    callerType: "token",
+  });
+
+  // Verify that verifyRawToken ignores the corrupted cache entry and re-fetches callerId & orgId from storage
+  const recoveredIdentity = await store.verifyRawToken(rawToken);
+  assertEquals(recoveredIdentity !== null, true);
+  assertEquals(recoveredIdentity?.callerId, "production-laptop");
+  assertEquals(recoveredIdentity?.orgId, "custom-tenant-org");
+});

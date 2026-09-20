@@ -183,7 +183,7 @@ Deno.test("T-0803: AC1 & AC2 - Zero-copy login starts callback server, opens bro
         return new Response(
           JSON.stringify({
             ok: true,
-            identity: { orgId: expectedOrgId, callerId: "dev-laptop" },
+            identity: { orgId: expectedOrgId, callerId: "acme-laptop" },
             request_id: "req_zc_auth",
           }),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -261,6 +261,7 @@ Deno.test("T-0803: AC1 & AC2 - Zero-copy login starts callback server, opens bro
       redirectTarget.searchParams.set("token", deliveredToken);
       redirectTarget.searchParams.set("state", stateParam);
       redirectTarget.searchParams.set("orgId", expectedOrgId);
+      redirectTarget.searchParams.set("keyName", "acme-laptop");
 
       const callbackRes = await fetch(redirectTarget.toString());
       assertEquals(
@@ -319,6 +320,11 @@ Deno.test("T-0803: AC1 & AC2 - Zero-copy login starts callback server, opens bro
       saved?.controlUrl,
       controlUrl,
       "Persisted controlUrl must match target",
+    );
+    assertEquals(
+      saved?.keyName,
+      "acme-laptop",
+      "Persisted keyName must match callerId",
     );
 
     // 3. Mode 0600 verification on POSIX systems (PLAT-15)
