@@ -141,6 +141,48 @@ function calculateRouteScore(pattern: string): number {
 }
 
 /**
+ * Normalizes functions configuration from either a map/table ([functions.name])
+ * or an array of tables ([[functions]]) into a standard map keyed by function name.
+ */
+export function normalizeFunctions(
+  functionsRaw: unknown,
+): Record<string, Record<string, unknown>> {
+  if (!functionsRaw || typeof functionsRaw !== "object") {
+    return {};
+  }
+  if (Array.isArray(functionsRaw)) {
+    const normalized: Record<string, Record<string, unknown>> = {};
+    for (let i = 0; i < functionsRaw.length; i++) {
+      const item = functionsRaw[i];
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        const itemObj = { ...(item as Record<string, unknown>) };
+        const name = typeof itemObj.name === "string" && itemObj.name.trim()
+          ? itemObj.name.trim()
+          : `fn_${i}`;
+        if (!itemObj.entry && typeof itemObj.entrypoint === "string") {
+          itemObj.entry = itemObj.entrypoint;
+        }
+        normalized[name] = itemObj;
+      }
+    }
+    return normalized;
+  }
+  const normalized: Record<string, Record<string, unknown>> = {};
+  for (
+    const [k, v] of Object.entries(functionsRaw as Record<string, unknown>)
+  ) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const itemObj = { ...(v as Record<string, unknown>) };
+      if (!itemObj.entry && typeof itemObj.entrypoint === "string") {
+        itemObj.entry = itemObj.entrypoint;
+      }
+      normalized[k] = itemObj;
+    }
+  }
+  return normalized;
+}
+
+/**
  * Statically validates a railfog.toml configuration file and its declared resources.
  *
  * @spec contracts/platform.contract.md#PLAT-3 — Schema and entrypoint validation
@@ -210,6 +252,11 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       }],
       warnings: [],
     };
+  }
+
+  // Normalize [[functions]] array syntax to standard map
+  if (parsed.functions !== undefined) {
+    parsed.functions = normalizeFunctions(parsed.functions);
   }
 
   // spec: contracts/platform.contract.md#PLAT-18 — Project resource name required
@@ -368,10 +415,15 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
   const hasBackgroundTriggers = hasFunctions &&
     Object.values(functionsRaw as Record<string, unknown>).some((f) => {
       if (typeof f !== "object" || f === null) return false;
-      const triggers = (f as Record<string, unknown>).triggers;
-      return typeof triggers === "object" && triggers !== null &&
-        (Boolean((triggers as Record<string, unknown>).queue) ||
-          Boolean((triggers as Record<string, unknown>).schedule));
+      const fnObj = f as Record<string, unknown>;
+      const triggers = fnObj.triggers;
+      const isQueueConsumer = fnObj.type === "queue_consumer" ||
+        Boolean(fnObj.queue);
+      const isSchedule = fnObj.type === "cron" || Boolean(fnObj.schedule);
+      return isQueueConsumer || isSchedule ||
+        (typeof triggers === "object" && triggers !== null &&
+          (Boolean((triggers as Record<string, unknown>).queue) ||
+            Boolean((triggers as Record<string, unknown>).schedule)));
     });
 
   if (candidateRoutes.length === 0 && !hasBackgroundTriggers) {
@@ -520,6 +572,9 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       }
 
       const fn = fnConfigRaw as Record<string, unknown>;
+      if (!fn.entry && typeof fn.entrypoint === "string") {
+        fn.entry = fn.entrypoint;
+      }
 
       // spec: contracts/platform.contract.md#PLAT-3, PLAT-6 — Entrypoint existence and traversal isolation
       if (typeof fn.entry !== "string" || fn.entry.trim() === "") {
@@ -531,13 +586,37 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
             `Function '${fnName}' must declare an 'entry' file path (PLAT-3)`,
         });
       } else {
-        const entry = fn.entry;
+        let entry = fn.entry;
         const normRoot = normalize(projectRoot);
-        const resolvedPath = normalize(
+        let resolvedPath = normalize(
           isAbsolute(entry) ? entry : join(normRoot, entry),
         );
-        const rel = relative(normRoot, resolvedPath);
 
+        // Fallback: if entry not found directly, check functions/<entry>
+        let fileExists = false;
+        try {
+          const stat = await Deno.stat(resolvedPath);
+          if (stat.isFile) fileExists = true;
+        } catch {
+          // not found directly
+        }
+
+        if (!fileExists && !isAbsolute(entry)) {
+          const fallbackPath = normalize(join(normRoot, "functions", entry));
+          try {
+            const statFallback = await Deno.stat(fallbackPath);
+            if (statFallback.isFile) {
+              resolvedPath = fallbackPath;
+              entry = join("functions", entry);
+              fn.entry = entry;
+              fileExists = true;
+            }
+          } catch {
+            // fallback not found either
+          }
+        }
+
+        const rel = relative(normRoot, resolvedPath);
         const isOutside = rel.startsWith("..") ||
           rel === ".." ||
           isAbsolute(rel) ||
@@ -553,25 +632,13 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
             message:
               `Entrypoint escapes project root directory: "${entry}" (PLAT-6)`,
           });
-        } else {
-          try {
-            const stat = await Deno.stat(resolvedPath);
-            if (!stat.isFile) {
-              errors.push({
-                severity: "error",
-                code: "VALIDATION_FAILED",
-                path: `functions.${fnName}.entry`,
-                message: `Entrypoint file "${entry}" does not exist (PLAT-3)`,
-              });
-            }
-          } catch (_err) {
-            errors.push({
-              severity: "error",
-              code: "VALIDATION_FAILED",
-              path: `functions.${fnName}.entry`,
-              message: `Entrypoint file "${entry}" does not exist (PLAT-3)`,
-            });
-          }
+        } else if (!fileExists) {
+          errors.push({
+            severity: "error",
+            code: "VALIDATION_FAILED",
+            path: `functions.${fnName}.entry`,
+            message: `Entrypoint file "${entry}" does not exist (PLAT-3)`,
+          });
         }
       }
 
@@ -965,7 +1032,8 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
           severity: "error",
           code: "VALIDATION_FAILED",
           path: `${c.path}.function`,
-          message: `Route targets undeclared function "${c.functionName}" (PLAT-3)`,
+          message:
+            `Route targets undeclared function "${c.functionName}" (PLAT-3)`,
         });
         continue;
       }

@@ -59,6 +59,92 @@ const CONTROL_PLANE_SERVICE_NAME = "railfog-control";
 const DEFAULT_CONTROL_PORT = 8081;
 const DEFAULT_CONTROL_HOST = "127.0.0.1";
 
+// WHATWG Fetch specification restricted ports (e.g. IRC, mail, X11) that HTTP clients block
+const BLOCKED_FETCH_PORTS = new Set([
+  1,
+  7,
+  9,
+  11,
+  13,
+  15,
+  17,
+  19,
+  20,
+  21,
+  22,
+  23,
+  25,
+  37,
+  42,
+  43,
+  53,
+  69,
+  77,
+  79,
+  87,
+  95,
+  101,
+  102,
+  103,
+  104,
+  109,
+  110,
+  111,
+  113,
+  115,
+  117,
+  119,
+  123,
+  135,
+  137,
+  139,
+  143,
+  161,
+  179,
+  389,
+  427,
+  465,
+  512,
+  513,
+  514,
+  515,
+  526,
+  530,
+  531,
+  532,
+  540,
+  548,
+  554,
+  556,
+  563,
+  587,
+  601,
+  636,
+  989,
+  990,
+  993,
+  995,
+  1719,
+  1720,
+  1723,
+  2049,
+  3659,
+  4045,
+  5060,
+  5061,
+  6566,
+  6665,
+  6666,
+  6667,
+  6668,
+  6669,
+  6697,
+  10080,
+]);
+function isBlockedFetchPort(port: number): boolean {
+  return BLOCKED_FETCH_PORTS.has(port) || (port >= 6000 && port <= 6063);
+}
+
 // spec: contracts/platform.contract.md#PLAT-7, #PLAT-18 — Default tenant fallback
 const DEFAULT_ORG_ID = "default-org";
 
@@ -266,7 +352,7 @@ function isEtagMatch(ifNoneMatchHeader: string, currentEtag: string): boolean {
  * - FN-3: Function lifecycle and pointer flip rollback.
  * - ADR-0002: State backup export and restore.
  */
-export function startControlServer(
+export async function startControlServer(
   options: ControlServerOptions,
 ): Promise<ControlServer> {
   const snapshotStates = new Map<string, ProjectSnapshotState>();
@@ -869,17 +955,25 @@ export function startControlServer(
   };
 
   // spec: contracts/platform.contract.md#PLAT-19 — Bind HTTP daemon
-  const server = Deno.serve(
-    {
-      port: options.port ?? DEFAULT_CONTROL_PORT,
-      hostname: options.host ?? DEFAULT_CONTROL_HOST,
-      signal: options.signal,
-      onListen: () => {},
-    },
-    handler,
-  );
-
-  const assignedPort = (server.addr as Deno.NetAddr).port;
+  let server: Deno.HttpServer;
+  let assignedPort: number;
+  while (true) {
+    server = Deno.serve(
+      {
+        port: options.port ?? DEFAULT_CONTROL_PORT,
+        hostname: options.host ?? DEFAULT_CONTROL_HOST,
+        signal: options.signal,
+        onListen: () => {},
+      },
+      handler,
+    );
+    assignedPort = (server.addr as Deno.NetAddr).port;
+    if (options.port === 0 && isBlockedFetchPort(assignedPort)) {
+      await server.shutdown();
+      continue;
+    }
+    break;
+  }
   const controlServer: ControlServer = {
     port: assignedPort,
     close: async () => {
@@ -892,7 +986,7 @@ export function startControlServer(
     },
   };
 
-  return Promise.resolve(controlServer);
+  return controlServer;
 }
 
 // spec: contracts/platform.contract.md#PLAT-1 — Standalone control plane daemon runner

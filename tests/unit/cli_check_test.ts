@@ -1510,7 +1510,11 @@ capabilities = ["kv:read", "kv:write"]
   const dir = await createTempProject(toml, { "api.ts": DEFAULT_HANDLER_TS });
   try {
     const result = await checkProject(dir);
-    assertEquals(result.valid, true, "Per-function routes must validate successfully");
+    assertEquals(
+      result.valid,
+      true,
+      "Per-function routes must validate successfully",
+    );
     assertEquals(result.errors.length, 0);
     assertExists(result.routeSummary);
     assertEquals(result.routeSummary.length, 3);
@@ -1540,7 +1544,9 @@ entry = "api.ts"
 route = "/api/*"
 `;
 
-  const dir = await createTempProject(badToml, { "api.ts": DEFAULT_HANDLER_TS });
+  const dir = await createTempProject(badToml, {
+    "api.ts": DEFAULT_HANDLER_TS,
+  });
   try {
     const result = await checkProject(dir);
     assertEquals(result.valid, false);
@@ -1551,3 +1557,47 @@ route = "/api/*"
   }
 });
 
+Deno.test("PLAT-3 & FN-1: [[functions]] array-of-tables syntax and entrypoint fallback under functions/ directory", async () => {
+  const toml = `
+name = "cloud-demo"
+
+[limits]
+memory_mb = 128
+timeout_ms = 5000
+
+[[functions]]
+name = "api"
+entrypoint = "api.ts"
+routes = ["/api/hello", "/api/data", "/api/counter", "/api/jobs"]
+capabilities = ["kv", "objects", "queues", "env"]
+
+[[functions]]
+name = "worker"
+entrypoint = "worker.ts"
+type = "queue_consumer"
+queue = "jobs"
+capabilities = ["kv", "objects", "env"]
+`;
+
+  const dir = await createTempProject(toml, {
+    "functions/api.ts": DEFAULT_HANDLER_TS,
+    "functions/worker.ts": DEFAULT_HANDLER_TS,
+  });
+
+  try {
+    const result = await checkProject(dir);
+    assertEquals(
+      result.valid,
+      true,
+      "Array of tables [[functions]] must validate cleanly",
+    );
+    assertEquals(result.errors.length, 0);
+    assertExists(result.routeSummary);
+    assertEquals(result.routeSummary.length, 4);
+
+    const exitCode = await runCheck(dir);
+    assertEquals(exitCode, 0);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});

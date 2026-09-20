@@ -18,6 +18,7 @@
 
 import { isAbsolute, join, relative, toFileUrl } from "@std/path";
 import { parse } from "@std/toml";
+import { normalizeFunctions } from "../../cli/check.ts";
 import { generateUlid } from "../../packages/core/id/ulid.ts";
 import {
   InternalError,
@@ -116,6 +117,47 @@ export function formatRequestLine(info: RequestLogLineInfo): string {
 }
 
 /**
+ * Normalizes functions, permissions, and routes across both TOML schemas.
+ */
+export function normalizeProjectConfig(config: RailfogConfig): RailfogConfig {
+  const normalized = { ...config };
+  if (normalized.functions) {
+    const fns = normalizeFunctions(normalized.functions);
+    for (const fn of Object.values(fns)) {
+      const anyFn = fn as Record<string, unknown>;
+      if (!anyFn.permissions && anyFn.capabilities) {
+        if (Array.isArray(anyFn.capabilities)) {
+          const caps = anyFn.capabilities as unknown[];
+          const synth: Record<string, string[]> = {};
+          for (const c of caps) {
+            if (typeof c !== "string") continue;
+            const lower = c.toLowerCase().trim();
+            if (lower.startsWith("kv") || lower === "kv") {
+              synth.kv = synth.kv ?? ["default"];
+            } else if (
+              lower.startsWith("object") || lower.startsWith("s3") ||
+              lower === "objects"
+            ) {
+              synth.objects = synth.objects ?? ["default"];
+            } else if (lower.startsWith("queue") || lower === "queues") {
+              synth.queues = synth.queues ?? ["default"];
+            }
+          }
+          anyFn.permissions = synth;
+        } else if (
+          typeof anyFn.capabilities === "object" &&
+          anyFn.capabilities !== null && !Array.isArray(anyFn.capabilities)
+        ) {
+          anyFn.permissions = anyFn.capabilities;
+        }
+      }
+    }
+    normalized.functions = fns as unknown as Record<string, FunctionConfig>;
+  }
+  return normalized;
+}
+
+/**
  * Normalizes routes from top-level routes array and per-function routes/route declarations.
  */
 export function normalizeRoutes(config: RailfogConfig): RouteConfig[] {
@@ -128,7 +170,8 @@ export function normalizeRoutes(config: RailfogConfig): RouteConfig[] {
     }
   }
   if (config.functions) {
-    for (const [fnName, fnConfig] of Object.entries(config.functions)) {
+    const fns = normalizeFunctions(config.functions);
+    for (const [fnName, fnConfig] of Object.entries(fns)) {
       const anyFn = fnConfig as Record<string, unknown>;
       if (Array.isArray(anyFn.routes)) {
         for (const p of anyFn.routes) {
@@ -240,6 +283,8 @@ export interface RailfogConfig {
   }>;
 }
 
+export type FunctionConfig = NonNullable<RailfogConfig["functions"]>[string];
+
 const DEFAULT_PORT = 8000;
 const DEFAULT_ORG_ID = "local-org";
 const DEFAULT_REVISION = "local-dev";
@@ -296,7 +341,7 @@ export async function startLocalServer(
   const queuesProvider = options?.providers?.queues ??
     new SQLiteQueueProvider();
 
-  let currentConfig = config;
+  let currentConfig = normalizeProjectConfig(config);
   let routes: RouteConfig[] = normalizeRoutes(currentConfig);
 
   // spec: docs/contracts/functions.contract.md#FN-8 — Pre-resolve permission snapshot at server startup
@@ -475,8 +520,33 @@ export async function startLocalServer(
     }
 
     // spec: docs/contracts/functions.contract.md#FN-1, #FN-3, #FN-6 — Load function into isolate
-    const entry = fnConfig.entry ?? `functions/${matchedRoute.function}.ts`;
-    const resolvedEntry = isAbsolute(entry) ? entry : join(cwd, entry);
+    const anyFn = fnConfig as Record<string, unknown>;
+    const rawEntry = fnConfig.entry ??
+      (anyFn.entrypoint as string | undefined) ??
+      `functions/${matchedRoute.function}.ts`;
+    let entry = rawEntry;
+    let resolvedEntry = isAbsolute(entry) ? entry : join(cwd, entry);
+
+    let statFound = false;
+    try {
+      if ((await Deno.stat(resolvedEntry)).isFile) {
+        statFound = true;
+      }
+    } catch {
+      // not found directly
+    }
+
+    if (!statFound && !isAbsolute(entry)) {
+      const fallback = join(cwd, "functions", entry);
+      try {
+        if ((await Deno.stat(fallback)).isFile) {
+          resolvedEntry = fallback;
+          entry = join("functions", entry);
+        }
+      } catch {
+        // fallback not found either
+      }
+    }
 
     let loadedFn = loadedModules.get(resolvedEntry);
     if (!loadedFn) {
@@ -696,7 +766,9 @@ export async function startLocalServer(
         if (tomlChanged) {
           try {
             const tomlContent = await Deno.readTextFile(tomlPath);
-            currentConfig = parse(tomlContent) as unknown as RailfogConfig;
+            currentConfig = normalizeProjectConfig(
+              parse(tomlContent) as unknown as RailfogConfig,
+            );
             routes = normalizeRoutes(currentConfig);
             updateCachedPermissions(currentConfig);
             console.log("Reloaded railfog.toml");

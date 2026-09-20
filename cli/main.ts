@@ -9,6 +9,7 @@ import {
 import {
   checkProject,
   type CheckResult,
+  normalizeFunctions,
   runCheck,
   type ValidationIssue,
 } from "./check.ts";
@@ -180,10 +181,7 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
 
   const parsed = parse(content) as Record<string, unknown>;
   const appName = typeof parsed.name === "string" ? parsed.name : "(unnamed)";
-  const functions = (parsed.functions ?? {}) as Record<
-    string,
-    { entry?: string }
-  >;
+  const functions = normalizeFunctions(parsed.functions);
   const routes = (parsed.routes ?? []) as Array<
     { pattern?: string; function?: string }
   >;
@@ -193,7 +191,8 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
   console.log("Functions:");
   console.log("  NAME       ENTRY");
   for (const [name, fnConfig] of Object.entries(functions)) {
-    const entry = fnConfig?.entry ?? "(no entry)";
+    const entry = (fnConfig?.entry as string) ??
+      (fnConfig?.entrypoint as string) ?? "(no entry)";
     console.log(`  ${name.padEnd(10)} ${entry}`);
   }
   console.log();

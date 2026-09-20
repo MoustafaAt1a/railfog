@@ -25,6 +25,7 @@ import { DeployDiagnosticsAnalyzer } from "../packages/core/diagnostics/deploy-a
 import { ValidationFailedError } from "../packages/errors/mod.ts";
 import { SecretRedactor } from "../packages/logging/secret-redactor.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
+import { normalizeFunctions } from "./check.ts";
 import { bold, createSpinner, dim, green } from "./spinner.ts";
 
 export interface DeployProgressCallbacks {
@@ -82,6 +83,10 @@ interface FunctionConfig {
     cpu_ms?: number;
     timeout_ms?: number;
     memory_mb?: number;
+  };
+  triggers?: {
+    queue?: string;
+    schedule?: string;
   };
 }
 
@@ -250,6 +255,13 @@ export async function runDeploy(
     );
   }
 
+  // Normalize [[functions]] array syntax to map
+  if (parsed && typeof parsed === "object" && parsed.functions !== undefined) {
+    parsed.functions = normalizeFunctions(
+      parsed.functions,
+    ) as unknown as Record<string, FunctionConfig>;
+  }
+
   // spec: docs/contracts/platform.contract.md#PLAT-3 — Schema validation
   if (
     !parsed ||
@@ -308,6 +320,15 @@ export async function runDeploy(
         fnConfig.permissions = anyFn
           .capabilities as unknown as typeof fnConfig.permissions;
       }
+    }
+
+    // Normalize type = "queue_consumer" or queue property
+    if (
+      !fnConfig.triggers && (anyFn.type === "queue_consumer" || anyFn.queue)
+    ) {
+      fnConfig.triggers = {
+        queue: typeof anyFn.queue === "string" ? anyFn.queue : "default",
+      };
     }
 
     // 2. Normalize global limits -> fn limits
@@ -401,32 +422,56 @@ export async function runDeploy(
         );
       }
 
+      const anyFn = fnConfig as Record<string, unknown>;
+      if (!fnConfig.entry && typeof anyFn.entrypoint === "string") {
+        fnConfig.entry = anyFn.entrypoint;
+      }
+
       if (typeof fnConfig.entry !== "string" || fnConfig.entry.trim() === "") {
         throw new ValidationFailedError(
           `VALIDATION_FAILED: Entrypoint for function '${fnName}' cannot be empty`,
         );
       }
 
+      // Check direct path first, then fallback to functions/<entry>
+      let resolvedEntry = resolve(cwd, fnConfig.entry);
+      let realEntry: string | undefined;
+      try {
+        const candidate = await Deno.realPath(resolvedEntry);
+        const stat = await Deno.stat(candidate);
+        if (stat.isFile) {
+          realEntry = candidate;
+        }
+      } catch {
+        // direct path not found
+      }
+
+      if (!realEntry && !isAbsolute(fnConfig.entry)) {
+        const fallback = resolve(cwd, "functions", fnConfig.entry);
+        try {
+          const candidate = await Deno.realPath(fallback);
+          const stat = await Deno.stat(candidate);
+          if (stat.isFile) {
+            realEntry = candidate;
+            fnConfig.entry = "functions/" + fnConfig.entry;
+            resolvedEntry = fallback;
+          }
+        } catch {
+          // fallback not found either
+        }
+      }
+
+      if (!realEntry) {
+        throw new ValidationFailedError(
+          `VALIDATION_FAILED: Entrypoint file '${fnConfig.entry}' does not exist (PLAT-3)`,
+        );
+      }
+
       // spec: docs/contracts/platform.contract.md#PLAT-6 — Lexical path traversal validation
-      const resolvedEntry = resolve(cwd, fnConfig.entry);
       const rel = relative(cwd, resolvedEntry);
       if (rel.startsWith("..") || isAbsolute(rel) || rel === "") {
         throw new ValidationFailedError(
           `VALIDATION_FAILED: Entrypoint '${fnConfig.entry}' escapes project directory (PLAT-6)`,
-        );
-      }
-
-      // spec: docs/contracts/platform.contract.md#PLAT-3, PLAT-6 — Canonical path verification and symlink isolation
-      let realEntry: string;
-      try {
-        realEntry = await Deno.realPath(resolvedEntry);
-        const stat = await Deno.stat(realEntry);
-        if (!stat.isFile) {
-          throw new Error();
-        }
-      } catch {
-        throw new ValidationFailedError(
-          `VALIDATION_FAILED: Entrypoint file '${fnConfig.entry}' does not exist (PLAT-3)`,
         );
       }
 
