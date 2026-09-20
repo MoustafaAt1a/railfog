@@ -32,7 +32,11 @@ Deno.test("T-0758: Integration — Full Backing Services and Web-to-CLI Login Li
   });
 
   const deploymentService = new DeploymentService(objStorage);
-  const stateBackupService = createStateBackupService(deploymentService, pgKv, objStorage);
+  const stateBackupService = createStateBackupService(
+    deploymentService,
+    pgKv,
+    objStorage,
+  );
 
   const server = await startControlServer({
     port: 0,

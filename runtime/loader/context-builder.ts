@@ -45,6 +45,7 @@ export interface RailFogContext {
 export function buildContext(
   fn: LoadedFunctionMeta,
   bindings: ResolvedBindings,
+  env?: EnvBinding,
 ): RailFogContext {
   const deadline = Date.now() +
     (fn.timeout_ms ?? fn.timeoutMs ?? DEFAULT_TIMEOUT_MS);
@@ -65,7 +66,7 @@ export function buildContext(
     queues: bindings.queues
       ? { ...bindings.queues }
       : ({} as unknown as QueueBinding),
-    env: {
+    env: env ?? {
       get(_key: string): string | undefined {
         return undefined;
       },

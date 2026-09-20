@@ -45,8 +45,14 @@ Deno.test("T-0752: PostgresKVProvider basic CRUD, TTL, and Schema (KV-2)", async
   assertEquals(initial, null);
 
   // Set and get
-  await provider.set(["app", "config", "theme"], { dark: true, primaryColor: "#0070f3" });
-  const theme = await provider.get(["app", "config", "theme"]) as { dark: boolean; primaryColor: string };
+  await provider.set(["app", "config", "theme"], {
+    dark: true,
+    primaryColor: "#0070f3",
+  });
+  const theme = await provider.get(["app", "config", "theme"]) as {
+    dark: boolean;
+    primaryColor: string;
+  };
   assertEquals(theme.dark, true);
   assertEquals(theme.primaryColor, "#0070f3");
 
@@ -76,7 +82,10 @@ Deno.test("T-0752: PostgresKVProvider list with prefix and pagination (KV-2)", a
   assertEquals(page1.keys.length, 2);
   assertEquals(typeof page1.cursor, "string");
 
-  const page2 = await provider.list(["projects"], { limit: 2, cursor: page1.cursor });
+  const page2 = await provider.list(["projects"], {
+    limit: 2,
+    cursor: page1.cursor,
+  });
   assertEquals(page2.keys.length, 1);
   assertEquals(page2.keys[0].key, ["projects", "p3"]);
 
@@ -111,7 +120,9 @@ Deno.test("T-0752: PostgresKVProvider atomic transactional CAS (KV-3, KV-5)", as
   assertEquals(failRes.ok, false);
 
   // Stock remains untouched at 95
-  const current = await provider.get(["inventory", "stock"]) as { items: number };
+  const current = await provider.get(["inventory", "stock"]) as {
+    items: number;
+  };
   assertEquals(current.items, 95);
 
   await provider.close();

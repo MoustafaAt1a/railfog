@@ -122,7 +122,9 @@ export function createAuthMiddleware(
                 response: createAuthErrorResponse(
                   403,
                   "PERMISSION_DENIED",
-                  `Access denied: API token is scoped to project '${identity.projectId}' but requested '${projectMatch[1]}' (PLAT-6).`,
+                  `Access denied: API token is scoped to project '${identity.projectId}' but requested '${
+                    projectMatch[1]
+                  }' (PLAT-6).`,
                   requestId,
                 ),
               };

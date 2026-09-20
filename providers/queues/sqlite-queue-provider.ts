@@ -179,4 +179,13 @@ export class SQLiteQueueProvider implements QueueProvider {
         : null,
     );
   }
+
+  // Spec reference: PLAT-19 — Deterministic resource cleanup
+  close(): void {
+    try {
+      this.db.close();
+    } catch {
+      // Ignored if already closed
+    }
+  }
 }

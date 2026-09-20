@@ -35,7 +35,10 @@ Deno.test("T-0754: createAuthMiddleware rejects missing credentials with 403 PER
 
   if (!result.ok) {
     assertEquals(result.response.status, 403);
-    assertEquals(result.response.headers.get("x-request-id"), "req_01J8Z000000000000000000002");
+    assertEquals(
+      result.response.headers.get("x-request-id"),
+      "req_01J8Z000000000000000000002",
+    );
     const body = await result.response.json();
     assertEquals(body.error.code, "PERMISSION_DENIED");
     assertEquals(body.error.request_id, "req_01J8Z000000000000000000002");
@@ -54,10 +57,16 @@ Deno.test("T-0754: createAuthMiddleware validates Bearer token and x-api-key via
   const middleware = createAuthMiddleware({ apiKeyStore: store });
 
   // 1. Valid Authorization: Bearer <key>
-  const bearerReq = new Request("http://localhost:8081/v1/projects/app-backend/deploy", {
-    headers: { authorization: `Bearer ${rawToken}` },
-  });
-  const bearerRes = await middleware(bearerReq, "req_01J8Z000000000000000000003");
+  const bearerReq = new Request(
+    "http://localhost:8081/v1/projects/app-backend/deploy",
+    {
+      headers: { authorization: `Bearer ${rawToken}` },
+    },
+  );
+  const bearerRes = await middleware(
+    bearerReq,
+    "req_01J8Z000000000000000000003",
+  );
   assertEquals(bearerRes.ok, true);
   if (bearerRes.ok) {
     assertEquals(bearerRes.context.callerId, "ci-runner");
@@ -65,19 +74,28 @@ Deno.test("T-0754: createAuthMiddleware validates Bearer token and x-api-key via
   }
 
   // 2. Valid x-api-key: <key>
-  const xApiKeyReq = new Request("http://localhost:8081/v1/projects/app-backend/deploy", {
-    headers: { "x-api-key": rawToken },
-  });
-  const xApiKeyRes = await middleware(xApiKeyReq, "req_01J8Z000000000000000000004");
+  const xApiKeyReq = new Request(
+    "http://localhost:8081/v1/projects/app-backend/deploy",
+    {
+      headers: { "x-api-key": rawToken },
+    },
+  );
+  const xApiKeyRes = await middleware(
+    xApiKeyReq,
+    "req_01J8Z000000000000000000004",
+  );
   assertEquals(xApiKeyRes.ok, true);
   if (xApiKeyRes.ok) {
     assertEquals(xApiKeyRes.context.callerId, "ci-runner");
   }
 
   // 3. Invalid token
-  const badReq = new Request("http://localhost:8081/v1/projects/app-backend/deploy", {
-    headers: { authorization: "Bearer rfk_fake_bad_token_999" },
-  });
+  const badReq = new Request(
+    "http://localhost:8081/v1/projects/app-backend/deploy",
+    {
+      headers: { authorization: "Bearer rfk_fake_bad_token_999" },
+    },
+  );
   const badRes = await middleware(badReq, "req_01J8Z000000000000000000005");
   assertEquals(badRes.ok, false);
   if (!badRes.ok) {

@@ -97,7 +97,9 @@ export class ApiKeyStore {
    * Never leaks raw token in errors or logs.
    */
   async verifyRawToken(rawToken: string): Promise<IdentityContext | null> {
-    if (!rawToken || typeof rawToken !== "string" || !rawToken.startsWith("rfk_")) {
+    if (
+      !rawToken || typeof rawToken !== "string" || !rawToken.startsWith("rfk_")
+    ) {
       return null;
     }
 

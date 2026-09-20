@@ -23,6 +23,7 @@ import {
  */
 export interface HandlerContext extends RailFogContext {
   req: Request;
+  params?: Record<string, string | undefined>;
   body<T = unknown>(): Promise<T>;
   json(data: unknown, status?: number): Response;
   text(str: string, status?: number): Response;
@@ -305,6 +306,14 @@ export function api(routes: ApiRouteMap): FunctionHandler {
       );
     }
 
-    return await winningRoute.handler(c);
+    const match = winningRoute.urlPattern.exec({ pathname });
+    const params: Record<string, string | undefined> =
+      match?.pathname?.groups ?? {};
+    const routeContext: HandlerContext = {
+      ...c,
+      params,
+    };
+
+    return await winningRoute.handler(routeContext);
   });
 }

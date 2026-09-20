@@ -13,7 +13,10 @@ import { PostgresKVProvider } from "../../providers/kv/postgres-provider.ts";
 Deno.test("T-0753: ApiKeyStore creates and verifies raw API keys with hashing (PLAT-15)", async () => {
   const storage = new PostgresKVProvider();
   const cache = new RedisKVProvider();
-  const store = new ApiKeyStore({ storageProvider: storage, cacheProvider: cache });
+  const store = new ApiKeyStore({
+    storageProvider: storage,
+    cacheProvider: cache,
+  });
 
   // 1. Create a key
   const res = await store.createKey({
@@ -56,7 +59,10 @@ Deno.test("T-0753: ApiKeyStore creates and verifies raw API keys with hashing (P
 Deno.test("T-0753: ApiKeyStore revokes keys and purges cache immediately (PLAT-6, PLAT-15)", async () => {
   const storage = new PostgresKVProvider();
   const cache = new RedisKVProvider();
-  const store = new ApiKeyStore({ storageProvider: storage, cacheProvider: cache });
+  const store = new ApiKeyStore({
+    storageProvider: storage,
+    cacheProvider: cache,
+  });
 
   const { rawToken, record } = await store.createKey({
     name: "test-revoke",

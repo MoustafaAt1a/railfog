@@ -31,6 +31,21 @@ export function specificityScore(pattern: string): number {
   return score;
 }
 
+const patternCache = new Map<string, URLPattern>();
+const MAX_PATTERN_CACHE_SIZE = 1000;
+
+function getCompiledPattern(normalizedPattern: string): URLPattern {
+  let p = patternCache.get(normalizedPattern);
+  if (!p) {
+    if (patternCache.size >= MAX_PATTERN_CACHE_SIZE) {
+      patternCache.clear();
+    }
+    p = new URLPattern({ pathname: normalizedPattern });
+    patternCache.set(normalizedPattern, p);
+  }
+  return p;
+}
+
 // spec: docs/contracts/platform.contract.md#PLAT-11 — Routing specificity algorithm
 export function matchRoute(
   routes: RouteConfig[],
@@ -43,7 +58,7 @@ export function matchRoute(
     const normalizedPattern = route.pattern.startsWith("/")
       ? route.pattern
       : `/${route.pattern}`;
-    const urlPattern = new URLPattern({ pathname: normalizedPattern });
+    const urlPattern = getCompiledPattern(normalizedPattern);
     if (urlPattern.test(path, "http://railfog.internal")) {
       const score = specificityScore(route.pattern);
       if (score > highestScore) {

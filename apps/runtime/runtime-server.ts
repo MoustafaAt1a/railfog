@@ -327,10 +327,34 @@ export async function startRuntimeServer(
       invocationHeaders["x-request-id"] = requestId;
       invocationHeaders["request-id"] = requestId;
 
+      // spec: contracts/functions.contract.md#FN-5 — Request body size limit (10MB default, reject with 413 PAYLOAD_TOO_LARGE)
+      const maxRequestBodyBytes = 10 * 1024 * 1024;
+      const contentLengthHeader = req.headers.get("content-length");
+      if (contentLengthHeader) {
+        const contentLength = parseInt(contentLengthHeader, 10);
+        if (!isNaN(contentLength) && contentLength > maxRequestBodyBytes) {
+          return createErrorResponse(
+            413,
+            "PAYLOAD_TOO_LARGE",
+            `Request body exceeds maximum allowed size of ${maxRequestBodyBytes} bytes`,
+            requestId,
+          );
+        }
+      }
+
       // spec: contracts/functions.contract.md#FN-1 — Request body extraction
-      const bodyBytes = req.body
-        ? new Uint8Array(await req.arrayBuffer())
-        : undefined;
+      let bodyBytes: Uint8Array | undefined;
+      if (req.body) {
+        bodyBytes = new Uint8Array(await req.arrayBuffer());
+        if (bodyBytes.byteLength > maxRequestBodyBytes) {
+          return createErrorResponse(
+            413,
+            "PAYLOAD_TOO_LARGE",
+            `Request body exceeds maximum allowed size of ${maxRequestBodyBytes} bytes`,
+            requestId,
+          );
+        }
+      }
 
       // spec: contracts/platform.contract.md#PLAT-4, FN-6, FN-8 — Fresh InvocationRequest container
       const invocation: InvocationRequest = {

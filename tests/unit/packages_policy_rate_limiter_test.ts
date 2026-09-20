@@ -590,3 +590,25 @@ Deno.test("TokenBucketLimiter defaults to Date.now() when nowProvider is omitted
   assertEquals(res.allowed, true);
   assertEquals(res.remaining, 19);
 });
+
+Deno.test("PLAT-9 (Unit): TokenBucketLimiter prune removes idle buckets while preserving capacity on fresh access", () => {
+  let currentTime = 1_000_000;
+  const limiter = new TokenBucketLimiter({ nowProvider: () => currentTime });
+
+  limiter.consume("active_ip", "ip");
+  limiter.consume("idle_ip", "ip");
+
+  // Advance time beyond idle threshold (60s = 60,000ms)
+  currentTime += 70_000;
+
+  // Active key is accessed again, resetting its timestamp
+  limiter.consume("active_ip", "ip");
+
+  const pruned = limiter.prune(60_000, currentTime);
+  assertEquals(pruned, 1, "Should prune exactly the 1 idle bucket");
+
+  // Re-accessing the pruned key immediately gets full burst capacity
+  const postPrune = limiter.consume("idle_ip", "ip");
+  assertEquals(postPrune.allowed, true);
+  assertEquals(postPrune.remaining, 19);
+});

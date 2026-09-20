@@ -154,6 +154,15 @@ export class SQLiteKVProvider implements KVProvider {
   atomic(): KVAtomicBuilder {
     return new SQLiteKVAtomicBuilder(this.db, this);
   }
+
+  // Spec reference: PLAT-19 — Deterministic resource cleanup
+  close(): void {
+    try {
+      this.db.close();
+    } catch {
+      // Ignored if already closed
+    }
+  }
 }
 
 class SQLiteKVAtomicBuilder implements KVAtomicBuilder {

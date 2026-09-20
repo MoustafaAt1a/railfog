@@ -1,7 +1,7 @@
 // spec: contracts/platform.contract.md#PLAT-19 — Repository structure & CLI distribution
 // tests/unit/installer_posix_test.ts
 
-import { assertEquals, assertMatch } from "@std/assert";
+import { assertMatch } from "@std/assert";
 
 Deno.test("T-0808: POSIX installer script exists and conforms to strict POSIX shell syntax", async () => {
   const scriptPath = new URL("../../scripts/install.sh", import.meta.url);

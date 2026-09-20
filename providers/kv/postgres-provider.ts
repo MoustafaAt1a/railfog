@@ -66,7 +66,9 @@ export class PostgresKVProvider implements KVProvider {
       );
     }
     if (key.length > 32) {
-      throw new ValidationFailedError("VALIDATION_FAILED: Key exceeds 32 segments");
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Key exceeds 32 segments",
+      );
     }
     const encoder = new TextEncoder();
     const byteLength = key.reduce(
@@ -74,7 +76,9 @@ export class PostgresKVProvider implements KVProvider {
       0,
     );
     if (byteLength > 512) {
-      throw new ValidationFailedError("VALIDATION_FAILED: Key exceeds 512 bytes");
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Key exceeds 512 bytes",
+      );
     }
   }
 
@@ -95,7 +99,9 @@ export class PostgresKVProvider implements KVProvider {
         );
       `;
       await this.sql`
-        CREATE INDEX IF NOT EXISTS ${this.sql(`idx_${this.tableName}_expires_at`)}
+        CREATE INDEX IF NOT EXISTS ${
+        this.sql(`idx_${this.tableName}_expires_at`)
+      }
         ON ${this.sql(this.tableName)}(expires_at);
       `;
     }
@@ -248,8 +254,12 @@ export class PostgresKVProvider implements KVProvider {
 
       const hasMore = rows.length > limit;
       const selected = hasMore ? rows.slice(0, limit) : rows;
-      const keys = selected.map((r: { key_json: unknown; value_json: unknown }) => ({
-        key: (typeof r.key_json === "string" ? JSON.parse(r.key_json) : r.key_json) as string[],
+      const keys = selected.map((
+        r: { key_json: unknown; value_json: unknown },
+      ) => ({
+        key: (typeof r.key_json === "string"
+          ? JSON.parse(r.key_json)
+          : r.key_json) as string[],
         value: r.value_json,
       }));
 

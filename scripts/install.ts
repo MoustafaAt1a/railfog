@@ -133,7 +133,8 @@ export async function runInstaller(options: InstallerOptions): Promise<{
     return {
       ok: false,
       installedPath: "",
-      output: `Invalid root directory path: contains forbidden shell characters`,
+      output:
+        `Invalid root directory path: contains forbidden shell characters`,
     };
   }
 

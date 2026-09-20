@@ -964,3 +964,33 @@ Deno.test("Server Lifecycle: respects AbortSignal for graceful shutdown", async 
 
   await mockCp.close();
 });
+
+Deno.test("FN-5: runtime server rejects request body exceeding 10MB limit with HTTP 413 PAYLOAD_TOO_LARGE", async () => {
+  const projectId = "proj_test_payload_limit";
+  const snapshot = createMockSnapshot();
+  const mockCp = createMockControlPlane(projectId, snapshot);
+  const isolationProvider = new MockIsolationProvider();
+
+  let server: RuntimeServer | null = null;
+  try {
+    server = await startRuntimeServer({
+      projectId,
+      controlPlaneUrl: mockCp.url,
+      isolationProvider,
+      pollIntervalMs: 10000,
+    });
+
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/users`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: new Uint8Array(11 * 1024 * 1024),
+    });
+
+    assertEquals(res.status, 413);
+    const body = await res.json();
+    assertEquals(body.error.code, "PAYLOAD_TOO_LARGE");
+  } finally {
+    if (server) await server.close();
+    await mockCp.close();
+  }
+});

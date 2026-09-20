@@ -45,7 +45,10 @@ Deno.test("T-0751: RedisKVProvider basic CRUD and TTL (KV-2)", async () => {
 
   // Set and get
   await provider.set(["users", "101"], { name: "Alice", role: "admin" });
-  const fetched = await provider.get(["users", "101"]) as { name: string; role: string };
+  const fetched = await provider.get(["users", "101"]) as {
+    name: string;
+    role: string;
+  };
   assertEquals(fetched.name, "Alice");
   assertEquals(fetched.role, "admin");
 
@@ -75,7 +78,10 @@ Deno.test("T-0751: RedisKVProvider list with prefix and pagination (KV-2)", asyn
   assertEquals(typeof listRes.cursor, "string");
 
   // Fetch next page
-  const page2 = await provider.list(["session"], { limit: 2, cursor: listRes.cursor });
+  const page2 = await provider.list(["session"], {
+    limit: 2,
+    cursor: listRes.cursor,
+  });
   assertEquals(page2.keys.length, 1);
   assertEquals(page2.keys[0].key, ["session", "gamma"]);
 

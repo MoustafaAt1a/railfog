@@ -56,10 +56,14 @@ export class RedisKVProvider implements KVProvider {
   // spec: contracts/kv.contract.md#KV-4 — Key model validation
   public validateKey(key: string[]): void {
     if (!Array.isArray(key) || key.length === 0) {
-      throw new ValidationFailedError("VALIDATION_FAILED: Key must be a non-empty array of segments");
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Key must be a non-empty array of segments",
+      );
     }
     if (key.length > 32) {
-      throw new ValidationFailedError("VALIDATION_FAILED: Key exceeds 32 segments");
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Key exceeds 32 segments",
+      );
     }
     const encoder = new TextEncoder();
     const byteLength = key.reduce(
@@ -67,12 +71,15 @@ export class RedisKVProvider implements KVProvider {
       0,
     );
     if (byteLength > 512) {
-      throw new ValidationFailedError("VALIDATION_FAILED: Key exceeds 512 bytes");
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Key exceeds 512 bytes",
+      );
     }
   }
 
   public encodeKeyPath(key: string[]): string {
-    return this.prefix + key.map((seg) => encodeURIComponent(seg)).join("/") + "/";
+    return this.prefix + key.map((seg) => encodeURIComponent(seg)).join("/") +
+      "/";
   }
 
   private cleanMemoryExpired(now = Date.now()): void {

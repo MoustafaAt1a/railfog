@@ -989,3 +989,24 @@ Deno.test("T-0810 / Types: HandlerContext, HandlerFn, HandlerResult, ApiRouteMap
   assertFalse(false);
   assertNotEquals(sampleMap, null);
 });
+
+Deno.test("T-0810 / Ergonomics: api() provides c.params containing URLPattern route parameter groups", async () => {
+  const router = api({
+    "GET /users/:userId/posts/:postId": (c) => {
+      return {
+        userId: c.params?.userId,
+        postId: c.params?.postId,
+      };
+    },
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request(
+    "https://example.railfog.internal/users/usr_100/posts/pst_200",
+  );
+  const res = await router(req, ctx);
+
+  assertEquals(res.status, 200);
+  const data = await res.json();
+  assertEquals(data, { userId: "usr_100", postId: "pst_200" });
+});

@@ -247,34 +247,40 @@ export async function devCommand(
 }
 
 function printGeneralHelp(): void {
-  console.log(`RailFog CLI - Edge compute platform
+  console.log(`RailFog CLI — Serverless Application Platform
 
 Usage:
   rail <command> [options]
 
-Commands:
+Development & Deployment:
   init      Initialize a new RailFog project in the current directory
-  add       Add a dependency or primitive to the current project
+  dev       Start the local development server with hot-reload
+  deploy    Deploy functions and configuration to the Control Plane
   status    Show status of functions and routes in railfog.toml
-  check     Validate railfog.toml configuration and routes
-  dev       Start the local development server
-  deploy    Deploy functions to the Control Plane
-  rollback  Rollback a function to a previous revision
-  export    Export project state to a disaster recovery archive
-  import    Import and restore project state from a disaster recovery archive
-  secrets   Manage encrypted project secrets (set, list, delete)
-  logs      Stream and filter structured runtime logs
-  usage     Display resource usage and itemized cost breakdown
-  cost      Alias for usage subcommand
-  login     Authenticate your session via web browser and API key
+  check     Validate railfog.toml configuration and route patterns
+  add       Add a dependency or primitive to deno.json
+
+Authentication & Identity:
+  login     Authenticate your session via browser or API token
   logout    Log out and remove local credentials
   whoami    Display currently authenticated organization and key
+
+Operations & Reliability:
+  logs      Stream and filter structured runtime logs
+  secrets   Manage encrypted project secrets (set, list, delete)
+  rollback  Rollback a function to a previous revision instantly
+  usage     Display resource consumption and itemized cost breakdown
+  cost      Alias for usage subcommand
+  export    Export project state to a disaster recovery archive
+  import    Import and restore project state from a disaster recovery archive
+
+Maintenance:
   upgrade   Upgrade the RailFog CLI to the latest version
   update    Alias for upgrade subcommand
 
 Options:
-  -v, --version Show CLI version
-  -h, --help    Show help information`);
+  -v, --version  Show CLI version
+  -h, --help     Show help information`);
 }
 
 function printLoginHelp(): void {
@@ -1103,15 +1109,14 @@ export async function main(args: string[] = Deno.args): Promise<void> {
     }
     default:
       if (!command) {
-        console.error(
-          "Error: No command specified. Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update",
-        );
+        printGeneralHelp();
+        return;
       } else {
         console.error(
           `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update`,
         );
+        Deno.exit(1);
       }
-      Deno.exit(1);
   }
 }
 

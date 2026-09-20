@@ -41,6 +41,7 @@ export interface TokenBucketLimiter {
   consume(key: string, scope: RateLimitScope): RateLimitResult;
   acquireConcurrency(fnKey: string, maxConcurrency: number): ConcurrencyResult;
   releaseConcurrency(fnKey: string): void;
+  prune(maxIdleMs?: number, now?: number): number;
 }
 
 /**
@@ -149,6 +150,23 @@ export class TokenBucketLimiter implements TokenBucketLimiter {
     } else {
       this.concurrencyCounts.delete(fnKey);
     }
+  }
+
+  /**
+   * Prunes idle buckets that have been inactive longer than maxIdleMs.
+   * Eliminates memory accumulation from ephemeral client keys.
+   *
+   * spec: contracts/platform.contract.md#PLAT-9
+   */
+  prune(maxIdleMs: number = 60_000, now: number = this.nowProvider()): number {
+    let prunedCount = 0;
+    for (const [key, bucket] of this.buckets.entries()) {
+      if (now - bucket.lastReplenishedAt > maxIdleMs) {
+        this.buckets.delete(key);
+        prunedCount++;
+      }
+    }
+    return prunedCount;
   }
 }
 
