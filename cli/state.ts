@@ -48,7 +48,9 @@ export interface ImportCommandOptions {
   stateBackupService?: StateBackupService;
 }
 
-const DEFAULT_CONTROL_PLANE_URL = "http://localhost:8000";
+export const PRODUCTION_CONTROL_PLANE_URL =
+  "https://railfog-control-production.up.railway.app";
+export const DEFAULT_CONTROL_PLANE_URL = PRODUCTION_CONTROL_PLANE_URL;
 
 /**
  * Exports a project's state into a portable disaster recovery archive JSON file.

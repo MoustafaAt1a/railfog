@@ -28,7 +28,9 @@ export interface LoginResult {
   orgId: string;
 }
 
-const DEFAULT_CONTROL_URL = "http://localhost:8081";
+export const PRODUCTION_CONTROL_URL =
+  "https://railfog-control-production.up.railway.app";
+export const DEFAULT_CONTROL_URL = PRODUCTION_CONTROL_URL;
 
 /**
  * Sanitizes a message to prevent leaking sensitive credentials in terminal logs.

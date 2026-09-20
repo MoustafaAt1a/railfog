@@ -38,7 +38,9 @@ interface RailfogToml {
   name?: string;
 }
 
-const DEFAULT_CONTROL_PLANE_URL = "http://localhost:8000";
+export const PRODUCTION_CONTROL_PLANE_URL =
+  "https://railfog-control-production.up.railway.app";
+export const DEFAULT_CONTROL_PLANE_URL = PRODUCTION_CONTROL_PLANE_URL;
 
 // spec: docs/contracts/platform.contract.md#PLAT-3 — Deployment pipeline (pointer-flip rollback)
 // spec: docs/contracts/platform.contract.md#PLAT-12 — Error model

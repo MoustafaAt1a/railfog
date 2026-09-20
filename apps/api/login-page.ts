@@ -269,7 +269,7 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
         <input type="text" id="keyName" value="cli-session" placeholder="e.g. dev-laptop">
       </div>
       <button class="btn" id="generate-btn" onclick="generateApiKey()">
-        Generate API Key
+        ${validCallback ? "🚀 Authorize CLI in Terminal" : "Generate API Key"}
       </button>
     </div>
 
@@ -339,8 +339,12 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
           document.getElementById("key-text").innerText = activeKey;
           document.getElementById("key-box").style.display = "block";
           document.getElementById("setup-view").style.display = "none";
-          // Try to copy immediately
+          // Copy to clipboard
           copyKey();
+          // 1-Click zero-copy flow: automatically redirect if terminal callback URL is present
+          if (CALLBACK_URL) {
+            authorizeCli();
+          }
         } else {
           alert("Failed to generate key: " + (data.error?.message || "Unknown error"));
           btn.disabled = false;

@@ -91,7 +91,9 @@ interface RailfogToml {
   routes?: Array<{ pattern?: string; function?: string }>;
 }
 
-const DEFAULT_CONTROL_PLANE_URL = "http://localhost:8000";
+export const PRODUCTION_CONTROL_PLANE_URL =
+  "https://railfog-control-production.up.railway.app";
+export const DEFAULT_CONTROL_PLANE_URL = PRODUCTION_CONTROL_PLANE_URL;
 
 // Stage identifiers matching test contract regexes
 const STEP_PACKAGING =

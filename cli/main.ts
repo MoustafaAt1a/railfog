@@ -271,7 +271,7 @@ Usage:
   rail login [options]
 
 Options:
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_URL or http://localhost:8081)
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_URL or https://railfog-control-production.up.railway.app)
   --token <key>          Directly provide API key (non-interactive / CI)
   --manual               Skip browser callback server and prompt on stdin
   -h, --help             Show help for login command`);
@@ -297,7 +297,7 @@ Usage:
   rail deploy [options]
 
 Options:
-  --control-url <url>    Control Plane API URL (default: http://localhost:8000 or RAILFOG_CONTROL_PLANE_URL)
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
   --project <name>       Override project name declared in railfog.toml
   -h, --help             Show help for deploy command`);
 }
@@ -310,7 +310,7 @@ Usage:
 
 Options:
   --to <revisionId>      The target revision ID to rollback to (required)
-  --control-url <url>    Control Plane API URL (default: http://localhost:8000 or RAILFOG_CONTROL_PLANE_URL)
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
   --project <name>       Override project name declared in railfog.toml
   -h, --help             Show help for rollback command`);
 }
@@ -325,7 +325,7 @@ Options:
   --out <path>           Output backup archive JSON file path (default: <backup_id>.json)
   --project <name>       Override project name declared in railfog.toml
   --org <id>             Organization ID (default: default)
-  --control-url <url>    Control Plane API URL (default: http://localhost:8000 or RAILFOG_CONTROL_PLANE_URL)
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
   -h, --help             Show help for export command`);
 }
 
@@ -340,7 +340,7 @@ Options:
   --project <name>       Target project name (defaults to railfog.toml or archive)
   --org <id>             Target organization ID
   --overwrite-kv         Overwrite existing KV keys in target project
-  --control-url <url>    Control Plane API URL (default: http://localhost:8000 or RAILFOG_CONTROL_PLANE_URL)
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
   -h, --help             Show help for import command`);
 }
 
