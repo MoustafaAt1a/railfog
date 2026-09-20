@@ -1280,6 +1280,30 @@ Deno.test(
         );
       }
     }
+
+    // 7.3: Deno install.ts script validation
+    {
+      const tsPath = join(rootDir, "scripts", "install.ts");
+      assert((await Deno.stat(tsPath)).isFile, "scripts/install.ts must exist");
+      const tsContent = await Deno.readTextFile(tsPath);
+
+      assertMatch(tsContent, /PLAT-19/, "install.ts must cite PLAT-19");
+      assertMatch(
+        tsContent,
+        /export function parseInstallerArgs/,
+        "install.ts must export parseInstallerArgs",
+      );
+      assertMatch(
+        tsContent,
+        /export function resolveInstallPaths/,
+        "install.ts must export resolveInstallPaths",
+      );
+      assertMatch(
+        tsContent,
+        /export async function runInstaller/,
+        "install.ts must export runInstaller",
+      );
+    }
   },
 );
 

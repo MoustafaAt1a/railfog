@@ -51,7 +51,7 @@ fi
 if [ ! -f "$BINARY_PATH" ] || [ ! -s "$BINARY_PATH" ]; then
   if command -v deno >/dev/null 2>&1; then
     echo "Compiling via local Deno..."
-    deno install -g -A -f -n rail https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts
+    deno install -g -A -f --config https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json -n rail https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts
     exit 0
   else
     echo "Creating bootstrap runner..."

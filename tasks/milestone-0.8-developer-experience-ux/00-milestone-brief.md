@@ -63,3 +63,5 @@ T-0811 (Project Dependency Add)            │
 | `T-0810` | Implement Ergonomic Function Handler Wrapper             | `sdk/typescript/wrapper.ts`            | `FN-1`, `FN-4`, `PLAT-19`                                   |
 | `T-0811` | Implement Project Dependency Management in `rail add`    | `cli/add.ts`                           | `PLAT-19`                                                   |
 | `T-0812` | Run Milestone 0.8 E2E Verification Suite                 | `tests/e2e/ux_dx_milestone_08_test.ts` | `PLAT-1`, `PLAT-3`, `PLAT-15`, `PLAT-17`, `PLAT-19`, `FN-1` |
+| `T-0813` | Universal Deno CLI Installer & Repository Install Task   | `scripts/install.ts`                   | `PLAT-19`                                                   |
+

@@ -32,7 +32,7 @@ try {
         Copy-Item -Path $LocalDist -Destination $BinaryPath -Force
     } elseif (Get-Command deno -ErrorAction SilentlyContinue) {
         Write-Host "Compiling via local Deno..." -ForegroundColor Yellow
-        deno compile -A -o $BinaryPath "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts"
+        deno compile -A --config "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json" -o $BinaryPath "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts"
     } else {
         Write-Error "Failed to download rail.exe: $_"
         exit 1
