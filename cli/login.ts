@@ -50,8 +50,37 @@ async function systemOpenBrowser(url: string): Promise<boolean> {
     let args: string[];
 
     if (Deno.build.os === "windows") {
-      cmd = "cmd";
-      args = ["/c", "start", "", url];
+      // In Windows cmd.exe, '&' is interpreted as a command separator and strips query parameters.
+      // powershell Start-Process safely launches the default browser with the full URL intact.
+      try {
+        const psCommand = new Deno.Command("powershell", {
+          args: [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `Start-Process -FilePath "${url.replaceAll('"', '`"')}"`,
+          ],
+          stdout: "null",
+          stderr: "null",
+        });
+        const psProcess = psCommand.spawn();
+        const psStatus = await psProcess.status;
+        if (psStatus.success) {
+          return true;
+        }
+      } catch {
+        // Fallback to cmd.exe below
+      }
+
+      const escapedUrl = url.replaceAll("&", "^&");
+      const cmdCommand = new Deno.Command("cmd", {
+        args: ["/c", `start "" ${escapedUrl}`],
+        stdout: "null",
+        stderr: "null",
+      });
+      const cmdProcess = cmdCommand.spawn();
+      await cmdProcess.status;
+      return true;
     } else if (Deno.build.os === "darwin") {
       cmd = "open";
       args = [url];

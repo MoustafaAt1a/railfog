@@ -341,8 +341,8 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
           document.getElementById("setup-view").style.display = "none";
           // Copy to clipboard
           copyKey();
-          // 1-Click zero-copy flow: automatically redirect if terminal callback URL is present
-          if (CALLBACK_URL) {
+          // 1-Click zero-copy flow: automatically redirect if terminal callback URL and state are present
+          if (CALLBACK_URL && STATE_NONCE) {
             authorizeCli();
           }
         } else {
@@ -359,7 +359,11 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
 
     function authorizeCli() {
       if (!activeKey || !CALLBACK_URL) return;
-      const target = CALLBACK_URL + "?token=" + encodeURIComponent(activeKey) + (STATE_NONCE ? "&state=" + encodeURIComponent(STATE_NONCE) : "");
+      if (!STATE_NONCE) {
+        alert("Session state is missing from URL. Please copy your API key and paste it into your terminal manually.");
+        return;
+      }
+      const target = CALLBACK_URL + "?token=" + encodeURIComponent(activeKey) + "&state=" + encodeURIComponent(STATE_NONCE);
       // Use window.location.replace to prevent storing token in browser back-button history (PLAT-15)
       window.location.replace(target);
     }
