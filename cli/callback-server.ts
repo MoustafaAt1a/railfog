@@ -19,44 +19,85 @@ const SUCCESS_HTML = `<!DOCTYPE html>
   <meta charset="utf-8">
   <title>RailFog — Authentication Successful</title>
   <style>
+    :root {
+      --ink: #0B2340;
+      --paper: #F7F9FA;
+      --canvas: #EBF0F3;
+      --line: #C9D3DB;
+      --steel: #6C8194;
+      --slate: #3D5266;
+      --lamp: #0FB88E;
+      --lamp-tint: #C6F0E0;
+      --lamp-deep: #0A6B50;
+      --font-sans: Archivo, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--font-sans);
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
       margin: 0;
-      background-color: #f8fafc;
-      color: #0f172a;
+      background-color: var(--canvas);
+      color: var(--ink);
     }
-    .container {
+    .card {
+      width: 100%;
       max-width: 440px;
-      padding: 2.5rem;
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      padding: 32px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 2px;
       text-align: center;
+    }
+    .signal {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: var(--lamp-tint);
+      border-radius: 2px;
+      margin-bottom: 16px;
+    }
+    .lamp-dot {
+      width: 12px;
+      height: 12px;
+      background: var(--lamp);
+      border-radius: 2px;
     }
     h1 {
       font-size: 1.25rem;
-      font-weight: 600;
-      color: #059669;
-      margin-top: 0;
-      margin-bottom: 0.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin-bottom: 8px;
     }
     p {
       font-size: 0.95rem;
-      color: #475569;
-      margin: 0;
+      color: var(--slate);
       line-height: 1.5;
+    }
+    .hint {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--steel);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="card">
+    <div class="signal"><div class="lamp-dot"></div></div>
     <h1>Authentication Successful</h1>
-    <p>You can now close this tab and return to your terminal.</p>
+    <p>Your identity has been verified. You may close this window and return to your terminal.</p>
+    <div class="hint">Signal: Clear &bull; Session Active</div>
   </div>
 </body>
 </html>`;

@@ -43,14 +43,20 @@ export function renderDashboardHtml(
       --ink-soft: #16335C;
       --paper: #F7F9FA;
       --canvas: #EBF0F3;
+      --mist: #DFE6EB;
       --line: #C9D3DB;
+      --haze: #B4C2CD;
       --steel: #6C8194;
       --slate: #3D5266;
+      --mute: #4E6274;
       --lamp: #0FB88E;
+      --lamp-press: #0A9E7A;
+      --lamp-deep: #0A6B50;
       --lamp-tint: #C6F0E0;
       --stop: #B3261E;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --stop-tint: #FBE4E1;
+      --font-sans: Archivo, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -58,12 +64,12 @@ export function renderDashboardHtml(
       color: var(--ink);
       font-family: var(--font-sans);
       line-height: 1.5;
-      padding-bottom: 40px;
+      padding-bottom: 48px;
     }
     header {
       background: var(--ink);
       color: var(--paper);
-      padding: 16px 24px;
+      padding: 16px 32px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -81,97 +87,197 @@ export function renderDashboardHtml(
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
+      padding: 3px 8px;
+      border-radius: 2px;
       background: var(--lamp-tint);
-      color: #0A6B50;
+      color: var(--lamp-deep);
+      font-family: var(--font-mono);
       font-size: 0.75rem;
-      font-weight: 600;
+      font-weight: 700;
+      border: 1px solid var(--lamp);
+      letter-spacing: 0.04em;
     }
     .lamp-dot {
       width: 8px;
       height: 8px;
-      border-radius: 50%;
+      border-radius: 2px;
       background: var(--lamp);
     }
     .container {
-      max-width: 1100px;
-      margin: 24px auto;
-      padding: 0 16px;
+      max-width: 1120px;
+      margin: 32px auto;
+      padding: 0 24px;
     }
     .tabs {
       display: flex;
-      gap: 8px;
-      margin-bottom: 20px;
+      gap: 6px;
+      margin-bottom: 24px;
       border-bottom: 1px solid var(--line);
       padding-bottom: 8px;
     }
     .tab-btn {
       background: none;
-      border: none;
+      border: 1px solid transparent;
       padding: 8px 16px;
       font-weight: 600;
       color: var(--slate);
       cursor: pointer;
-      border-radius: 6px;
-      font-size: 0.9rem;
+      border-radius: 2px;
+      font-size: 0.875rem;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover {
+      color: var(--ink);
+      border-color: var(--line);
     }
     .tab-btn.active {
       background: var(--ink);
       color: var(--paper);
+      border-color: var(--ink);
     }
     .panel {
       display: none;
       background: var(--paper);
-      border-radius: 8px;
+      border-radius: 2px;
       border: 1px solid var(--line);
-      padding: 24px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      padding: 24px 28px;
     }
     .panel.active { display: block; }
-    h2 { font-size: 1.2rem; margin-bottom: 16px; font-weight: 700; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-family: var(--font-mono); font-size: 0.85rem; }
-    th { text-align: left; padding: 10px 12px; background: var(--canvas); border-bottom: 1px solid var(--line); font-weight: 600; }
-    td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
-    .method { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
-    .method-get { background: #E0F2FE; color: #0369A1; }
-    .method-post { background: #DCFCE7; color: #15803D; }
-    .method-put { background: #FEF9C3; color: #A16207; }
-    .method-delete { background: #FEE2E2; color: #B91C1C; }
-    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .card { background: var(--canvas); padding: 16px; border-radius: 6px; border: 1px solid var(--line); }
-    .card-title { font-size: 0.8rem; text-transform: uppercase; color: var(--steel); font-weight: 700; margin-bottom: 4px; }
-    .card-value { font-size: 1.2rem; font-weight: 700; font-family: var(--font-mono); }
-    .form-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    h2 {
+      font-size: 1.15rem;
+      margin-bottom: 18px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      border: 1px solid var(--line);
+    }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      background: var(--mist);
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--slate);
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+    }
+    tr:last-child td { border-bottom: none; }
+    .method {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 2px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .method-get {
+      background: var(--lamp-tint);
+      color: var(--lamp-deep);
+      border: 1px solid var(--lamp);
+    }
+    .method-post {
+      background: var(--mist);
+      color: var(--ink);
+      border: 1px solid var(--steel);
+    }
+    .method-delete {
+      background: var(--stop-tint);
+      color: var(--stop);
+      border: 1px solid var(--stop);
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--paper);
+      padding: 18px 20px;
+      border-radius: 2px;
+      border: 1px solid var(--line);
+    }
+    .card-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--steel);
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: 0.05em;
+    }
+    .card-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--ink);
+    }
+    .form-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
     input, button, select {
-      padding: 8px 12px;
-      border-radius: 6px;
+      padding: 8px 14px;
+      border-radius: 2px;
       border: 1px solid var(--line);
       font-family: inherit;
-      font-size: 0.9rem;
+      font-size: 0.875rem;
     }
-    input { flex: 1; font-family: var(--font-mono); }
+    input {
+      flex: 1;
+      font-family: var(--font-mono);
+      background: #ffffff;
+      color: var(--ink);
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--ink);
+    }
     button.primary {
       background: var(--lamp);
-      color: white;
+      color: var(--ink);
       border: none;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button.primary:hover { background: var(--lamp-press); }
+    button.secondary {
+      background: var(--paper);
+      color: var(--ink);
+      border: 1px solid var(--line);
       font-weight: 600;
       cursor: pointer;
     }
-    button.primary:hover { background: #0A9E7A; }
+    button.secondary:hover { border-color: var(--steel); }
     button.danger {
-      background: var(--stop);
-      color: white;
-      border: none;
+      background: var(--stop-tint);
+      color: var(--stop);
+      border: 1px solid var(--stop);
       cursor: pointer;
       padding: 4px 8px;
       font-size: 0.75rem;
-      border-radius: 4px;
+      border-radius: 2px;
+      font-weight: 600;
     }
     .test-link {
-      color: #0284C7;
+      color: var(--lamp-deep);
       text-decoration: none;
       font-weight: 600;
+      font-family: var(--font-mono);
     }
     .test-link:hover { text-decoration: underline; }
   </style>
@@ -179,11 +285,11 @@ export function renderDashboardHtml(
 <body>
   <header>
     <div class="brand">
-      <span>⚡ RailFog Local Dashboard</span>
+      <span>RailFog Local Dashboard</span>
       <span class="badge"><span class="lamp-dot"></span> DEV SERVER ACTIVE</span>
     </div>
-    <div style="font-family: var(--font-mono); font-size: 0.85rem; color: #9FB3C8;">
-      Project: <strong>${appName}</strong>
+    <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--haze);">
+      Project: <strong style="color: var(--paper);">${appName}</strong>
     </div>
   </header>
 
@@ -199,7 +305,7 @@ export function renderDashboardHtml(
       </div>
       <div class="card">
         <div class="card-title">Runtime Topology</div>
-        <div class="card-value">Deno · Trigger → Function</div>
+        <div class="card-value">Deno &bull; Trigger &rarr; Function</div>
       </div>
     </div>
 
@@ -243,14 +349,14 @@ export function renderDashboardHtml(
           <tr><td colspan="3" style="color: var(--steel);">Click Refresh to load KV keys...</td></tr>
         </tbody>
       </table>
-      <div style="margin-top: 12px;">
-        <button onclick="refreshKv()">↻ Refresh Keys</button>
+      <div style="margin-top: 16px;">
+        <button class="secondary" onclick="refreshKv()">↻ Refresh Keys</button>
       </div>
     </div>
 
     <div id="panel-system" class="panel">
       <h2>Project Manifest</h2>
-      <pre id="config-json" style="background: var(--canvas); padding: 16px; border-radius: 6px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.85rem;"></pre>
+      <pre id="config-json" style="background: var(--canvas); padding: 16px; border-radius: 2px; border: 1px solid var(--line); overflow-x: auto; font-family: var(--font-mono); font-size: 0.85rem; color: var(--ink);"></pre>
     </div>
   </div>
 

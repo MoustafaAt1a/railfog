@@ -1,12 +1,20 @@
-# Deno
+# Deno & Build outputs
 .deno/
 deno.lock.bak
 coverage/
 *.lcov
 bin/
+dist/
+build/
+out/
+target/
 *.exe
+*.bin
+*.dll
+*.dylib
+*.so
 
-# Local dev data (SQLite-backed local providers, T-0104/T-0106)
+# Local dev data & runtime caches (SQLite-backed local providers, T-0104/T-0106)
 *.db
 *.db-journal
 *.db-wal
@@ -33,10 +41,34 @@ ehthumbs.db
 .env.*
 !.env.example
 
-# Temporary and scratch artifacts
+# Temporary, scratch, and log files
 tmp/
 .tmp/
 scratch/
 *.log
-.serena/
+*.heapsnapshot
+*.cpuprofile
 
+# AI Assistants, Agents & Artifacts (Prevent AI artifacts from being pushed to GitHub)
+.serena/
+.gemini/
+.claude/
+.cursor/
+.cursorrules
+.windsurf/
+.codeium/
+.aider*
+.copilot/
+.antigravity/
+brain/
+.brain/
+artifacts/
+.artifacts/
+*.artifact.*
+*.transcript.jsonl
+*.transcript.json
+.system_generated/
+.agents/scratch/
+.agents/artifacts/
+.agents/tmp/
+.agents/logs/

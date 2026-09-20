@@ -489,7 +489,7 @@ const KNOWN_COMMANDS = [
   "update",
 ];
 
-function findClosestCommand(cmd: string): string | null {
+export function findClosestCommand(cmd: string): string | null {
   let closest: string | null = null;
   let minDistance = 3;
 

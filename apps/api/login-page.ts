@@ -70,22 +70,28 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
   <title>Login — ${serviceName}</title>
   <style>
     :root {
-      --bg: #090a0f;
-      --card-bg: #12141c;
-      --border: #222634;
-      --text: #f0f3f8;
-      --muted: #8b949e;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
-      --success: #10b981;
-      --success-hover: #059669;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --ink: #0B2340;
+      --ink-soft: #16335C;
+      --paper: #F7F9FA;
+      --canvas: #EBF0F3;
+      --mist: #DFE6EB;
+      --line: #C9D3DB;
+      --steel: #6C8194;
+      --slate: #3D5266;
+      --mute: #4E6274;
+      --lamp: #0FB88E;
+      --lamp-press: #0A9E7A;
+      --lamp-tint: #C6F0E0;
+      --lamp-deep: #0A6B50;
+      --stop: #B3261E;
+      --stop-tint: #FBE4E1;
+      --font-sans: Archivo, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background-color: var(--bg);
-      color: var(--text);
+      background-color: var(--canvas);
+      color: var(--ink);
       font-family: var(--font-sans);
       min-height: 100vh;
       display: flex;
@@ -94,130 +100,140 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
       padding: 1.5rem;
     }
     .card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      max-width: 480px;
+      background-color: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      max-width: 460px;
       width: 100%;
-      padding: 2.5rem 2rem;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      padding: 2.25rem 2rem;
     }
     .brand {
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1.25rem;
     }
     .logo {
       width: 32px;
       height: 32px;
-      background: linear-gradient(135deg, var(--accent), #8b5cf6);
-      border-radius: 8px;
+      background: var(--ink);
+      border-radius: 2px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--lamp);
+      letter-spacing: 0.05em;
     }
     h1 {
-      font-size: 1.35rem;
-      font-weight: 600;
+      font-size: 1.25rem;
+      font-weight: 700;
       letter-spacing: -0.02em;
+      color: var(--ink);
     }
     p.subtitle {
-      color: var(--muted);
+      color: var(--slate);
       font-size: 0.9rem;
-      line-height: 1.4;
-      margin-bottom: 1.75rem;
+      line-height: 1.5;
+      margin-bottom: 1.5rem;
     }
     .form-group {
       margin-bottom: 1.25rem;
     }
     label {
       display: block;
-      font-size: 0.825rem;
-      font-weight: 500;
-      color: var(--muted);
-      margin-bottom: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--slate);
+      margin-bottom: 0.4rem;
     }
     input[type="text"] {
       width: 100%;
-      padding: 0.75rem 1rem;
-      background: #0d0f17;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-family: var(--font-sans);
-      font-size: 0.95rem;
+      height: 42px;
+      padding: 0 0.875rem;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.15s;
     }
     input[type="text"]:focus {
-      border-color: var(--accent);
+      border-color: var(--ink);
     }
     .btn {
       width: 100%;
-      padding: 0.75rem 1rem;
-      background: var(--accent);
-      color: #fff;
+      height: 44px;
+      padding: 0 1rem;
+      background: var(--ink);
+      color: var(--paper);
       border: none;
-      border-radius: 6px;
+      border-radius: 2px;
       font-weight: 600;
       font-size: 0.95rem;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.15s;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
     }
     .btn:hover {
-      background: var(--accent-hover);
+      background: var(--ink-soft);
     }
     .btn-authorize {
-      background: var(--success);
+      background: var(--lamp);
+      color: var(--ink);
+      font-weight: 700;
       margin-top: 0.75rem;
     }
     .btn-authorize:hover {
-      background: var(--success-hover);
+      background: var(--lamp-press);
     }
     .key-box {
       margin-top: 1.5rem;
       padding: 1.25rem;
-      background: #0a0c12;
-      border: 1px dashed var(--accent);
-      border-radius: 8px;
+      background: var(--mist);
+      border: 1px solid var(--line);
+      border-radius: 2px;
       display: none;
     }
     .key-display {
       font-family: var(--font-mono);
       font-size: 0.85rem;
-      padding: 0.65rem;
-      background: #000;
-      border: 1px solid var(--border);
-      border-radius: 4px;
+      padding: 0.75rem;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 2px;
       word-break: break-all;
       margin: 0.75rem 0;
-      color: #a7f3d0;
+      color: var(--ink);
     }
     .btn-copy {
-      background: #1e293b;
-      color: #e2e8f0;
-      border: 1px solid #334155;
-      padding: 0.5rem 1rem;
+      background: var(--paper);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 0.65rem 1rem;
       font-size: 0.85rem;
       width: 100%;
-      border-radius: 4px;
+      border-radius: 2px;
       cursor: pointer;
-      font-weight: 500;
+      font-weight: 600;
+      transition: border-color 0.15s;
     }
     .btn-copy:hover {
-      background: #334155;
+      border-color: var(--steel);
     }
     .steps {
       margin-top: 1.25rem;
       font-size: 0.825rem;
-      color: var(--muted);
+      color: var(--slate);
       line-height: 1.6;
     }
     .steps ol {
@@ -225,22 +241,26 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
       margin-top: 0.25rem;
     }
     .badge {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       padding: 0.2rem 0.5rem;
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
+      background: var(--lamp-tint);
+      color: var(--lamp-deep);
+      border: 1px solid var(--lamp);
       font-size: 0.75rem;
-      border-radius: 4px;
+      border-radius: 2px;
       font-weight: 600;
     }
     .callback-notice {
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.25);
-      border-radius: 6px;
+      background: var(--lamp-tint);
+      border: 1px solid var(--lamp);
+      border-radius: 2px;
       padding: 0.65rem 0.85rem;
       font-size: 0.82rem;
-      color: #93c5fd;
+      color: var(--lamp-deep);
       margin-bottom: 1.25rem;
+      font-weight: 500;
     }
   </style>
 </head>
