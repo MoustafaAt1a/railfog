@@ -808,6 +808,19 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
           ? fn.capabilities
           : fn.permissions) as unknown[];
         const syntheticPermissions: Record<string, string[]> = {};
+        const projectEnv = (parsed as Record<string, unknown>).env as
+          | Record<string, unknown>
+          | undefined;
+        const projectSecrets = Array.isArray(
+            (parsed as Record<string, unknown>).secrets,
+          )
+          ? ((parsed as Record<string, unknown>).secrets as string[])
+          : [];
+        const knownEnvKeys = [
+          ...(projectEnv ? Object.keys(projectEnv) : []),
+          ...projectSecrets,
+        ];
+        let hasEnvCap = false;
         for (const cap of caps) {
           if (typeof cap !== "string") continue;
           const lower = cap.toLowerCase().trim();
@@ -824,6 +837,30 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
             syntheticPermissions.queues = syntheticPermissions.queues ?? [
               "default",
             ];
+          } else if (
+            lower === "env" || lower === "secrets" ||
+            lower.startsWith("env:") || lower.startsWith("secret:") ||
+            lower.startsWith("secrets:")
+          ) {
+            hasEnvCap = true;
+            if (lower.includes(":")) {
+              const sec = cap.slice(cap.indexOf(":") + 1).trim();
+              if (sec) {
+                syntheticPermissions.secrets = syntheticPermissions.secrets ??
+                  [];
+                if (!syntheticPermissions.secrets.includes(sec)) {
+                  syntheticPermissions.secrets.push(sec);
+                }
+              }
+            }
+          }
+        }
+        if (hasEnvCap) {
+          syntheticPermissions.secrets = syntheticPermissions.secrets ?? [];
+          for (const k of knownEnvKeys) {
+            if (!syntheticPermissions.secrets.includes(k)) {
+              syntheticPermissions.secrets.push(k);
+            }
           }
         }
         permissions = syntheticPermissions;

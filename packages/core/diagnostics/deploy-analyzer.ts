@@ -276,13 +276,26 @@ export class DeployDiagnosticsAnalyzer {
         }
       }
 
+      // Project-level env and secrets tables
+      if (m.env && typeof m.env === "object") {
+        for (const k of Object.keys(m.env as Record<string, unknown>)) {
+          declaredSecrets.add(k);
+        }
+      }
+      if (Array.isArray(m.secrets)) {
+        for (const s of m.secrets) {
+          if (typeof s === "string") declaredSecrets.add(s);
+        }
+      }
+
       // Check function definitions if present
       if (m.functions && typeof m.functions === "object") {
         for (
           const fn of Object.values(m.functions as Record<string, unknown>)
         ) {
           if (fn && typeof fn === "object") {
-            const fnPerms = (fn as Record<string, unknown>).permissions as
+            const anyFn = fn as Record<string, unknown>;
+            const fnPerms = anyFn.permissions as
               | Record<string, unknown>
               | undefined;
             if (fnPerms && typeof fnPerms === "object") {
@@ -294,6 +307,32 @@ export class DeployDiagnosticsAnalyzer {
               if (Array.isArray(fnPerms.network)) {
                 for (const n of fnPerms.network) {
                   if (typeof n === "string") declaredNetwork.add(n);
+                }
+              }
+            }
+            if (anyFn.env && typeof anyFn.env === "object") {
+              for (
+                const k of Object.keys(anyFn.env as Record<string, unknown>)
+              ) {
+                declaredSecrets.add(k);
+              }
+            }
+            if (Array.isArray(anyFn.secrets)) {
+              for (const s of anyFn.secrets) {
+                if (typeof s === "string") declaredSecrets.add(s);
+              }
+            }
+            if (Array.isArray(anyFn.capabilities)) {
+              for (const cap of anyFn.capabilities) {
+                if (typeof cap === "string") {
+                  const lower = cap.toLowerCase().trim();
+                  if (
+                    lower.startsWith("env:") || lower.startsWith("secret:") ||
+                    lower.startsWith("secrets:")
+                  ) {
+                    const sec = cap.slice(cap.indexOf(":") + 1).trim();
+                    if (sec) declaredSecrets.add(sec);
+                  }
                 }
               }
             }

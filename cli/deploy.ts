@@ -289,6 +289,19 @@ export async function runDeploy(
     | FunctionConfig["limits"]
     | undefined;
 
+  const projectEnv = (parsed as Record<string, unknown>).env as
+    | Record<string, unknown>
+    | undefined;
+  const projectSecrets = Array.isArray(
+      (parsed as Record<string, unknown>).secrets,
+    )
+    ? ((parsed as Record<string, unknown>).secrets as string[])
+    : [];
+  const knownEnvSecretNames = new Set<string>([
+    ...(projectEnv ? Object.keys(projectEnv) : []),
+    ...projectSecrets,
+  ]);
+
   for (const [fnName, fnConfig] of Object.entries(parsed.functions)) {
     if (!fnConfig || typeof fnConfig !== "object") continue;
     const anyFn = fnConfig as Record<string, unknown>;
@@ -298,6 +311,7 @@ export async function runDeploy(
       if (Array.isArray(anyFn.capabilities)) {
         const caps = anyFn.capabilities as unknown[];
         const synth: Record<string, string[]> = {};
+        let hasEnvCap = false;
         for (const c of caps) {
           if (typeof c !== "string") continue;
           const lower = c.toLowerCase().trim();
@@ -310,6 +324,57 @@ export async function runDeploy(
             synth.objects = synth.objects ?? ["default"];
           } else if (lower.startsWith("queue") || lower === "queues") {
             synth.queues = synth.queues ?? ["default"];
+          } else if (
+            lower === "env" || lower === "secrets" ||
+            lower.startsWith("env:") || lower.startsWith("secret:") ||
+            lower.startsWith("secrets:")
+          ) {
+            hasEnvCap = true;
+            if (lower.includes(":")) {
+              const sec = c.slice(c.indexOf(":") + 1).trim();
+              if (sec) {
+                synth.secrets = synth.secrets ?? [];
+                if (!synth.secrets.includes(sec)) synth.secrets.push(sec);
+              }
+            }
+          }
+        }
+        if (hasEnvCap) {
+          synth.secrets = synth.secrets ?? [];
+          for (const k of knownEnvSecretNames) {
+            if (!synth.secrets.includes(k)) synth.secrets.push(k);
+          }
+          const entryFile = anyFn.entry ?? anyFn.entrypoint;
+          if (typeof entryFile === "string") {
+            try {
+              let code = "";
+              const directPath = isAbsolute(entryFile)
+                ? entryFile
+                : join(cwd, entryFile);
+              try {
+                code = await Deno.readTextFile(directPath);
+              } catch {
+                const fallback = join(cwd, "functions", entryFile);
+                try {
+                  code = await Deno.readTextFile(fallback);
+                } catch {
+                  // ignore
+                }
+              }
+              if (code) {
+                const regex =
+                  /(?:\b(?:ctx|Deno)\s*(?:\?\.|\.)\s*)?\b(?:env|secrets)\s*(?:\?\.|\.)\s*(?:get|require)\s*\(\s*(["'`])([A-Za-z0-9_]+)\1\s*\)/g;
+                let match: RegExpExecArray | null;
+                while ((match = regex.exec(code)) !== null) {
+                  const secName = match[2];
+                  if (secName && !synth.secrets.includes(secName)) {
+                    synth.secrets.push(secName);
+                  }
+                }
+              }
+            } catch {
+              // Best effort
+            }
           }
         }
         fnConfig.permissions = synth;

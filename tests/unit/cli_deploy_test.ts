@@ -1304,3 +1304,47 @@ Deno.test(
     }
   },
 );
+
+Deno.test(
+  "PLAT-6 & PLAT-15: Deploy succeeds when secrets in [env] are accessed via capabilities = ['env']",
+  async () => {
+    const tempDir = await Deno.makeTempDir({ prefix: "railfog-env-cap-test-" });
+    const storageDir = await Deno.makeTempDir({
+      prefix: "railfog-env-cap-storage-",
+    });
+
+    try {
+      const toml = `
+name = "env-cap-test"
+[env]
+WELCOME_MSG = "Hello World"
+
+[[functions]]
+name = "api"
+entry = "api.ts"
+route = "/api/hello"
+capabilities = ["env"]
+`;
+      await Deno.writeTextFile(join(tempDir, "railfog.toml"), toml);
+      await Deno.writeTextFile(
+        join(tempDir, "api.ts"),
+        `export default async function handle(req: Request, ctx: any): Promise<Response> {
+  const msg = ctx.env.get("WELCOME_MSG");
+  return new Response(msg);
+}`,
+      );
+
+      const { service } = createTestDeploymentService(storageDir);
+      const res = await deployCommand({
+        cwd: tempDir,
+        deploymentService: service,
+      });
+
+      assert(res.revisionId.startsWith("rev_"));
+      assertEquals(res.state, "Deployed");
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+      await Deno.remove(storageDir, { recursive: true });
+    }
+  },
+);

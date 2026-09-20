@@ -40,6 +40,7 @@ import { LocalFSProvider } from "../../providers/objects/local-fs-provider.ts";
 import { SQLiteQueueProvider } from "../../providers/queues/sqlite-queue-provider.ts";
 import {
   buildContext,
+  type EnvBinding,
   type LoadedFunctionMeta,
   type RailFogContext,
 } from "../loader/context-builder.ts";
@@ -123,12 +124,22 @@ export function normalizeProjectConfig(config: RailfogConfig): RailfogConfig {
   const normalized = { ...config };
   if (normalized.functions) {
     const fns = normalizeFunctions(normalized.functions);
+    const projectEnv = config.env;
+    const projectSecrets = Array.isArray(config.secrets)
+      ? (config.secrets as string[])
+      : [];
+    const knownEnvKeys = [
+      ...(projectEnv ? Object.keys(projectEnv) : []),
+      ...projectSecrets,
+    ];
+
     for (const fn of Object.values(fns)) {
       const anyFn = fn as Record<string, unknown>;
       if (!anyFn.permissions && anyFn.capabilities) {
         if (Array.isArray(anyFn.capabilities)) {
           const caps = anyFn.capabilities as unknown[];
           const synth: Record<string, string[]> = {};
+          let hasEnvCap = false;
           for (const c of caps) {
             if (typeof c !== "string") continue;
             const lower = c.toLowerCase().trim();
@@ -141,6 +152,25 @@ export function normalizeProjectConfig(config: RailfogConfig): RailfogConfig {
               synth.objects = synth.objects ?? ["default"];
             } else if (lower.startsWith("queue") || lower === "queues") {
               synth.queues = synth.queues ?? ["default"];
+            } else if (
+              lower === "env" || lower === "secrets" ||
+              lower.startsWith("env:") || lower.startsWith("secret:") ||
+              lower.startsWith("secrets:")
+            ) {
+              hasEnvCap = true;
+              if (lower.includes(":")) {
+                const sec = c.slice(c.indexOf(":") + 1).trim();
+                if (sec) {
+                  synth.secrets = synth.secrets ?? [];
+                  if (!synth.secrets.includes(sec)) synth.secrets.push(sec);
+                }
+              }
+            }
+          }
+          if (hasEnvCap) {
+            synth.secrets = synth.secrets ?? [];
+            for (const k of knownEnvKeys) {
+              if (!synth.secrets.includes(k)) synth.secrets.push(k);
             }
           }
           anyFn.permissions = synth;
@@ -264,6 +294,8 @@ export interface LocalServer {
 
 export interface RailfogConfig {
   name: string;
+  env?: Record<string, string>;
+  secrets?: string[] | Record<string, string>;
   functions?: Record<string, {
     entry?: string;
     triggers?: { queue?: string; schedule?: string };
@@ -616,7 +648,16 @@ export async function startLocalServer(
       revision: DEFAULT_REVISION,
       timeout_ms: fnConfig.timeout_ms ?? fnConfig.timeoutMs,
     };
-    const ctx = buildContext(fnMeta, resolvedBindings);
+    const configEnv = currentConfig.env;
+    const envBinding: EnvBinding = {
+      get(key: string): string | undefined {
+        if (configEnv && key in configEnv) {
+          return String(configEnv[key]);
+        }
+        return Deno.env.get(key);
+      },
+    };
+    const ctx = buildContext(fnMeta, resolvedBindings, envBinding);
     finalRequestId = ctx.requestId;
 
     // spec: docs/contracts/functions.contract.md#FN-8 — Invoke handler and catch errors
