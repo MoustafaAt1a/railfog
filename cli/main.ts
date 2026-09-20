@@ -283,6 +283,7 @@ Operations & Reliability:
 Maintenance:
   upgrade   Upgrade the RailFog CLI to the latest version
   update    Alias for upgrade subcommand
+  sync      Sync CLI with the latest git updates (alias for update)
 
 Options:
   -v, --version  Show CLI version
@@ -422,6 +423,7 @@ function printUpgradeHelp(): void {
 Usage:
   rail upgrade [options]
   rail update [options]
+  rail sync [options]
 
 Options:
   --check               Check for newer versions without installing
@@ -487,6 +489,7 @@ const KNOWN_COMMANDS = [
   "import",
   "upgrade",
   "update",
+  "sync",
 ];
 
 export function findClosestCommand(cmd: string): string | null {
@@ -1195,7 +1198,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       break;
     }
     case "upgrade":
-    case "update": {
+    case "update":
+    case "sync": {
       let checkOnly = false;
       let force = false;
       let version: string | undefined;
@@ -1252,7 +1256,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       } else {
         const suggestion = findClosestCommand(command);
         console.error(
-          `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update`,
+          `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync`,
         );
         if (suggestion) {
           console.error(`\nDid you mean "rail ${suggestion}"?`);

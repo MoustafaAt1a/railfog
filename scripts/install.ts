@@ -2,6 +2,7 @@
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0813-deno-cli-installer.md
 // scripts/install.ts — Universal cross-platform Deno CLI installer for RailFog
 
+// deno-lint-ignore no-import-prefix
 import { fromFileUrl, join, resolve } from "jsr:@std/path@0.224.0";
 
 /**
@@ -15,6 +16,7 @@ export interface InstallerOptions {
   force?: boolean;
   ref?: string;
   repo?: string;
+  commit?: string;
   local?: boolean;
   help?: boolean;
 }
@@ -65,6 +67,12 @@ export function parseInstallerArgs(args: string[]): InstallerOptions {
       }
     } else if (arg.startsWith("--repo=")) {
       options.repo = arg.slice("--repo=".length);
+    } else if (arg === "--commit") {
+      if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+        options.commit = args[++i];
+      }
+    } else if (arg.startsWith("--commit=")) {
+      options.commit = arg.slice("--commit=".length);
     }
   }
 
@@ -117,6 +125,37 @@ export function resolveInstallPaths(options: InstallerOptions): {
 }
 
 /**
+ * Resolves the genuine Deno executable path.
+ * When rail is executed as a standalone compiled binary, Deno.execPath()
+ * points to rail(.exe). To spawn `deno install`, we locate the genuine deno executable.
+ */
+export function resolveDenoExecutable(): string {
+  const currentExec = Deno.execPath();
+  const currentBase = currentExec.split(/[\\/]/).pop()?.toLowerCase() ?? "";
+  if (currentBase === "deno" || currentBase === "deno.exe") {
+    return currentExec;
+  }
+  const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "";
+  if (home) {
+    const isWindows = Deno.build.os === "windows";
+    const denoInHome = join(
+      home,
+      ".deno",
+      "bin",
+      isWindows ? "deno.exe" : "deno",
+    );
+    try {
+      if (Deno.statSync(denoInHome).isFile) {
+        return denoInHome;
+      }
+    } catch {
+      // Continue search
+    }
+  }
+  return "deno";
+}
+
+/**
  * Executes the Deno global installer for RailFog CLI.
  *
  * Handles both remote repository installations (downloading isolated deno.json)
@@ -150,6 +189,7 @@ export async function runInstaller(options: InstallerOptions): Promise<{
       // spec: contracts/platform.contract.md#PLAT-19, PLAT-15 — Remote GitHub config validation
       const ref = options.ref || "main";
       const repo = options.repo || "MoustafaAt1a/railfog";
+      const downloadRef = options.commit || ref;
 
       if (
         !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo) ||
@@ -164,19 +204,19 @@ export async function runInstaller(options: InstallerOptions): Promise<{
       }
 
       if (
-        !/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/.test(ref) ||
-        ref.includes("..") ||
-        ref.includes("//")
+        !/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/.test(downloadRef) ||
+        downloadRef.includes("..") ||
+        downloadRef.includes("//")
       ) {
         return {
           ok: false,
           installedPath: "",
-          output: `Invalid git ref format: "${ref}"`,
+          output: `Invalid git ref format: "${downloadRef}"`,
         };
       }
 
       const denoJsonUrl =
-        `https://raw.githubusercontent.com/${repo}/${ref}/deno.json`;
+        `https://raw.githubusercontent.com/${repo}/${downloadRef}/deno.json`;
 
       let response: Response;
       try {
@@ -205,7 +245,8 @@ export async function runInstaller(options: InstallerOptions): Promise<{
       tempDir = await Deno.makeTempDir({ prefix: "railfog-install-" });
       configPath = join(tempDir, "deno.json");
       await Deno.writeTextFile(configPath, denoJsonContent);
-      target = `https://raw.githubusercontent.com/${repo}/${ref}/cli/main.ts`;
+      target =
+        `https://raw.githubusercontent.com/${repo}/${downloadRef}/cli/main.ts`;
     } else {
       // spec: contracts/platform.contract.md#PLAT-19 — Local repository resolution
       let localRootDir = import.meta.url.startsWith("file:")
@@ -273,7 +314,7 @@ export async function runInstaller(options: InstallerOptions): Promise<{
     }
     args.push("-n", "rail", target);
 
-    const cmd = new Deno.Command(Deno.execPath(), {
+    const cmd = new Deno.Command(resolveDenoExecutable(), {
       args,
       stdout: "piped",
       stderr: "piped",
@@ -289,6 +330,16 @@ export async function runInstaller(options: InstallerOptions): Promise<{
         installedPath: "",
         output: stderr + stdout,
       };
+    }
+
+    // On Windows, if installing as script shim (rail.cmd), remove any shadowing rail.exe
+    if (!options.compile && Deno.build.os === "windows") {
+      const exePath = join(paths.binDir, "rail.exe");
+      try {
+        await Deno.remove(exePath);
+      } catch {
+        // Best effort: may not exist or may be locked
+      }
     }
 
     // spec: contracts/platform.contract.md#PLAT-19, T-0813 AC 5 — Post-installation verification
@@ -329,6 +380,22 @@ export async function runInstaller(options: InstallerOptions): Promise<{
       };
     }
 
+    // Record installation version and git commit metadata
+    try {
+      const meta = {
+        version: "0.8.0",
+        ref: options.ref ?? "main",
+        commit: options.commit,
+        installedAt: new Date().toISOString(),
+      };
+      await Deno.writeTextFile(
+        join(paths.binDir, ".rail-version.json"),
+        JSON.stringify(meta, null, 2),
+      );
+    } catch {
+      // Best-effort metadata recording
+    }
+
     return {
       ok: true,
       installedPath: paths.fullBinaryPath,
@@ -362,6 +429,7 @@ Options:
   -f, --force           Force overwrite existing installation
   -l, --local           Install from local repository instead of GitHub
       --ref <ref>       Git ref/tag/branch to install (default: main)
+      --commit <sha>    Exact git commit SHA to install (bypasses CDN caches)
       --repo <repo>     GitHub repository (default: MoustafaAt1a/railfog)
   -h, --help            Show help information
 `);

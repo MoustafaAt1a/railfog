@@ -5,6 +5,7 @@
 import { CLI_VERSION } from "./version.ts";
 import { createSpinner } from "./spinner.ts";
 import { runInstaller } from "../scripts/install.ts";
+import { join } from "@std/path";
 
 /**
  * Configuration options for upgrading the RailFog CLI.
@@ -140,6 +141,68 @@ export async function checkLatestVersion(options?: {
 }
 
 /**
+ * Resolves the latest git commit SHA of a given ref via GitHub API.
+ * Returns undefined if network is unavailable, offline, or rate-limited.
+ */
+export async function checkLatestCommit(options?: {
+  repo?: string;
+  ref?: string;
+}): Promise<string | undefined> {
+  const repo = options?.repo ?? "MoustafaAt1a/railfog";
+  const ref = options?.ref ?? "main";
+
+  if (!isValidRepo(repo) || !isValidRef(ref)) {
+    return undefined;
+  }
+
+  try {
+    const url = `https://api.github.com/repos/${repo}/commits/${ref}`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "RailFog-CLI",
+        "Accept": "application/vnd.github.v3+json",
+      },
+      signal: AbortSignal.timeout(6_000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.sha === "string") {
+        return data.sha;
+      }
+    }
+  } catch {
+    // Non-fatal if offline or rate limited
+  }
+  return undefined;
+}
+
+/**
+ * Reads local installation metadata (.rail-version.json).
+ */
+export function getInstalledMetadata(rootOrBinDir?: string): {
+  version?: string;
+  ref?: string;
+  commit?: string;
+  installedAt?: string;
+} | undefined {
+  try {
+    let metaPath: string;
+    if (rootOrBinDir) {
+      metaPath = rootOrBinDir.endsWith("bin")
+        ? join(rootOrBinDir, ".rail-version.json")
+        : join(rootOrBinDir, "bin", ".rail-version.json");
+    } else {
+      const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "";
+      metaPath = join(home, ".deno", "bin", ".rail-version.json");
+    }
+    const content = Deno.readTextFileSync(metaPath);
+    return JSON.parse(content);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Prints styled completion box.
  */
 function printUpgradeBox(installedPath: string, targetVersion: string): void {
@@ -240,13 +303,38 @@ export async function runUpgrade(
           ref: options?.ref ?? targetRef,
         });
       }
-      const upToDate = targetVersion === currentVersion;
+
+      const latestCommit = await checkLatestCommit({
+        repo: options?.repo,
+        ref: options?.ref ?? targetRef,
+      });
+      const installedMeta = getInstalledMetadata(options?.root);
+
+      let upToDate = targetVersion === currentVersion;
+      if (
+        latestCommit && installedMeta?.commit &&
+        targetRef === (installedMeta.ref ?? "main")
+      ) {
+        upToDate = upToDate && (latestCommit === installedMeta.commit);
+      }
+
       if (upToDate) {
         console.log(`RailFog CLI is already up to date (${currentVersion}).`);
       } else {
-        console.log(
-          `An update is available: ${currentVersion} -> ${targetVersion}. Run 'rail update' to upgrade.`,
-        );
+        if (
+          latestCommit && installedMeta?.commit &&
+          latestCommit !== installedMeta.commit
+        ) {
+          console.log(
+            `A git update is available: ${
+              installedMeta.commit.slice(0, 7)
+            } -> ${latestCommit.slice(0, 7)}. Run 'rail update' to upgrade.`,
+          );
+        } else {
+          console.log(
+            `An update is available: ${currentVersion} -> ${targetVersion}. Run 'rail update' to upgrade.`,
+          );
+        }
       }
       return {
         ok: true,
@@ -268,9 +356,10 @@ export async function runUpgrade(
 
   let targetVersion = options?.version ?? targetRef;
 
-  // spec: PLAT-19, T-0814 AC 3 — Skip upgrade if already on target version and force is false
+  // spec: PLAT-19, T-0814 AC 3 — Skip upgrade if explicit version matches current and force is false
   if (
     !options?.local &&
+    options?.version &&
     targetVersion === currentVersion && !options?.force && targetRef !== "main"
   ) {
     const message = `RailFog CLI is already up to date (${currentVersion}).`;
@@ -284,36 +373,65 @@ export async function runUpgrade(
     };
   }
 
-  if (!options?.local && !options?.force && targetRef === "main") {
-    try {
-      const latest = await checkLatestVersion({
-        repo: options?.repo,
-        ref: targetRef,
-      });
-      if (latest === currentVersion) {
-        const message =
-          `RailFog CLI is already up to date (${currentVersion}).`;
-        console.log(message);
-        return {
-          ok: true,
-          upToDate: true,
-          currentVersion,
-          targetVersion: latest,
-          message,
-        };
+  let resolvedCommit: string | undefined;
+  if (!options?.local && !options?.version) {
+    resolvedCommit = await checkLatestCommit({
+      repo: options?.repo,
+      ref: targetRef,
+    });
+    const installedMeta = getInstalledMetadata(options?.root);
+
+    if (
+      !options?.force &&
+      resolvedCommit &&
+      installedMeta?.commit &&
+      resolvedCommit === installedMeta.commit
+    ) {
+      const message = `RailFog CLI is already up to date (${currentVersion} @ ${
+        resolvedCommit.slice(0, 7)
+      }).`;
+      console.log(message);
+      return {
+        ok: true,
+        upToDate: true,
+        currentVersion,
+        targetVersion: currentVersion,
+        message,
+      };
+    }
+
+    if (!options?.force && !resolvedCommit && targetRef === "main") {
+      try {
+        const latest = await checkLatestVersion({
+          repo: options?.repo,
+          ref: targetRef,
+        });
+        if (latest === currentVersion) {
+          const message =
+            `RailFog CLI is already up to date (${currentVersion}).`;
+          console.log(message);
+          return {
+            ok: true,
+            upToDate: true,
+            currentVersion,
+            targetVersion: latest,
+            message,
+          };
+        }
+        targetVersion = latest;
+      } catch {
+        // If version check fails, proceed with installer
       }
-      targetVersion = latest;
-    } catch {
-      // If version check fails, proceed with installer
     }
   }
 
   // spec: PLAT-19, T-0814 AC 4, 5 — Execute installer with progress spinner
   const spinner = createSpinner();
+  const commitSuffix = resolvedCommit ? ` (${resolvedCommit.slice(0, 7)})` : "";
   spinner.start(
     options?.local
       ? "Syncing RailFog CLI from local repository..."
-      : `Upgrading RailFog CLI (${currentVersion} -> ${targetRef})...`,
+      : `Upgrading RailFog CLI (${currentVersion} -> ${targetRef}${commitSuffix})...`,
   );
 
   const res = await runInstaller({
@@ -321,6 +439,7 @@ export async function runUpgrade(
     compile: options?.compile,
     force: true,
     ref: targetRef,
+    commit: resolvedCommit,
     repo: options?.repo ?? "MoustafaAt1a/railfog",
     local: options?.local,
   });
@@ -338,15 +457,18 @@ export async function runUpgrade(
 
   const successMessage = options?.local
     ? "RailFog CLI synchronized successfully from local repository."
-    : `RailFog CLI upgraded successfully to ${targetRef}`;
+    : `RailFog CLI upgraded successfully to ${targetRef}${commitSuffix}`;
   spinner.succeed(successMessage);
-  printUpgradeBox(res.installedPath, options?.local ? "local" : targetRef);
+  printUpgradeBox(
+    res.installedPath,
+    options?.local ? "local" : `${targetRef}${commitSuffix}`,
+  );
 
   return {
     ok: true,
     upToDate: false,
     currentVersion,
-    targetVersion: options?.local ? "local" : targetRef,
+    targetVersion: options?.local ? "local" : `${targetRef}${commitSuffix}`,
     installedPath: res.installedPath,
     message: successMessage,
   };

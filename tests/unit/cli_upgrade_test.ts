@@ -13,7 +13,9 @@ import {
 import { fromFileUrl, join } from "@std/path";
 import { CLI_VERSION } from "../../cli/version.ts";
 import {
+  checkLatestCommit,
   checkLatestVersion,
+  getInstalledMetadata,
   isValidRef,
   isValidRepo,
   isValidVersion,
@@ -733,6 +735,65 @@ Deno.test(
     } finally {
       try {
         await Deno.remove(parentTemp, { recursive: true });
+      } catch {
+        // cleanup
+      }
+    }
+  },
+);
+
+// =============================================================================
+// 7. Git Sync and Rail Sync Alias Tests
+// =============================================================================
+
+Deno.test(
+  "CLI command dispatch: 'rail sync --help' documents sync subcommand",
+  async () => {
+    const res = await runCli(["sync", "--help"]);
+    assertEquals(res.code, 0, `'rail sync --help' must exit 0: ${res.stderr}`);
+    assertStringIncludes(
+      res.stdout,
+      "rail sync",
+      `Expected 'rail sync' in help stdout, got: ${res.stdout}`,
+    );
+  },
+);
+
+Deno.test(
+  "Git Sync: checkLatestCommit resolves commit SHA or handles network gracefully",
+  async () => {
+    const commit = await checkLatestCommit({
+      repo: "MoustafaAt1a/railfog",
+      ref: "main",
+    });
+    // If online, commit is 40-character hex string; if offline, it returns undefined
+    if (commit !== undefined) {
+      assertEquals(typeof commit, "string");
+      assertMatch(commit, /^[a-f0-9]{40}$/);
+    }
+  },
+);
+
+Deno.test(
+  "Git Sync: runUpgrade writes .rail-version.json metadata during execution",
+  async () => {
+    const tempRoot = await Deno.makeTempDir({ prefix: "railfog-sync-meta-" });
+    try {
+      const result = await runUpgrade({
+        root: tempRoot,
+        local: true,
+      });
+      assertEquals(result.ok, true);
+
+      const meta = getInstalledMetadata(tempRoot);
+      assert(
+        meta !== undefined,
+        ".rail-version.json must be written to bin directory",
+      );
+      assertEquals(meta.version, "0.8.0");
+    } finally {
+      try {
+        await Deno.remove(tempRoot, { recursive: true });
       } catch {
         // cleanup
       }
