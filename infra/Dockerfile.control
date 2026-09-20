@@ -7,13 +7,15 @@
 # Stage 1: Build and dependency caching stage
 FROM denoland/deno:alpine AS builder
 WORKDIR /app
+ENV DENO_DIR=/app/.deno_dir
 COPY deno.json* ./
 COPY . .
-RUN deno cache --allow-import apps/api/control-server.ts cli/main.ts || true
+RUN deno cache apps/api/control-server.ts cli/main.ts
 
 # Stage 2: Minimal runtime image for railfog-control
 FROM denoland/deno:alpine AS runner
 WORKDIR /app
+ENV DENO_DIR=/app/.deno_dir
 
 # spec: contracts/platform.contract.md#PLAT-4 — Create unprivileged user (UID 10001) for defense in depth
 RUN addgroup -g 10001 railfog && \
