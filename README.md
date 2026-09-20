@@ -286,6 +286,43 @@ rail import --in <backup.json> [--project <name>] [--overwrite-kv]
 
 ---
 
+### CLI Self-Upgrade & Version Inspection
+
+#### `rail --version` / `rail -v`
+
+Prints the current semantic version of the RailFog CLI (`PLAT-19`):
+
+```bash
+rail --version
+# or
+rail -v
+```
+
+#### `rail update` / `rail upgrade`
+
+Upgrades the RailFog CLI in-place to the latest release or a specified git ref
+(`PLAT-19`):
+
+```bash
+# Check if an update is available without modifying local installations
+rail update --check
+
+# Upgrade to the latest version on main
+rail update
+
+# Force reinstallation even if already up to date
+rail update --force
+
+# Upgrade to a specific git branch, tag, or semantic version
+rail update --ref v0.8.0
+rail update --version 0.8.0
+
+# Compile into a standalone native binary
+rail update --compile
+```
+
+---
+
 ## Documentation Links
 
 - [Architecture & Modular Monolith Guide](ARCHITECTURE.md) — Comprehensive guide

@@ -2,7 +2,7 @@
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0813-deno-cli-installer.md
 // scripts/install.ts — Universal cross-platform Deno CLI installer for RailFog
 
-import { fromFileUrl, join, resolve } from "jsr:@std/path@0.224.0";
+import { fromFileUrl, join, resolve } from "@std/path";
 
 /**
  * Options configuring CLI installer behavior.
@@ -129,6 +129,14 @@ export async function runInstaller(options: InstallerOptions): Promise<{
   installedPath: string;
   output: string;
 }> {
+  if (options.root && /[&|;`$><]/.test(options.root)) {
+    return {
+      ok: false,
+      installedPath: "",
+      output: `Invalid root directory path: contains forbidden shell characters`,
+    };
+  }
+
   const paths = resolveInstallPaths(options);
   const isLocal = Boolean(options.local);
   let tempDir: string | undefined;
@@ -138,15 +146,42 @@ export async function runInstaller(options: InstallerOptions): Promise<{
     let target: string;
 
     if (!isLocal) {
-      // spec: contracts/platform.contract.md#PLAT-19 — Remote GitHub config validation
+      // spec: contracts/platform.contract.md#PLAT-19, PLAT-15 — Remote GitHub config validation
       const ref = options.ref || "main";
       const repo = options.repo || "MoustafaAt1a/railfog";
+
+      if (
+        !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo) ||
+        repo.includes("..") ||
+        repo.includes("//")
+      ) {
+        return {
+          ok: false,
+          installedPath: "",
+          output: `Invalid repository format: "${repo}"`,
+        };
+      }
+
+      if (
+        !/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/.test(ref) ||
+        ref.includes("..") ||
+        ref.includes("//")
+      ) {
+        return {
+          ok: false,
+          installedPath: "",
+          output: `Invalid git ref format: "${ref}"`,
+        };
+      }
+
       const denoJsonUrl =
         `https://raw.githubusercontent.com/${repo}/${ref}/deno.json`;
 
       let response: Response;
       try {
-        response = await fetch(denoJsonUrl);
+        response = await fetch(denoJsonUrl, {
+          signal: AbortSignal.timeout(10_000),
+        });
       } catch (err) {
         return {
           ok: false,

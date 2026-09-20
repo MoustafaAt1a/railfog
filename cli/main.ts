@@ -49,10 +49,17 @@ import {
 } from "./logs.ts";
 import { formatUsageReport, runUsage, type UsageCliOptions } from "./usage.ts";
 import { runLogin, runLogout, runWhoami } from "./login.ts";
+import { CLI_VERSION } from "./version.ts";
+import {
+  runUpgrade,
+  type UpgradeOptions,
+  type UpgradeResult,
+} from "./upgrade.ts";
 import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
 
 export {
   checkProject,
+  CLI_VERSION,
   deployCommand,
   exportCommand,
   formatLogEntry,
@@ -68,6 +75,7 @@ export {
   runLogout,
   runLogs,
   runSecrets,
+  runUpgrade,
   runUsage,
   runWhoami,
 };
@@ -88,6 +96,8 @@ export type {
   RollbackCommandResult,
   SecretCliOptions,
   SecretListEntry,
+  UpgradeOptions,
+  UpgradeResult,
   UsageCliOptions,
   ValidationIssue,
 };
@@ -259,8 +269,11 @@ Commands:
   login     Authenticate your session via web browser and API key
   logout    Log out and remove local credentials
   whoami    Display currently authenticated organization and key
+  upgrade   Upgrade the RailFog CLI to the latest version
+  update    Alias for upgrade subcommand
 
 Options:
+  -v, --version Show CLI version
   -h, --help    Show help information`);
 }
 
@@ -391,7 +404,33 @@ Options:
   -h, --help               Show help for usage command`);
 }
 
+function printUpgradeHelp(): void {
+  console.log(`RailFog CLI - Self-upgrade mechanism
+
+Usage:
+  rail upgrade [options]
+  rail update [options]
+
+Options:
+  --check               Check for newer versions without installing
+  -f, --force           Force reinstallation even if already up to date
+  --version <version>   Upgrade to a specific semantic version
+  --ref <ref>           Upgrade to a specific git branch or tag (default: main)
+  --compile             Compile into a standalone native binary
+  -h, --help            Show help for upgrade command`);
+}
+
 export async function main(args: string[] = Deno.args): Promise<void> {
+  // spec: PLAT-19, T-0814 AC 1 — Top-level --version and -v flag handling
+  if (
+    args[0] === "--version" ||
+    args[0] === "-v" ||
+    args[0] === "version"
+  ) {
+    console.log(`rail ${CLI_VERSION}`);
+    return;
+  }
+
   const command = args[0];
 
   if (command === "-h" || command === "--help") {
@@ -1010,14 +1049,61 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+    case "upgrade":
+    case "update": {
+      let checkOnly = false;
+      let force = false;
+      let version: string | undefined;
+      let ref: string | undefined;
+      let compile = false;
+
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printUpgradeHelp();
+          return;
+        }
+        if (arg === "--check") {
+          checkOnly = true;
+        } else if (arg === "-f" || arg === "--force") {
+          force = true;
+        } else if (arg === "--compile") {
+          compile = true;
+        } else if (arg === "--version" && args[i + 1]) {
+          version = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--version=")) {
+          version = arg.slice("--version=".length);
+        } else if (arg === "--ref" && args[i + 1]) {
+          ref = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--ref=")) {
+          ref = arg.slice("--ref=".length);
+        }
+      }
+
+      // spec: docs/contracts/platform.contract.md#PLAT-19, tasks/milestone-0.8-developer-experience-ux/T-0814-cli-self-upgrade-mechanism.md
+      const res = await runUpgrade({
+        checkOnly,
+        force,
+        version,
+        ref,
+        compile,
+      });
+
+      if (!res.ok) {
+        Deno.exit(1);
+      }
+      break;
+    }
     default:
       if (!command) {
         console.error(
-          "Error: No command specified. Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami",
+          "Error: No command specified. Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update",
         );
       } else {
         console.error(
-          `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami`,
+          `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update`,
         );
       }
       Deno.exit(1);
