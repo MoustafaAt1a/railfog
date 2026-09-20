@@ -46,11 +46,14 @@ export default function defineRailwayConfig(ctx?: RailwayServiceContext) {
         variables: {
           PORT: "8081",
           DENO_ENV: "production",
+          REDIS_URL: "${{Redis.REDIS_URL}}",
+          DATABASE_URL: "${{Postgres.DATABASE_URL}}",
+          OBJECTS_BUCKET: "railfog-objects-hwvblgdyu",
+          OBJECTS_ENDPOINT: "https://t3.storageapi.dev",
           CLOUDFLARE_ACCOUNT_ID: "${{CLOUDFLARE_ACCOUNT_ID}}",
           CLOUDFLARE_API_TOKEN: "${{CLOUDFLARE_API_TOKEN}}",
           CLOUDFLARE_KV_NAMESPACE_ID: "${{CLOUDFLARE_KV_NAMESPACE_ID}}",
-          CLOUDFLARE_R2_BUCKET: "${{CLOUDFLARE_R2_BUCKET}}",
-          CLOUDFLARE_QUEUE_NAME: "${{CLOUDFLARE_QUEUE_NAME}}",
+          CLOUDFLARE_QUEUE_ID: "${{CLOUDFLARE_QUEUE_ID}}",
         },
       },
       {
@@ -70,13 +73,28 @@ export default function defineRailwayConfig(ctx?: RailwayServiceContext) {
           PORT: "8080",
           DENO_ENV: "production",
           RAILFOG_CONTROL_URL:
-            "http://${{railfog-control.RAILWAY_PRIVATE_DOMAIN}}:8081",
+            "http://${{railfog-control.RAILWAY_PRIVATE_DOMAIN}}:${{railfog-control.PORT}}",
+          REDIS_URL: "${{Redis.REDIS_URL}}",
+          DATABASE_URL: "${{Postgres.DATABASE_URL}}",
           CLOUDFLARE_ACCOUNT_ID: "${{CLOUDFLARE_ACCOUNT_ID}}",
           CLOUDFLARE_API_TOKEN: "${{CLOUDFLARE_API_TOKEN}}",
           CLOUDFLARE_KV_NAMESPACE_ID: "${{CLOUDFLARE_KV_NAMESPACE_ID}}",
-          CLOUDFLARE_R2_BUCKET: "${{CLOUDFLARE_R2_BUCKET}}",
-          CLOUDFLARE_QUEUE_NAME: "${{CLOUDFLARE_QUEUE_NAME}}",
+          CLOUDFLARE_QUEUE_ID: "${{CLOUDFLARE_QUEUE_ID}}",
         },
+      },
+      {
+        name: "Redis",
+        image: "redis:8.2",
+      },
+      {
+        name: "Postgres",
+        image: "ghcr.io/railwayapp-templates/postgres-ssl:18",
+      },
+    ],
+    buckets: [
+      {
+        name: "railfog-objects",
+        region: "sjc",
       },
     ],
   };

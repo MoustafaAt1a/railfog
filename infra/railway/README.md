@@ -9,22 +9,36 @@ Declarative Infrastructure as Code (IaC) packaging for deploying the RailFog edg
 RailFog maintains a strict two-process deployment model (`PLAT-1`):
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       Railway Project                       │
-│                                                             │
-│  ┌───────────────────────┐       ┌───────────────────────┐  │
-│  │   railfog-runtime     │       │    railfog-control    │  │
-│  │      (Port 8080)      │       │      (Port 8081)      │  │
-│  │  - Live HTTP ingress  │       │  - Deployments & CAS  │  │
-│  │  - Sandboxed isolates │       │  - Revisions & state  │  │
-│  │  - Snapshot cache     │──────>│  - Private network    │  │
-│  └───────────────────────┘       └───────────────────────┘  │
-│              ▲                               ▲              │
-│              │                               │              │
-└──────────────┼───────────────────────────────┼──────────────┘
-               │                               │
-        Public Traffic               Cloudflare Backing
-     (railfog.up.railway.app)       (KV, R2, Queues)
+┌────────────────────────────────────────────────────────────────────────┐
+│                            Railway Project                             │
+│                                                                        │
+│  ┌───────────────────────┐              ┌───────────────────────────┐  │
+│  │   railfog-runtime     │              │      railfog-control      │  │
+│  │      (Port 8080)      │   private    │        (Port 8081)        │  │
+│  │  - Live HTTP ingress  │─────────────>│  - Deployments & CAS      │  │
+│  │  - Sandboxed isolates │   network    │  - Revisions & snapshots  │  │
+│  │  - Fail-static cache  │              │  - State & backup service │  │
+│  └───────────┬───────────┘              └─────────────┬─────────────┘  │
+│              │                                        │                │
+│              ▼                                        ▼                │
+│  ┌───────────────────────┐              ┌───────────────────────────┐  │
+│  │      Redis 8.2        │              │       PostgreSQL 18       │  │
+│  │  - Distributed cache  │              │  - Relational metadata    │  │
+│  │  - Session/rate-limit │              │  - Persistent storage     │  │
+│  └───────────────────────┘              └───────────────────────────┘  │
+│              ▲                                        ▲                │
+│              │                                        │                │
+│              └───────────────────┬────────────────────┘                │
+│                                  ▼                                     │
+│                     ┌─────────────────────────┐                        │
+│                     │  railfog-objects Bucket │                        │
+│                     │  - S3-compatible blobs  │                        │
+│                     │  - Artifacts & archives │                        │
+│                     └─────────────────────────┘                        │
+└──────────────────────────────────┼─────────────────────────────────────┘
+                                   │
+                             Public Ingress
+                      (railfog.up.railway.app)
 ```
 
 ---
