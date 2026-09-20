@@ -2,7 +2,7 @@
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0813-deno-cli-installer.md
 // scripts/install.ts — Universal cross-platform Deno CLI installer for RailFog
 
-import { fromFileUrl, join, resolve } from "@std/path";
+import { fromFileUrl, join, resolve } from "jsr:@std/path@0.224.0";
 
 /**
  * Options configuring CLI installer behavior.
