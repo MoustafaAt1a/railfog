@@ -91,7 +91,21 @@ export async function runInit(options: InitOptions): Promise<InitResult> {
   }
 
   const template = options.template ?? "minimal";
-  const sdkModUrl = new URL("../sdk/typescript/mod.ts", import.meta.url).href;
+  let sdkModUrl = "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts";
+  if (!import.meta.url.includes("deno-compile") && !import.meta.url.startsWith("deno:")) {
+    try {
+      const candidate = new URL("../sdk/typescript/mod.ts", import.meta.url);
+      if (candidate.protocol === "file:") {
+        if (Deno.statSync(candidate).isFile) {
+          sdkModUrl = candidate.href;
+        }
+      } else {
+        sdkModUrl = candidate.href;
+      }
+    } catch {
+      // Fallback to GitHub raw URL
+    }
+  }
 
   const denoJsonContent = JSON.stringify(
     {

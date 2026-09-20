@@ -14,6 +14,88 @@ RailFog is a lightweight edge compute platform built on standard Web APIs (`Requ
 
 ---
 
+## Installation & Quickstart
+
+### 1. Install the CLI (`rail`)
+
+The RailFog command-line interface (`rail`) is available as a global Deno executable or a zero-dependency standalone binary.
+
+#### Option A: Global Deno Install (Recommended)
+```bash
+deno install -g -A -n rail https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts
+```
+Once installed, `rail` is directly accessible from your shell terminal.
+
+#### Option B: Standalone Native Binary (Zero Prerequisites)
+Compile or download a self-contained executable for Windows, macOS, or Linux:
+```bash
+deno compile -A -o rail cli/main.ts
+```
+On Windows this produces `rail.exe`; on Linux and macOS it produces `rail`.
+
+---
+
+### 2. Install & Import the TypeScript SDK (`@railfog/sdk`)
+
+The `@railfog/sdk` package provides typed handlers (`FunctionHandler`, `QueueConsumerHandler`), invocation context (`RailFogContext`), capability bindings (`ctx.kv`, `ctx.objects`, `ctx.queues`, `ctx.env`), and reliability utilities (`withIdempotency`, `withRetry`).
+
+#### Option A: Automatic Scaffolding (Recommended)
+Initializing any new project via `rail init` automatically configures `deno.json` with `@railfog/sdk`:
+```bash
+rail init my-app
+cd my-app
+```
+
+#### Option B: Manual Import Mapping
+Add `@railfog/sdk` to your project's `deno.json`:
+```json
+{
+  "imports": {
+    "@railfog/sdk": "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts"
+  }
+}
+```
+
+#### Option C: Direct URL Import
+In your TypeScript function handlers:
+```typescript
+import type { FunctionHandler, RailFogContext } from "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts";
+
+const handler: FunctionHandler = async (req, ctx) => {
+  const visitor = await ctx.kv.get(["stats", "visitors"]);
+  return Response.json({ ok: true, visitor, requestId: ctx.requestId });
+};
+
+export default handler;
+```
+
+---
+
+### 3. Quickstart Workflow
+
+```bash
+# 1. Authenticate with the RailFog control plane
+rail login --control-url https://railfog-control-production.up.railway.app
+
+# 2. Verify authenticated identity
+rail whoami
+
+# 3. Create a new project
+rail init my-app
+cd my-app
+
+# 4. Start the local development server (with SQLite KV/Queues and local storage)
+rail dev
+
+# 5. Validate project configuration and entrypoints statically
+rail check
+
+# 6. Deploy to the cloud
+rail deploy
+```
+
+---
+
 ## Developer Tooling & CLI Commands (Milestone 0.5)
 
 The `rail` CLI manages the full local development, validation, deployment, and operational lifecycle (`PLAT-19`).
