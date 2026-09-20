@@ -1,0 +1,10 @@
+railway_api_token          = "your_railway_api_token"
+project_name               = "railfog"
+environment_name           = "production"
+
+# Cloudflare Provider Backing Configuration
+cloudflare_account_id      = "your_cloudflare_account_id"
+cloudflare_api_token       = "your_cloudflare_api_token"
+cloudflare_kv_namespace_id = "your_kv_namespace_id"
+cloudflare_r2_bucket       = "your_r2_bucket"
+cloudflare_queue_name      = "your_queue_name"
