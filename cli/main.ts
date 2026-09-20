@@ -1,6 +1,7 @@
 import { join } from "@std/path";
 import { parse } from "@std/toml";
 import {
+  formatStartupBanner,
   type LocalServer,
   type RailfogConfig,
   startLocalServer,
@@ -48,7 +49,7 @@ import {
   runLogs,
 } from "./logs.ts";
 import { formatUsageReport, runUsage, type UsageCliOptions } from "./usage.ts";
-import { runLogin, runLogout, runWhoami } from "./login.ts";
+import { runLogin, runLogout, runWhoami, systemOpenBrowser } from "./login.ts";
 import { CLI_VERSION } from "./version.ts";
 import {
   runUpgrade,
@@ -204,6 +205,11 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
     const target = route.function ?? "";
     console.log(`  ${pattern.padEnd(15)} ${target}`);
   }
+  console.log();
+
+  console.log("Backing Services:");
+  console.log("  KV & Queues: SQLite");
+  console.log("  Objects:     LocalFS");
 }
 
 function printDevHelp(): void {
@@ -427,6 +433,76 @@ Options:
   -h, --help            Show help for upgrade command`);
 }
 
+/**
+ * Calculates the Levenshtein edit distance between two strings.
+ * Minimalist dynamic programming: O(m * n) time, O(min(m, n)) space.
+ */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  const m = a.length;
+  const n = b.length;
+  let prevRow = new Array<number>(n + 1);
+  let currRow = new Array<number>(n + 1);
+
+  for (let j = 0; j <= n; j++) prevRow[j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    currRow[0] = i;
+    const aChar = a.charCodeAt(i - 1);
+    for (let j = 1; j <= n; j++) {
+      const cost = aChar === b.charCodeAt(j - 1) ? 0 : 1;
+      currRow[j] = Math.min(
+        prevRow[j] + 1,
+        currRow[j - 1] + 1,
+        prevRow[j - 1] + cost,
+      );
+    }
+    const temp = prevRow;
+    prevRow = currRow;
+    currRow = temp;
+  }
+
+  return prevRow[n];
+}
+
+const KNOWN_COMMANDS = [
+  "init",
+  "dev",
+  "deploy",
+  "status",
+  "check",
+  "add",
+  "login",
+  "logout",
+  "whoami",
+  "logs",
+  "secrets",
+  "rollback",
+  "usage",
+  "cost",
+  "export",
+  "import",
+  "upgrade",
+  "update",
+];
+
+function findClosestCommand(cmd: string): string | null {
+  let closest: string | null = null;
+  let minDistance = 3;
+
+  for (const known of KNOWN_COMMANDS) {
+    const dist = levenshtein(cmd.toLowerCase(), known);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closest = known;
+    }
+  }
+  return closest;
+}
+
 export async function main(args: string[] = Deno.args): Promise<void> {
   // spec: PLAT-19, T-0814 AC 1 — Top-level --version and -v flag handling
   if (
@@ -572,7 +648,61 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           watch = false;
         }
       }
-      await devCommand(Deno.cwd(), port, { host, watch });
+      const server = await devCommand(Deno.cwd(), port, { host, watch });
+
+      // Interactive terminal shortcuts (Wrangler / Railway parity)
+      if (
+        typeof Deno.stdin.isTerminal === "function" && Deno.stdin.isTerminal()
+      ) {
+        try {
+          Deno.stdin.setRaw(true);
+          const buf = new Uint8Array(16);
+          while (true) {
+            const n = await Deno.stdin.read(buf);
+            if (n === null || n === 0) break;
+            const char = new TextDecoder().decode(buf.subarray(0, n));
+            // Ctrl+C (\x03) or 'q' / 'Q'
+            if (char === "\x03" || char === "q" || char === "Q") {
+              try {
+                Deno.stdin.setRaw(false);
+              } catch {
+                // ignore
+              }
+              await server.close();
+              console.log("\nDev server stopped.");
+              Deno.exit(0);
+            }
+            // 'b' / 'B': open in browser
+            if (char === "b" || char === "B") {
+              const url = `http://${host ?? "localhost"}:${server.port}`;
+              console.log(`\nOpening ${url} in browser...`);
+              await systemOpenBrowser(url);
+            }
+            // 'c' / 'C': clear console and reprint banner
+            if (char === "c" || char === "C") {
+              console.clear();
+              try {
+                const tomlPath = join(Deno.cwd(), "railfog.toml");
+                const tomlContent = await Deno.readTextFile(tomlPath);
+                const cfg = parse(tomlContent) as unknown as RailfogConfig;
+                console.log(
+                  formatStartupBanner(cfg, server.port, { host, watch }),
+                );
+              } catch {
+                // ignore
+              }
+            }
+          }
+        } catch {
+          // If raw mode cannot be set or stdin ends, remain alive
+        } finally {
+          try {
+            Deno.stdin.setRaw(false);
+          } catch {
+            // ignore
+          }
+        }
+      }
       break;
     }
     case "deploy": {
@@ -1112,9 +1242,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         printGeneralHelp();
         return;
       } else {
+        const suggestion = findClosestCommand(command);
         console.error(
           `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update`,
         );
+        if (suggestion) {
+          console.error(`\nDid you mean "rail ${suggestion}"?`);
+        }
         Deno.exit(1);
       }
   }

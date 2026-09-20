@@ -44,7 +44,7 @@ function sanitizeError(msg: string, secret?: string): string {
 /**
  * Launches the user's default desktop web browser to the specified URL.
  */
-async function systemOpenBrowser(url: string): Promise<boolean> {
+export async function systemOpenBrowser(url: string): Promise<boolean> {
   try {
     let cmd: string;
     let args: string[];

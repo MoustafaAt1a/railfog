@@ -49,6 +49,21 @@ import {
 } from "../router/route-matcher.ts";
 import { ProjectWatcher } from "./watcher.ts";
 
+function isColorSupported(): boolean {
+  try {
+    const noColor = Deno.env.get("NO_COLOR");
+    if (noColor !== undefined && noColor !== "") return false;
+    const ci = Deno.env.get("CI");
+    if (ci !== undefined && ci !== "" && ci !== "0" && ci !== "false") {
+      return false;
+    }
+    return typeof Deno.stdout.isTerminal === "function" &&
+      Deno.stdout.isTerminal();
+  } catch {
+    return false;
+  }
+}
+
 export interface RequestLogLineInfo {
   requestId: string;
   method: string;
@@ -59,9 +74,44 @@ export interface RequestLogLineInfo {
 
 // spec: docs/contracts/platform.contract.md#PLAT-14 — ULID request_id format
 export function formatRequestLine(info: RequestLogLineInfo): string {
-  return `[${info.requestId}] ${info.method} ${info.pathname} ${info.status} ${
+  const isColor = isColorSupported();
+  if (!isColor) {
+    return `[${info.requestId}] ${info.method} ${info.pathname} ${info.status} ${
+      Math.round(info.durationMs)
+    }ms`;
+  }
+
+  let methodColored = info.method;
+  switch (info.method.toUpperCase()) {
+    case "GET":
+      methodColored = `\x1b[36m${info.method}\x1b[0m`;
+      break;
+    case "POST":
+      methodColored = `\x1b[32m${info.method}\x1b[0m`;
+      break;
+    case "PUT":
+    case "PATCH":
+      methodColored = `\x1b[33m${info.method}\x1b[0m`;
+      break;
+    case "DELETE":
+      methodColored = `\x1b[31m${info.method}\x1b[0m`;
+      break;
+  }
+
+  let statusColored = `${info.status}`;
+  if (info.status >= 200 && info.status < 300) {
+    statusColored = `\x1b[32m${info.status}\x1b[0m`;
+  } else if (info.status >= 300 && info.status < 400) {
+    statusColored = `\x1b[36m${info.status}\x1b[0m`;
+  } else if (info.status >= 400 && info.status < 500) {
+    statusColored = `\x1b[33m${info.status}\x1b[0m`;
+  } else if (info.status >= 500) {
+    statusColored = `\x1b[31m${info.status}\x1b[0m`;
+  }
+
+  return `\x1b[2m[${info.requestId}]\x1b[0m ${methodColored} ${info.pathname} ${statusColored} \x1b[2m${
     Math.round(info.durationMs)
-  }ms`;
+  }ms\x1b[0m`;
 }
 
 // spec: docs/contracts/platform.contract.md#PLAT-11 — Specificity algorithm
@@ -96,6 +146,9 @@ export function formatStartupBanner(
       );
     }
   }
+
+  lines.push("");
+  lines.push("Ready for requests. [b] browser  [c] clear  [q] quit");
 
   return lines.join("\n");
 }
