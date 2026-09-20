@@ -15,6 +15,8 @@ since correct task sizing depends on what's already built
 | 0.4 Reliability | Retries, rollback, health checks, provider-failure handling, backup, usage accounting | Survive real failures |
 | 0.5 Developer Experience | CLI polish, TypeScript SDK, docs, local/cloud parity, deploy diagnostics | Fast, predictable iteration |
 | 0.6 Public Beta | Real users, real workloads, real cost data | No major new features — stabilize |
+| 0.7 Repo Consolidation | Standardized `@railfog/*` workspaces, centralized unit tests | Clean codebase layout and structure alignment |
+| **0.75 Backing Services & Auth** | PostgreSQL persistence, Redis cache, persistent API key auth middleware | Connect Railway backing infrastructure and secure daemons |
 | **1.0.0** | — | API stable, runtime stable, security tested, rollback reliable, export works, docs complete |
 
 ## Dependency notes for decomposition
