@@ -1,9 +1,9 @@
-# T-0805 — Implement Interactive Project Scaffolding in `rail init`
+# T-0806 — Implement Interactive Project Scaffolding in `rail init`
 
 Status: Not started
 Milestone: 0.8 Developer Experience & UX Polish
-Depends on: T-0804
-Blocks: T-0809
+Depends on: T-0805
+Blocks: T-0810
 
 ## Spec references
 
@@ -12,15 +12,15 @@ Blocks: T-0809
 ## Scope
 
 **In scope**:
-- `cli/init.ts` — Enhance `runInit()` and the CLI handler to support an interactive questionnaire when run without positional arguments in an interactive terminal:
+- `cli/init.ts` — Enhance `runInit()` to present an interactive setup flow when executed without positional arguments in an interactive terminal:
   - Prompts for project directory and name.
-  - Prompts for starter template selection (`minimal` or `worked-example`) using `selectPrompt` (`T-0804`).
-  - Renders a clean formatted completion card displaying created files, configured commands, and next steps (`rail dev`, `rail deploy`).
-- `tests/unit/cli_init_test.ts` — Add test coverage for interactive scaffolding options and completion output.
+  - Prompts for starter template selection (`minimal` or `worked-example`) using `selectPrompt` (`T-0805`).
+  - Renders a completion summary box displaying created files, configured commands, and next steps (`cd <dir>`, `rail dev`, `rail deploy`).
+- `tests/unit/cli_init_test.ts` — Add test coverage for interactive scaffolding prompts and summary card output.
 
 **Out of scope** (binding — see `docs/ANTIHALLUCINATION.md` Rule 6):
-- Low-level ANSI / prompt helpers (`cli/ui.ts` — covered in `T-0804`).
-- Modifying project template schemas or contracts under `docs/contracts/`.
+- Terminal prompt primitives (`cli/prompt.ts` — covered in `T-0805`).
+- Modifying project template schemas under `docs/contracts/`.
 
 ## Interface to implement
 
@@ -54,7 +54,7 @@ export function runInteractiveInit(options?: InteractiveInitOptions): Promise<In
 - [ ] `deno test` run, real output attached, all required tests passing
 - [ ] `deno lint` run, real output attached, zero warnings
 - [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
+- [ ] Reviewer pass complete; security-auditor pass complete if triggered
 - [ ] Nothing outside "In scope" touched
 
 ## Assumptions made

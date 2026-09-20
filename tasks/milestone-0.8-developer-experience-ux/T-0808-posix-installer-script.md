@@ -1,9 +1,9 @@
-# T-0807 — Implement POSIX Shell Universal Installer Script
+# T-0808 — Implement POSIX Shell Universal Installer Script
 
 Status: Not started
 Milestone: 0.8 Developer Experience & UX Polish
 Depends on: none
-Blocks: T-0809
+Blocks: T-0810
 
 ## Spec references
 
@@ -22,7 +22,7 @@ Blocks: T-0809
 - `tests/unit/installer_posix_test.ts` — Syntax and logic validation test for `scripts/install.sh`.
 
 **Out of scope** (binding — see `docs/ANTIHALLUCINATION.md` Rule 6):
-- Windows installer (`scripts/install.ps1` — covered in `T-0808`).
+- Windows installer (`scripts/install.ps1` — covered in `T-0809`).
 - Publishing to package managers (Homebrew, APT).
 
 ## Interface to implement
@@ -50,12 +50,13 @@ curl -fsSL https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/i
 
 - [ ] Implementation matches every cited clause ID exactly (`PLAT-19`)
 - [ ] Spec-anchor comments present at each RailFog-specific decision point
+- [ ] Unit tests written first (red), then implementation (green)
 - [ ] Shell script complies with strict POSIX standards (`set -e`)
 - [ ] `deno check` run, real output attached, zero errors
 - [ ] `deno test` run, real output attached, all required tests passing
 - [ ] `deno lint` run, real output attached, zero warnings
 - [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
+- [ ] Reviewer pass complete; security-auditor pass complete if triggered
 - [ ] Nothing outside "In scope" touched
 
 ## Assumptions made

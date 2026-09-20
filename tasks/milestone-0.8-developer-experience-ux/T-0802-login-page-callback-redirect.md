@@ -12,7 +12,12 @@ Blocks: T-0803
 ## Scope
 
 **In scope**:
-- `apps/api/login-page.ts` — Update the HTML template and client-side logic in the control plane's `/login` route to support `callback` and `state` query parameters. When present and pointing to a legitimate loopback URL (`http://127.0.0.1:*` or `http://localhost:*`), the UI displays an "Authorize CLI" action and automatically redirects to the callback with the issued token and matching state nonce.
+- `apps/api/login-page.ts` — Update the HTML template and client-side logic in the control plane's `/login` route to support `callback` and `state` query parameters.
+- Incorporates mandatory security controls:
+  - Strict loopback URL validation: enforces `http:`, empty username/password, hostname strictly `127.0.0.1` or `localhost`, unprivileged port (`1024 <= port <= 65535`), explicit blacklist of sensitive internal ports (`5432`, `6379`, `8081`), pathname strictly `/callback`, zero pre-existing search queries or hashes.
+  - Reflected XSS defense: strictly sanitizes `state` (`^[a-zA-Z0-9_-]+$`) and escapes callback URL before DOM injection.
+  - Drive-by token defense: requires an explicit user click on an "Authorize CLI" button (no silent zero-click automatic redirect).
+  - History protection: browser navigation uses `window.location.replace(...)` to prevent token leakage in back-button browser history.
 - `tests/unit/apps_control_server_login_test.ts` — Tests asserting safe callback parameter reflection, open-redirect prevention, and callback query string construction.
 
 **Out of scope** (binding — see `docs/ANTIHALLUCINATION.md` Rule 6):
@@ -35,14 +40,15 @@ export function isValidCallbackUrl(urlStr: string): boolean;
 
 ## Acceptance criteria (Given/When/Then)
 
-1. Given a user accesses `GET /login?callback=http://127.0.0.1:49152/callback&state=nonce_123`, when rendered, then the page detects the callback parameter, validates that it targets `127.0.0.1` or `localhost`, and embeds safe redirection logic in the DOM.
-2. Given a malicious user accesses `GET /login?callback=https://evil.com/steal`, when evaluated, then `isValidCallbackUrl` returns `false`, the open redirect is rejected, and the page renders in safe fallback mode without redirecting.
-3. Given an authorized token generation in callback mode, when the user clicks "Authorize CLI" (or auto-authorizes), then the browser navigates to `${callback}?token=${encodeURIComponent(rawToken)}&state=${encodeURIComponent(state)}`.
+1. Given a user accesses `GET /login?callback=http://127.0.0.1:49152/callback&state=nonce_123`, when rendered, then `isValidCallbackUrl` validates the loopback host and unprivileged port, displays an "Authorize CLI" action button, and sanitizes embedded parameters against reflected XSS.
+2. Given a malicious user accesses `GET /login?callback=https://evil.com/steal` or `http://127.0.0.1:password@evil.com` or `http://127.0.0.1:6379/callback`, when evaluated, then `isValidCallbackUrl` returns `false`, the open redirect is rejected, and the page renders in safe fallback mode without redirecting.
+3. Given an authorized token generation in callback mode, when the user clicks "Authorize CLI", then the browser navigates via `window.location.replace()` to `${callback}?token=${encodeURIComponent(rawToken)}&state=${encodeURIComponent(state)}`.
 4. Given no callback parameters are provided in the URL, then the page renders the standard 1-click copy-to-clipboard view with zero behavioral regressions.
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/apps_control_server_login_test.ts`: Verify `isValidCallbackUrl` rejects remote hosts and permits local loopbacks; verify rendered HTML embeds callback and state parameters safely without XSS.
+- [ ] Unit — `tests/unit/apps_control_server_login_test.ts`: Verify `isValidCallbackUrl` rejects remote hosts, userinfo spoofs, sensitive ports (5432, 6379, 8081), and permits safe local loopbacks; verify rendered HTML embeds callback and state parameters safely without XSS.
+- [ ] Security — Verify open-redirect defense, sensitive port blacklisting, and reflected XSS neutralization (`PLAT-15`).
 
 ## Definition of Done
 
@@ -53,9 +59,9 @@ export function isValidCallbackUrl(urlStr: string): boolean;
 - [ ] `deno test` run, real output attached, all required tests passing
 - [ ] `deno lint` run, real output attached, zero warnings
 - [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
+- [ ] Reviewer pass complete; security-auditor pass complete if triggered
 - [ ] Nothing outside "In scope" touched
 
 ## Assumptions made
 
-- Callback URLs are strictly restricted to `http://127.0.0.1:*` and `http://localhost:*` to prevent open-redirect and SSRF vulnerabilities.
+- Callback URLs are strictly restricted to unprivileged HTTP loopback addresses to prevent open-redirect and SSRF vulnerabilities.

@@ -1,13 +1,13 @@
-# T-0806 — Implement Rich Progress Feedback for `rail deploy`
+# T-0807 — Implement Rich Progress Feedback for `rail deploy`
 
 Status: Not started
 Milestone: 0.8 Developer Experience & UX Polish
 Depends on: T-0804
-Blocks: T-0809
+Blocks: T-0810
 
 ## Spec references
 
-`PLAT-3`, `PLAT-19`
+`PLAT-3`, `PLAT-15`, `PLAT-19`
 
 ## Scope
 
@@ -18,10 +18,11 @@ Blocks: T-0809
   - Step 3: Uploading snapshot bundle to Control Plane (`PLAT-1`, `PLAT-8`).
   - Step 4: Verifying deployment activation and health check.
   - Final card: Revision ID, elapsed time, live URL, and deployed route table.
+  - Suppression of bound secret values in error traces (`PLAT-15`).
 - `tests/unit/cli_deploy_progress_test.ts` — Unit tests asserting progress callbacks, step transitions, and non-TTY / CI silent fallback.
 
 **Out of scope** (binding — see `docs/ANTIHALLUCINATION.md` Rule 6):
-- UI spinner implementation (`cli/ui.ts` — covered in `T-0804`).
+- UI spinner implementation (`cli/spinner.ts` — covered in `T-0804`).
 - Modifying deployment snapshot protocols (`packages/protocol/` — stable).
 - Backend deployment handling on control server.
 
@@ -62,17 +63,18 @@ export interface DeploySummary {
 ## Tests required
 
 - [ ] Unit — `tests/unit/cli_deploy_progress_test.ts`: Verify progress event dispatch, `--json` suppression of ANSI spinners, and failure state reporting.
+- [ ] Security — Verify deploy progress error handlers suppress bound secret values and tokens (`PLAT-15`).
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`PLAT-3`, `PLAT-19`)
+- [ ] Implementation matches every cited clause ID exactly (`PLAT-3`, `PLAT-15`, `PLAT-19`)
 - [ ] Spec-anchor comments present at each RailFog-specific decision point
 - [ ] Unit tests written first (red), then implementation (green)
 - [ ] `deno check` run, real output attached, zero errors
 - [ ] `deno test` run, real output attached, all required tests passing
 - [ ] `deno lint` run, real output attached, zero warnings
 - [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
+- [ ] Reviewer pass complete; security-auditor pass complete if triggered
 - [ ] Nothing outside "In scope" touched
 
 ## Assumptions made

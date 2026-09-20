@@ -1,8 +1,8 @@
-# T-0809 — Milestone 0.8 Verification and E2E UX Audit
+# T-0810 — Run Milestone 0.8 E2E Verification Suite
 
 Status: Not started
 Milestone: 0.8 Developer Experience & UX Polish
-Depends on: T-0801, T-0802, T-0803, T-0804, T-0805, T-0806, T-0807, T-0808
+Depends on: T-0801, T-0802, T-0803, T-0804, T-0805, T-0806, T-0807, T-0808, T-0809
 Blocks: none
 
 ## Spec references
@@ -39,6 +39,7 @@ None — this is the verification and audit task for Milestone 0.8.
 ## Tests required
 
 - [ ] E2E — `tests/e2e/ux_dx_milestone_08_test.ts`: End-to-end verification of callback login, interactive CLI, and deployment feedback.
+- [ ] Security — Verify zero secret leakage across the end-to-end callback authentication lifecycle (`PLAT-15`).
 - [ ] Unit — All unit tests in `tests/unit/` pass.
 
 ## Definition of Done
@@ -49,6 +50,8 @@ None — this is the verification and audit task for Milestone 0.8.
 - [ ] `deno test` run, real output attached, all test suites passing
 - [ ] `deno lint` run, real output attached, zero warnings
 - [ ] No item from `docs/ANTI-SLOP.md` violated
+- [ ] Reviewer pass complete; security-auditor pass complete if triggered
+- [ ] Nothing outside "In scope" touched
 - [ ] All milestone tasks marked Done with verified DoD checklists
 
 ## Assumptions made

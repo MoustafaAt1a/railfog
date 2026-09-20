@@ -1,9 +1,9 @@
-# T-0808 — Implement Windows PowerShell Universal Installer Script
+# T-0809 — Implement Windows PowerShell Universal Installer Script
 
 Status: Not started
 Milestone: 0.8 Developer Experience & UX Polish
 Depends on: none
-Blocks: T-0809
+Blocks: T-0810
 
 ## Spec references
 
@@ -21,7 +21,7 @@ Blocks: T-0809
 - `tests/unit/installer_windows_test.ts` — Validation test checking PowerShell script structure and PATH modification safety.
 
 **Out of scope** (binding — see `docs/ANTIHALLUCINATION.md` Rule 6):
-- POSIX shell installer (`scripts/install.sh` — covered in `T-0807`).
+- POSIX shell installer (`scripts/install.sh` — covered in `T-0808`).
 - Windows MSI or Chocolatey / Winget packages.
 
 ## Interface to implement
@@ -48,12 +48,13 @@ irm https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.
 
 - [ ] Implementation matches every cited clause ID exactly (`PLAT-19`)
 - [ ] Spec-anchor comments present at each RailFog-specific decision point
+- [ ] Unit tests written first (red), then implementation (green)
 - [ ] PowerShell script runs cleanly without warnings under strict mode
 - [ ] `deno check` run, real output attached, zero errors
 - [ ] `deno test` run, real output attached, all required tests passing
 - [ ] `deno lint` run, real output attached, zero warnings
 - [ ] No item from `docs/ANTI-SLOP.md` violated
-- [ ] Reviewer pass complete
+- [ ] Reviewer pass complete; security-auditor pass complete if triggered
 - [ ] Nothing outside "In scope" touched
 
 ## Assumptions made
