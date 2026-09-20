@@ -254,6 +254,45 @@ Deno.test(
 );
 
 Deno.test(
+  "PLAT-1: forwards /login and /deploy routes directly to control plane",
+  async () => {
+    const mockControlPlane = createMockBackend(
+      (_req, rec) =>
+        new Response(
+          JSON.stringify({ target: "control", path: rec.pathname }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const mockDataPlane = createMockBackend();
+    let gateway: GatewayServer | undefined;
+
+    try {
+      const options: GatewayOptions = {
+        port: 0,
+        controlPlaneUrl: mockControlPlane.url,
+        dataPlaneUrl: mockDataPlane.url,
+      };
+      gateway = await startGatewayServer(options);
+
+      const res = await fetch(
+        `http://127.0.0.1:${gateway.port}/login?callback=http%3A%2F%2F127.0.0.1%3A4840%2Fcallback`,
+      );
+      assertEquals(res.status, HTTP_STATUS_OK);
+      const json = await res.json();
+      assertEquals(json.target, "control");
+      assertEquals(json.path, "/login");
+
+      assertEquals(mockControlPlane.requests.length, 1);
+      assertEquals(mockDataPlane.requests.length, 0);
+    } finally {
+      await gateway?.close();
+      await mockControlPlane.close();
+      await mockDataPlane.close();
+    }
+  },
+);
+
+Deno.test(
   "PLAT-1 (AC1): streams chunked response body from control plane back to client intact",
   async () => {
     // spec: contracts/platform.contract.md#PLAT-1 — streaming payload body preservation

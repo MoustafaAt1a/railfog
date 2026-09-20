@@ -317,7 +317,7 @@ RailFog applications can be packaged into zero-dependency minimal container imag
 
 ### 7.1 Deploying to Railway
 The repository includes pre-wired configurations for zero-config Railway deployments:
-- **`railway.json`**: Points directly to `infra/Dockerfile.runtime` with health checks on `/healthz`.
+- **`railway.json`**: Configures the control plane deployment (`infra/Dockerfile.control`) by default with health checks on `/healthz`. Runtime data-plane services can be deployed using `infra/railway/railway.runtime.json` or `RAILWAY_DOCKERFILE_PATH=infra/Dockerfile.runtime`.
 - **Command**:
   ```bash
   # Deploy cwd to Railway (auto-authenticates and provisions resources)

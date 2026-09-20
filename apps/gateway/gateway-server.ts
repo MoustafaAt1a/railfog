@@ -91,7 +91,17 @@ function resolveRequestId(req: Request): string {
  * spec: contracts/platform.contract.md#PLAT-11 — Route matching specificity
  */
 function resolveTargetUrl(incomingUrl: URL, options: GatewayOptions): URL {
-  const isControlPlane = incomingUrl.pathname === "/v1" ||
+  const isControlPlane = incomingUrl.pathname === "/login" ||
+    incomingUrl.pathname.startsWith("/login/") ||
+    incomingUrl.pathname === "/deploy" ||
+    incomingUrl.pathname.startsWith("/deploy/") ||
+    incomingUrl.pathname === "/rollback" ||
+    incomingUrl.pathname.startsWith("/rollback/") ||
+    incomingUrl.pathname === "/export" ||
+    incomingUrl.pathname.startsWith("/export/") ||
+    incomingUrl.pathname === "/import" ||
+    incomingUrl.pathname.startsWith("/import/") ||
+    incomingUrl.pathname === "/v1" ||
     incomingUrl.pathname.startsWith("/v1/");
   const baseString = isControlPlane
     ? options.controlPlaneUrl

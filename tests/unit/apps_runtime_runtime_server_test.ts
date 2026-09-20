@@ -214,6 +214,13 @@ function createMockControlPlane(
         });
       }
 
+      if (url.pathname === "/login") {
+        return new Response("<html>Login Page</html>", {
+          status: HTTP_STATUS_OK,
+          headers: { "content-type": "text/html" },
+        });
+      }
+
       return new Response("Not found", { status: HTTP_STATUS_NOT_FOUND });
     },
   );
@@ -992,5 +999,53 @@ Deno.test("FN-5: runtime server rejects request body exceeding 10MB limit with H
   } finally {
     if (server) await server.close();
     await mockCp.close();
+  }
+});
+
+Deno.test("Control Plane Routing: proxies /login to controlPlaneUrl when configured", async () => {
+  const projectId = "proj_test_control_proxy";
+  const snapshot = createMockSnapshot();
+  const mockCp = createMockControlPlane(projectId, snapshot);
+  const isolationProvider = new MockIsolationProvider();
+
+  let server: RuntimeServer | null = null;
+  try {
+    server = await startRuntimeServer({
+      projectId,
+      controlPlaneUrl: mockCp.url,
+      isolationProvider,
+      pollIntervalMs: 10000,
+    });
+
+    const res = await fetch(
+      `http://127.0.0.1:${server.port}/login?callback=http%3A%2F%2F127.0.0.1%3A4840%2Fcallback`,
+    );
+    assertEquals(res.status, HTTP_STATUS_OK);
+    const text = await res.text();
+    assertEquals(text, "<html>Login Page</html>");
+  } finally {
+    if (server) await server.close();
+    await mockCp.close();
+  }
+});
+
+Deno.test("Control Plane Routing: returns informative 404 when /login accessed without controlPlaneUrl", async () => {
+  const isolationProvider = new MockIsolationProvider();
+
+  let server: RuntimeServer | null = null;
+  try {
+    server = await startRuntimeServer({
+      projectId: "proj_test_no_cp",
+      isolationProvider,
+      pollIntervalMs: 10000,
+    });
+
+    const res = await fetch(`http://127.0.0.1:${server.port}/login`);
+    assertEquals(res.status, HTTP_STATUS_NOT_FOUND);
+    const data = await res.json();
+    assertEquals(data.error.code, ERROR_RESOURCE_NOT_FOUND);
+    assert(data.error.message.includes("Control Plane route"));
+  } finally {
+    if (server) await server.close();
   }
 });

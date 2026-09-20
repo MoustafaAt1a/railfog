@@ -266,6 +266,43 @@ export async function startRuntimeServer(
         });
       }
 
+      // Proxy or handle Control Plane management endpoints (/login, /v1/*, /deploy, etc.)
+      const isControlPlanePath = url.pathname === "/login" ||
+        url.pathname.startsWith("/login/") ||
+        url.pathname === "/deploy" ||
+        url.pathname.startsWith("/deploy/") ||
+        url.pathname === "/rollback" ||
+        url.pathname.startsWith("/rollback/") ||
+        url.pathname === "/export" ||
+        url.pathname.startsWith("/export/") ||
+        url.pathname === "/import" ||
+        url.pathname.startsWith("/import/") ||
+        url.pathname === "/v1" ||
+        url.pathname.startsWith("/v1/");
+
+      if (isControlPlanePath) {
+        if (options.controlPlaneUrl) {
+          const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
+          const targetUrl = new URL(`${baseUrl}${url.pathname}${url.search}`);
+          const headers = new Headers(req.headers);
+          headers.set("x-request-id", requestId);
+          headers.set("request-id", requestId);
+          return await fetch(targetUrl.toString(), {
+            method: req.method,
+            headers,
+            body: req.body,
+            redirect: "manual",
+          });
+        }
+
+        return createErrorResponse(
+          404,
+          "RESOURCE_NOT_FOUND",
+          `Endpoint ${url.pathname} is a Control Plane route. This instance is running railfog-runtime (Data Plane). Please route requests to railfog-control (Port 8081) or configure RAILFOG_CONTROL_URL.`,
+          requestId,
+        );
+      }
+
       // spec: contracts/platform.contract.md#PLAT-8, PLAT-11, PLAT-12 — Route matching against local snapshot
       if (!currentSnapshot || currentSnapshot.routes.length === 0) {
         return createErrorResponse(
