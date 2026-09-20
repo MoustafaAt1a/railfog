@@ -33,6 +33,7 @@ import {
 } from "../../packages/protocol/snapshot.ts";
 import { generateUlid } from "../../packages/core/id/ulid.ts";
 import { matchRoute } from "../../runtime/router/route-matcher.ts";
+import { LocalIsolationProvider } from "../../runtime/sandbox/local-isolation.ts";
 
 /**
  * Service identifier returned in health check responses.
@@ -420,4 +421,25 @@ export async function startRuntimeServer(
   };
 
   return runtimeServer;
+}
+
+// spec: contracts/platform.contract.md#PLAT-1 — Standalone daemon runner
+if (import.meta.main) {
+  const port = parseInt(Deno.env.get("PORT") || "8080", 10);
+  const host = Deno.env.get("HOST") || "0.0.0.0";
+  const controlPlaneUrl = Deno.env.get("RAILFOG_CONTROL_URL") || undefined;
+  const projectId = Deno.env.get("RAILFOG_PROJECT_ID") || "default";
+  const orgId = Deno.env.get("RAILFOG_ORG_ID") || "default-org";
+  const isolationProvider = new LocalIsolationProvider();
+
+  const server = await startRuntimeServer({
+    port,
+    host,
+    controlPlaneUrl,
+    projectId,
+    orgId,
+    isolationProvider,
+  });
+
+  console.log(`[railfog-runtime] listening on http://${host}:${server.port}`);
 }

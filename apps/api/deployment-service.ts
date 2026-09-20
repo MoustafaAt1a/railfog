@@ -462,3 +462,38 @@ export class DeploymentService {
     }
   }
 }
+
+// spec: contracts/platform.contract.md#PLAT-1 — Container entrypoint fallback
+if (import.meta.main) {
+  const { startControlServer } = await import("./control-server.ts");
+  const { LocalFSProvider } = await import(
+    "../../providers/objects/local-fs-provider.ts"
+  );
+  const { SQLiteKVProvider } = await import(
+    "../../providers/kv/sqlite-provider.ts"
+  );
+  const { createStateBackupService } = await import(
+    "./state-backup-service.ts"
+  );
+
+  const port = parseInt(Deno.env.get("PORT") || "8081", 10);
+  const host = Deno.env.get("HOST") || "0.0.0.0";
+  const storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR") || ".railfog/objects";
+  const storage = new LocalFSProvider(storageDir);
+  const kv = new SQLiteKVProvider();
+  const deploymentService = new DeploymentService(storage);
+  const stateBackupService = createStateBackupService(
+    deploymentService,
+    kv,
+    storage,
+  );
+
+  const server = await startControlServer({
+    port,
+    host,
+    deploymentService,
+    stateBackupService,
+  });
+
+  console.log(`[railfog-control] listening on http://${host}:${server.port}`);
+}

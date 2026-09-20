@@ -9,7 +9,7 @@ FROM denoland/deno:alpine AS builder
 WORKDIR /app
 COPY deno.json* ./
 COPY . .
-RUN deno cache --allow-import apps/api/deployment-service.ts cli/main.ts || true
+RUN deno cache --allow-import apps/api/control-server.ts cli/main.ts || true
 
 # Stage 2: Minimal runtime image for railfog-control
 FROM denoland/deno:alpine AS runner
@@ -33,4 +33,4 @@ USER 10001:10001
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD curl -f http://localhost:8081/healthz || exit 1
 
 # spec: contracts/platform.contract.md#PLAT-1 — Launch control plane daemon
-CMD ["run", "--allow-all", "apps/api/deployment-service.ts"]
+CMD ["run", "--allow-all", "apps/api/control-server.ts"]

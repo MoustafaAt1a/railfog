@@ -9,7 +9,7 @@ FROM denoland/deno:alpine AS builder
 WORKDIR /app
 COPY deno.json* ./
 COPY . .
-RUN deno cache --allow-import runtime/dev-server/local-server.ts cli/main.ts || true
+RUN deno cache --allow-import apps/runtime/runtime-server.ts cli/main.ts || true
 
 # Stage 2: Minimal runtime image for railfog-runtime
 FROM denoland/deno:alpine AS runner
@@ -33,4 +33,4 @@ USER 10001:10001
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD curl -f http://localhost:8080/healthz || exit 1
 
 # spec: contracts/platform.contract.md#PLAT-1 — Launch data plane runtime daemon
-CMD ["run", "--allow-all", "runtime/dev-server/local-server.ts"]
+CMD ["run", "--allow-all", "apps/runtime/runtime-server.ts"]

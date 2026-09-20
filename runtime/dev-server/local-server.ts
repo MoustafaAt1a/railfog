@@ -574,3 +574,37 @@ export async function startLocalServer(
 
   return localServer;
 }
+
+// spec: contracts/platform.contract.md#PLAT-1 — Container entrypoint fallback
+if (import.meta.main) {
+  const isProd = Deno.env.get("DENO_ENV") === "production" ||
+    !!Deno.env.get("RAILFOG_CONTROL_URL");
+  if (isProd) {
+    const { startRuntimeServer } = await import(
+      "../../apps/runtime/runtime-server.ts"
+    );
+    const { LocalIsolationProvider } = await import(
+      "../sandbox/local-isolation.ts"
+    );
+    const port = parseInt(Deno.env.get("PORT") || "8080", 10);
+    const host = Deno.env.get("HOST") || "0.0.0.0";
+    const controlPlaneUrl = Deno.env.get("RAILFOG_CONTROL_URL") || undefined;
+    const projectId = Deno.env.get("RAILFOG_PROJECT_ID") || "default";
+    const orgId = Deno.env.get("RAILFOG_ORG_ID") || "default-org";
+    const isolationProvider = new LocalIsolationProvider();
+    const server = await startRuntimeServer({
+      port,
+      host,
+      controlPlaneUrl,
+      projectId,
+      orgId,
+      isolationProvider,
+    });
+    console.log(`[railfog-runtime] listening on http://${host}:${server.port}`);
+  } else {
+    const port = parseInt(Deno.env.get("PORT") || "8000", 10);
+    const host = Deno.env.get("HOST") || "127.0.0.1";
+    const config: RailfogConfig = { name: "railfog", routes: [] };
+    await startLocalServer(config, port, { host });
+  }
+}
