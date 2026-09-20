@@ -4,7 +4,7 @@
 1. **Zero-Copy Local Callback Authentication**: `rail login` spawns an ephemeral loopback HTTP server, opens the browser, and completes authentication with a single click in the browser without manual copy-pasting.
 2. **Interactive Terminal UI (TUI)**: Interactive arrow-key selection prompts for `rail init`, animated step spinners for `rail deploy`, and styled status outputs.
 3. **Universal 1-Line Installers**: POSIX (`install.sh`) and Windows (`install.ps1`) scripts to install the standalone `rail` binary in seconds without prerequisites.
-4. **Minimalist SDK & Instant Addition**: Ultra-short `handle()` and `api()` helpers with automatic JSON serialization, plus 1-command SDK addition (`rail add sdk`).
+4. **Ergonomic SDK & Instant Addition**: Ultra-short `handle()` and `api()` wrappers with automatic JSON serialization, plus 1-command SDK addition (`rail add sdk`).
 
 ---
 
@@ -29,7 +29,7 @@ T-0805 (Terminal Selection Prompts)        │
 T-0808 (POSIX Installer Script)            │
 T-0809 (Windows Installer Script)          │
                                            │
-T-0810 (Minimalist SDK Helpers)            │
+T-0810 (Ergonomic Function Handler Wrapper)│
 T-0811 (Project Dependency Add)            │
   │                                        │
   └────────────────────────────────────────┴──► T-0812 (Milestone 0.8 Verification Suite)
@@ -50,6 +50,6 @@ T-0811 (Project Dependency Add)            │
 | `T-0807` | Implement Rich Progress Feedback for `rail deploy` | `cli/deploy.ts` | `PLAT-3`, `PLAT-15`, `PLAT-19` |
 | `T-0808` | Implement POSIX Shell Universal Installer Script | `scripts/install.sh` | `PLAT-19` |
 | `T-0809` | Implement Windows PowerShell Universal Installer Script | `scripts/install.ps1` | `PLAT-19` |
-| `T-0810` | Implement Minimalist SDK Helpers | `sdk/typescript/minimal.ts` | `FN-1`, `PLAT-6`, `PLAT-19` |
+| `T-0810` | Implement Ergonomic Function Handler Wrapper | `sdk/typescript/wrapper.ts` | `FN-1`, `FN-4`, `PLAT-19` |
 | `T-0811` | Implement Project Dependency Management in `rail add` | `cli/add.ts` | `PLAT-19` |
 | `T-0812` | Run Milestone 0.8 E2E Verification Suite | `tests/e2e/ux_dx_milestone_08_test.ts` | `PLAT-1`, `PLAT-3`, `PLAT-15`, `PLAT-17`, `PLAT-19`, `FN-1` |

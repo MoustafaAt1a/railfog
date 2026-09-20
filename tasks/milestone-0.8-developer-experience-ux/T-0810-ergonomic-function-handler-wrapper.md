@@ -1,4 +1,4 @@
-# T-0810 — Implement Minimalist SDK Helpers
+# T-0810 — Implement Ergonomic Function Handler Wrapper
 
 Status: Not started
 Milestone: 0.8 Developer Experience & UX Polish
@@ -7,16 +7,16 @@ Blocks: T-0812
 
 ## Spec references
 
-`FN-1`, `PLAT-6`, `PLAT-19`
+`FN-1`, `FN-4`, `PLAT-19`
 
 ## Scope
 
 **In scope**:
-- `sdk/typescript/minimal.ts` — Ultra-concise, ergonomic helpers for RailFog function handlers:
-  - `handle()`: High-level wrapper function that accepts `(c: MinimalContext) => Promise<unknown> | unknown`, provides auto-destructured access to `c.kv`, `c.objects`, `c.queues`, `c.env`, `c.req`, `c.body()`, and auto-wraps plain returned objects/primitives into `Response.json(...)`.
+- `sdk/typescript/wrapper.ts` — Ergonomic function handler wrappers for RailFog serverless workloads:
+  - `handle()`: High-level wrapper function that accepts `(c: HandlerContext) => Promise<unknown> | unknown`, provides auto-destructured access to `c.kv`, `c.objects`, `c.queues`, `c.env`, `c.req`, `c.body()`, and auto-wraps plain returned objects/primitives into `Response.json(...)`.
   - `api()`: Micro-router mapping HTTP method and path patterns (e.g. `"GET /items"`, `"POST /items"`) to minimal handler functions.
   - Re-export `handle` and `api` from `sdk/typescript/mod.ts`.
-- `tests/unit/sdk_minimal_test.ts` — Unit tests verifying automatic JSON serialization, error handling, body parsing, and route resolution.
+- `tests/unit/sdk_wrapper_test.ts` — Unit tests verifying automatic JSON serialization, error normalization, body parsing, and route resolution.
 
 **Out of scope** (binding — see `docs/ANTIHALLUCINATION.md` Rule 6):
 - Modifying underlying `RailFogContext` interface (`sdk/typescript/types.ts` — stable).
@@ -28,23 +28,23 @@ Blocks: T-0812
 ```typescript
 import type { FunctionHandler, RailFogContext } from "./types.ts";
 
-export interface MinimalContext extends RailFogContext {
+export interface HandlerContext extends RailFogContext {
   req: Request;
   body<T = unknown>(): Promise<T>;
   json(data: unknown, status?: number): Response;
   text(str: string, status?: number): Response;
 }
 
-export type MinimalHandlerResult = Response | Record<string, unknown> | unknown[] | string | number | boolean | null | void;
+export type HandlerResult = Response | Record<string, unknown> | unknown[] | string | number | boolean | null | void;
 
-export type MinimalHandlerFn = (
-  c: MinimalContext,
-) => Promise<MinimalHandlerResult> | MinimalHandlerResult;
+export type HandlerFn = (
+  c: HandlerContext,
+) => Promise<HandlerResult> | HandlerResult;
 
-export function handle(fn: MinimalHandlerFn): FunctionHandler;
+export function handle(fn: HandlerFn): FunctionHandler;
 
 export interface ApiRouteMap {
-  [routePattern: string]: MinimalHandlerFn;
+  [routePattern: string]: HandlerFn;
 }
 
 export function api(routes: ApiRouteMap): FunctionHandler;
@@ -59,11 +59,11 @@ export function api(routes: ApiRouteMap): FunctionHandler;
 
 ## Tests required
 
-- [ ] Unit — `tests/unit/sdk_minimal_test.ts`: Verify `handle` auto-JSON serialization, explicit `Response` passthrough, `c.body()` parsing, and `api()` route pattern matching.
+- [ ] Unit — `tests/unit/sdk_wrapper_test.ts`: Verify `handle` auto-JSON serialization, explicit `Response` passthrough, `c.body()` parsing, and `api()` route pattern matching.
 
 ## Definition of Done
 
-- [ ] Implementation matches every cited clause ID exactly (`FN-1`, `PLAT-6`, `PLAT-19`)
+- [ ] Implementation matches every cited clause ID exactly (`FN-1`, `FN-4`, `PLAT-19`)
 - [ ] Spec-anchor comments present at each RailFog-specific decision point
 - [ ] Unit tests written first (red), then implementation (green)
 - [ ] `deno check` run, real output attached, zero errors

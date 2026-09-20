@@ -20,7 +20,7 @@ Blocks: T-0812
 - `tests/unit/cli_add_test.ts` — Unit tests verifying `deno.json` parsing, import insertion, idempotent re-runs, and non-destructive JSON editing.
 
 **Out of scope** (binding — see `docs/ANTIHALLUCINATION.md` Rule 6):
-- SDK helper implementation (`sdk/typescript/minimal.ts` — covered in `T-0810`).
+- Function handler wrapper implementation (`sdk/typescript/wrapper.ts` — covered in `T-0810`).
 - Running npm/yarn/pnpm commands.
 - Modifying `railfog.toml`.
 

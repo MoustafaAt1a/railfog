@@ -17,7 +17,7 @@ Blocks: none
   2. Fallback mode: Tests `--manual` flag and timeout handling falling back to stdin prompt.
   3. Interactive scaffolding: Validates `rail init` interactive selection and file creation.
   4. Rich deploy progress: Validates animated spinners and step feedback during `rail deploy`.
-  5. Minimalist SDK: Validates function execution using `handle()` and `api()` micro-router helpers.
+  5. Minimalist SDK: Validates function execution using `handle()` and `api()` micro-router wrappers.
   6. CLI dependency addition: Validates `rail add sdk` injection into `deno.json`.
   7. Installer scripts: Verifies syntax integrity of `scripts/install.sh` and `scripts/install.ps1`.
 - Complete verification of Milestone 0.8 via `deno check`, `deno test`, and `deno lint`.
