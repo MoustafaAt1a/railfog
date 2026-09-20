@@ -34,6 +34,7 @@ registration gap, not a hidden feature.
 | `tdd-atomic-protocol` | Start of any `/implement-task` |
 | `atomic-task-decomposition` | Breaking work into task files |
 | `skill-authoring` | Noticing a recurring pattern with no existing skill — or before adding one, to check it's not a duplicate |
+| `use-railway` | Operating Railway infrastructure, deployments, and IaC |
 
 ## Workflows (`workflows/`) — slash commands
 
