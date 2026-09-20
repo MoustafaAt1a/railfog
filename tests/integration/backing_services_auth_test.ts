@@ -66,6 +66,7 @@ Deno.test("T-0758: Integration — Full Backing Services and Web-to-CLI Login Li
     // 3. Step 3: CLI interactive login simulation (paste key at prompt)
     const loginResult = await runLogin({
       controlUrl,
+      manual: true,
       configPath: cliConfigPath,
       openBrowser: () => Promise.resolve(true), // Mock browser open
       stdinReader: () => Promise.resolve(`  ${issuedRawToken}  `), // User pastes key

@@ -9,14 +9,27 @@
 // spec: contracts/kv.contract.md#KV-2 — KV binding permissions & deduplication in worked-example
 // spec: contracts/worked-example.md — Canonical upload pipeline reference implementation
 // spec: tasks/milestone-0.5-developer-experience/T-0503-cli-init-scaffold.md
+// spec: tasks/milestone-0.8-developer-experience-ux/T-0806-interactive-project-scaffolding.md
 
-import { basename, join, resolve } from "@std/path";
+import { basename, join, relative, resolve } from "@std/path";
+import { type Choice, selectPrompt, type WriterSync } from "./prompt.ts";
 
 export interface InitOptions {
   directory: string;
   projectName?: string;
   template?: "minimal" | "worked-example";
   force?: boolean;
+}
+
+export interface InteractiveInitOptions extends Omit<InitOptions, "directory"> {
+  directory?: string;
+  interactive?: boolean;
+  promptReader?: (message: string, defaultValue?: string) => Promise<string>;
+  templateSelector?: (
+    choices: Choice<"minimal" | "worked-example">[],
+  ) => Promise<"minimal" | "worked-example">;
+  outputWriter?: WriterSync;
+  writer?: WriterSync;
 }
 
 export interface InitResult {
@@ -91,8 +104,12 @@ export async function runInit(options: InitOptions): Promise<InitResult> {
   }
 
   const template = options.template ?? "minimal";
-  let sdkModUrl = "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts";
-  if (!import.meta.url.includes("deno-compile") && !import.meta.url.startsWith("deno:")) {
+  let sdkModUrl =
+    "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts";
+  if (
+    !import.meta.url.includes("deno-compile") &&
+    !import.meta.url.startsWith("deno:")
+  ) {
     try {
       const candidate = new URL("../sdk/typescript/mod.ts", import.meta.url);
       if (candidate.protocol === "file:") {
@@ -271,4 +288,275 @@ export default async function handler(
     targetDir,
     filesCreated,
   };
+}
+
+/**
+ * Fallback prompt reader reading a single line from standard input.
+ */
+async function defaultPromptReader(
+  message: string,
+  defaultValue?: string,
+  writer?: WriterSync,
+): Promise<string> {
+  const out = writer ?? Deno.stdout;
+  const promptMsg = defaultValue
+    ? `${message} (default: ${defaultValue}): `
+    : `${message}: `;
+  out.writeSync(new TextEncoder().encode(promptMsg));
+
+  const buf = new Uint8Array(1024);
+  const n = await Deno.stdin.read(buf);
+  if (n === null || n === 0) {
+    return defaultValue ?? "";
+  }
+  const raw = new TextDecoder().decode(buf.subarray(0, n));
+  const line = raw.replace(/[\r\n]+$/, "").trim();
+  return line || (defaultValue ?? "");
+}
+
+/**
+ * Inspects whether the active writer or stdin represents an interactive terminal.
+ */
+function isTerminalEnvironment(writer?: WriterSync): boolean {
+  if (
+    writer &&
+    "isTerminal" in writer &&
+    typeof (writer as unknown as { isTerminal: () => boolean }).isTerminal ===
+      "function"
+  ) {
+    return (writer as unknown as { isTerminal: () => boolean }).isTerminal();
+  }
+  if (typeof Deno.stdin.isTerminal === "function") {
+    return Deno.stdin.isTerminal();
+  }
+  return false;
+}
+
+/**
+ * Renders a styled completion summary box displaying created files, configured tasks, and next steps.
+ *
+ * @spec contracts/platform.contract.md#PLAT-19 — Completion summary box and next steps
+ */
+export function renderSummaryBox(
+  result: InitResult,
+  targetDirInput: string,
+  writer: WriterSync,
+): void {
+  const isCwd = resolve(result.targetDir) === resolve(Deno.cwd()) ||
+    targetDirInput === "." ||
+    targetDirInput === "./" ||
+    targetDirInput === ".\\";
+
+  const nextSteps: string[] = [];
+  if (!isCwd) {
+    nextSteps.push(`cd ${targetDirInput}`);
+  }
+  nextSteps.push("rail dev");
+  nextSteps.push("rail deploy");
+
+  const filesList = result.filesCreated.map((f) => {
+    const rel = relative(result.targetDir, f).replace(/\\/g, "/");
+    return rel || basename(f);
+  });
+
+  const tasksList = [
+    "dev   - rail dev",
+    "check - rail check",
+    "test  - deno test -A",
+    "lint  - deno lint",
+  ];
+
+  const contentLines: string[] = [
+    "Project created successfully!",
+    "",
+    "Created files:",
+    ...filesList.map((f) => `  • ${f}`),
+    "",
+    "Configured deno.json tasks:",
+    ...tasksList.map((t) => `  • ${t}`),
+    "",
+    "Next steps:",
+    ...nextSteps.map((s) => `  ${s}`),
+  ];
+
+  let maxLen = 40;
+  for (const line of contentLines) {
+    if (line.length > maxLen) {
+      maxLen = line.length;
+    }
+  }
+  const innerWidth = maxLen + 4;
+
+  const top = "┌" + "─".repeat(innerWidth) + "┐";
+  const bottom = "└" + "─".repeat(innerWidth) + "┘";
+  const output: string[] = [top];
+
+  for (const line of contentLines) {
+    const padded = "  " + line;
+    const padRight = " ".repeat(Math.max(0, innerWidth - padded.length));
+    output.push("│" + padded + padRight + "│");
+  }
+  output.push(bottom);
+
+  const boxText = "\n" + output.join("\n") + "\n";
+  writer.writeSync(new TextEncoder().encode(boxText));
+}
+
+/**
+ * Interactively prompts for project settings and scaffolds a new RailFog project.
+ * Falls back to non-interactive runInit when arguments are fully specified or environment is non-terminal.
+ *
+ * @spec contracts/platform.contract.md#PLAT-18 — Project resource naming
+ * @spec contracts/platform.contract.md#PLAT-19 — Interactive project scaffolding flow
+ */
+export async function runInteractiveInit(
+  options?: InteractiveInitOptions,
+): Promise<InitResult> {
+  const writer: WriterSync = options?.outputWriter ?? options?.writer ??
+    Deno.stdout;
+
+  // spec: contracts/platform.contract.md#PLAT-19 — Non-interactive fallback for non-terminal or fully-specified args
+  const isExplicitNonInteractive = options?.interactive === false;
+  const isFullySpecified = options?.directory !== undefined &&
+    options?.template !== undefined;
+  const isNonTerminal = !isTerminalEnvironment(writer);
+
+  if (
+    isExplicitNonInteractive ||
+    (options?.interactive === undefined && (isFullySpecified || isNonTerminal))
+  ) {
+    return await runInit({
+      directory: options?.directory ?? ".",
+      projectName: options?.projectName,
+      template: options?.template ?? "minimal",
+      force: options?.force,
+    });
+  }
+
+  const promptFn = options?.promptReader ??
+    ((message: string, defaultValue?: string) =>
+      defaultPromptReader(message, defaultValue, writer));
+
+  // 1. Prompt for project directory / path if not provided
+  // spec: contracts/platform.contract.md#PLAT-19 — Interactive directory selection
+  let targetDirPath = options?.directory;
+  if (targetDirPath === undefined) {
+    const dirAnswer = await promptFn(
+      "Project directory or path (default: .)",
+      ".",
+    );
+    targetDirPath = dirAnswer.trim() || ".";
+  }
+
+  // 2. Derive default project name from target directory
+  // spec: contracts/platform.contract.md#PLAT-18 — Project name derivation and sanitization
+  let defaultProjectName = "railfog-app";
+  const resolvedTargetDir = resolve(Deno.cwd(), targetDirPath);
+  const derivedBase = basename(resolvedTargetDir).trim();
+  if (
+    derivedBase &&
+    derivedBase !== "." &&
+    derivedBase !== "/" &&
+    derivedBase !== "\\" &&
+    PROJECT_NAME_REGEX.test(derivedBase)
+  ) {
+    defaultProjectName = derivedBase;
+  } else if (
+    derivedBase &&
+    derivedBase !== "." &&
+    derivedBase !== "/" &&
+    derivedBase !== "\\"
+  ) {
+    const sanitized = derivedBase.replace(/[^a-zA-Z0-9_.-]/g, "-").replace(
+      /^[^a-zA-Z0-9]+/,
+      "",
+    );
+    if (PROJECT_NAME_REGEX.test(sanitized)) {
+      defaultProjectName = sanitized;
+    }
+  }
+
+  // Prompt for project name if not explicitly provided
+  let projectName = options?.projectName;
+  if (projectName === undefined) {
+    const nameAnswer = await promptFn(
+      "Project name",
+      defaultProjectName,
+    );
+    projectName = nameAnswer.trim() || defaultProjectName;
+  }
+
+  // Validate project name against regex per PLAT-18
+  // spec: contracts/platform.contract.md#PLAT-18 — Project resource naming validation
+  if (!PROJECT_NAME_REGEX.test(projectName)) {
+    throw new Error(
+      `Invalid project name "${projectName}". Project name must start with an alphanumeric character, contain only [a-zA-Z0-9_.-], and cannot contain newlines, quotes, or special characters (PLAT-18).`,
+    );
+  }
+
+  // 3. Prompt for starter template selection if not provided
+  // spec: contracts/platform.contract.md#PLAT-19 — Starter template interactive prompt
+  const starterChoices: Choice<"minimal" | "worked-example">[] = [
+    {
+      label: "Minimal Starter (single HTTP API function)",
+      value: "minimal",
+      description: "Minimal HTTP endpoint with route mapping",
+    },
+    {
+      label: "Worked Example (file upload pipeline with Objects, Queues, KV)",
+      value: "worked-example",
+      description:
+        "Complete upload pipeline with presigning, queue worker, and KV deduplication",
+    },
+  ];
+
+  let template: "minimal" | "worked-example";
+  if (options?.template) {
+    template = options.template;
+  } else if (options?.templateSelector) {
+    template = await options.templateSelector(starterChoices);
+  } else {
+    template = await selectPrompt<"minimal" | "worked-example">({
+      message: "Select a starter template:",
+      choices: starterChoices,
+      outputWriter: writer,
+    });
+  }
+
+  // 4. Scaffold the project files
+  // spec: contracts/platform.contract.md#PLAT-19 — Scaffolding file layout
+  const result = await runInit({
+    directory: targetDirPath,
+    projectName,
+    template,
+    force: options?.force,
+  });
+
+  // 5. Render styled completion summary box
+  // spec: contracts/platform.contract.md#PLAT-19 — Completion summary box
+  renderSummaryBox(result, targetDirPath, writer);
+
+  return result;
+}
+
+/**
+ * CLI command handler for 'rail init'.
+ * Launches interactive project scaffolding when called without positional arguments in an interactive terminal.
+ *
+ * @spec contracts/platform.contract.md#PLAT-18, PLAT-19
+ */
+export async function initCommand(
+  cwd?: string,
+  force = false,
+  options?: InteractiveInitOptions,
+): Promise<InitResult> {
+  const isPositional = cwd !== undefined;
+  return await runInteractiveInit({
+    ...options,
+    directory: cwd,
+    force: force || options?.force,
+    interactive: isPositional
+      ? (options?.interactive ?? false)
+      : (options?.interactive ?? true),
+  });
 }

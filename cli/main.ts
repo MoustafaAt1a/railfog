@@ -16,7 +16,15 @@ import {
   type DeployCommandOptions,
   type DeployCommandResult,
 } from "./deploy.ts";
-import { type InitOptions, type InitResult, runInit } from "./init.ts";
+import { type AddOptions, type AddResult, runAdd } from "./add.ts";
+import {
+  initCommand,
+  type InitOptions,
+  type InitResult,
+  type InteractiveInitOptions,
+  runInit,
+  runInteractiveInit,
+} from "./init.ts";
 import {
   rollbackCommand,
   type RollbackCommandOptions,
@@ -50,9 +58,12 @@ export {
   formatLogEntry,
   formatUsageReport,
   importCommand,
+  initCommand,
   rollbackCommand,
+  runAdd,
   runCheck,
   runInit,
+  runInteractiveInit,
   runLogin,
   runLogout,
   runLogs,
@@ -61,6 +72,8 @@ export {
   runWhoami,
 };
 export type {
+  AddOptions,
+  AddResult,
   CheckResult,
   DeployCommandOptions,
   DeployCommandResult,
@@ -68,6 +81,7 @@ export type {
   ImportCommandOptions,
   InitOptions,
   InitResult,
+  InteractiveInitOptions,
   LogEntry,
   LogsCliOptions,
   RollbackCommandOptions,
@@ -101,14 +115,6 @@ export const STARTER_FUNCTION = `export default async function handler(
 }
 `;
 
-export async function initCommand(
-  cwd: string = Deno.cwd(),
-  force = false,
-): Promise<void> {
-  await runInit({ directory: cwd, force });
-  console.log("Initialized RailFog project.");
-}
-
 function printInitHelp(): void {
   console.log(`RailFog CLI - Initialize project
 
@@ -123,6 +129,29 @@ Options:
   --name <name>        Project name (default: derived from directory name)
   --force              Overwrite files in non-empty directory
   -h, --help           Show help for init command`);
+}
+
+// spec: contracts/platform.contract.md#PLAT-19 — Project dependency management
+export async function addCommand(
+  packageOrPrimitive: string,
+  cwd: string = Deno.cwd(),
+): Promise<AddResult> {
+  const result = await runAdd({ packageOrPrimitive, cwd });
+  console.log(`✓ Added ${result.addedImport} to deno.json`);
+  return result;
+}
+
+function printAddHelp(): void {
+  console.log(`RailFog CLI - Add dependency or primitive
+
+Usage:
+  rail add <package> [options]
+
+Arguments:
+  <package>    Package or primitive to add (supported: sdk)
+
+Options:
+  -h, --help   Show help for add command`);
 }
 
 export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
@@ -215,6 +244,7 @@ Usage:
 
 Commands:
   init      Initialize a new RailFog project in the current directory
+  add       Add a dependency or primitive to the current project
   status    Show status of functions and routes in railfog.toml
   check     Validate railfog.toml configuration and routes
   dev       Start the local development server
@@ -243,6 +273,7 @@ Usage:
 Options:
   --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_URL or http://localhost:8081)
   --token <key>          Directly provide API key (non-interactive / CI)
+  --manual               Skip browser callback server and prompt on stdin
   -h, --help             Show help for login command`);
 }
 
@@ -370,7 +401,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
 
   switch (command) {
     case "init": {
-      let directory = Deno.cwd();
+      let hasPositionalDir = false;
+      let directory: string | undefined;
       let projectName: string | undefined;
       let template: "minimal" | "worked-example" | undefined;
       let force = false;
@@ -397,12 +429,51 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           projectName = arg.slice("--name=".length);
         } else if (!arg.startsWith("-")) {
           directory = arg;
+          hasPositionalDir = true;
         }
       }
 
       try {
-        await runInit({ directory, projectName, template, force });
-        console.log("Initialized RailFog project.");
+        if (hasPositionalDir) {
+          await runInit({
+            directory: directory!,
+            projectName,
+            template,
+            force,
+          });
+          console.log("Initialized RailFog project.");
+        } else {
+          await runInteractiveInit({ projectName, template, force });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        Deno.exit(1);
+      }
+      break;
+    }
+    case "add": {
+      let pkg: string | undefined;
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printAddHelp();
+          return;
+        }
+        if (!arg.startsWith("-") && !pkg) {
+          pkg = arg;
+        }
+      }
+
+      if (!pkg) {
+        console.error(
+          "Error: Missing package argument. Supported additions: sdk",
+        );
+        Deno.exit(1);
+      }
+
+      try {
+        await addCommand(pkg, Deno.cwd());
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
@@ -889,6 +960,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
     case "login": {
       let controlUrl: string | undefined;
       let token: string | undefined;
+      let manual = false;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -906,10 +978,12 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--token=")) {
           token = arg.slice("--token=".length);
+        } else if (arg === "--manual") {
+          manual = true;
         }
       }
 
-      const res = await runLogin({ controlUrl, token });
+      const res = await runLogin({ controlUrl, token, manual });
       if (!res.ok) {
         Deno.exit(1);
       }
@@ -939,11 +1013,11 @@ export async function main(args: string[] = Deno.args): Promise<void> {
     default:
       if (!command) {
         console.error(
-          "Error: No command specified. Available commands: init, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami",
+          "Error: No command specified. Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami",
         );
       } else {
         console.error(
-          `Error: Unknown command "${command}". Available commands: init, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami`,
+          `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami`,
         );
       }
       Deno.exit(1);

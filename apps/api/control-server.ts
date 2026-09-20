@@ -389,8 +389,14 @@ export function startControlServer(
             requestId,
           );
         }
+        const callbackUrl = url.searchParams.get("callback") ?? undefined;
+        const state = url.searchParams.get("state") ?? undefined;
+        const orgId = url.searchParams.get("orgId") ?? undefined;
         const html = renderLoginPageHtml({
           serviceName: "RailFog Cloud",
+          callbackUrl,
+          state,
+          orgId,
         });
         return new Response(html, {
           status: HTTP_STATUS_OK,
@@ -927,7 +933,9 @@ if (import.meta.main) {
     console.log("[railfog-control] using SQLite KV provider");
   }
 
-  let cacheProvider: import("../../primitives/kv/kv-provider.ts").KVProvider | undefined;
+  let cacheProvider:
+    | import("../../primitives/kv/kv-provider.ts").KVProvider
+    | undefined;
   if (redisUrl && redisUrl.trim().length > 0) {
     cacheProvider = new RedisKVProvider({ url: redisUrl });
     console.log("[railfog-control] using Redis cache provider");
@@ -940,7 +948,8 @@ if (import.meta.main) {
 
   const bootstrapKey = Deno.env.get("RAILFOG_API_KEY");
   if (bootstrapKey) {
-    const hash = await (await import("../../packages/auth/token.ts")).hashApiToken(bootstrapKey);
+    const hash = await (await import("../../packages/auth/token.ts"))
+      .hashApiToken(bootstrapKey);
     await kv.set(["_auth", "tokens", hash], {
       id: "bootstrap-id",
       tokenHash: hash,
@@ -948,7 +957,9 @@ if (import.meta.main) {
       orgId: "default-org",
       createdAt: new Date().toISOString(),
     });
-    console.log("[railfog-control] initialized bootstrap API key from RAILFOG_API_KEY");
+    console.log(
+      "[railfog-control] initialized bootstrap API key from RAILFOG_API_KEY",
+    );
   }
 
   const deploymentService = new DeploymentService(storage);

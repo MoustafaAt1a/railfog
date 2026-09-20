@@ -1,10 +1,47 @@
 // spec: contracts/platform.contract.md#PLAT-1 — Control plane management surface
 // spec: contracts/platform.contract.md#PLAT-15 — Zero raw secret leakage into server logs
 // spec: tasks/milestone-0.75-backing-services-and-auth/T-0756-control-plane-login-page.md
+// spec: tasks/milestone-0.8-developer-experience-ux/T-0802-login-page-callback-redirect.md
 
 export interface LoginPageOptions {
   serviceName?: string;
   defaultOrgId?: string;
+  callbackUrl?: string; // Validated loopback URL, e.g. http://127.0.0.1:54321/callback
+  state?: string; // Nonce string to pass through to the callback
+  orgId?: string;
+}
+
+/**
+ * Validates loopback callback URL against open-redirect, SSRF, and port traversal attacks.
+ * spec: tasks/milestone-0.8-developer-experience-ux/T-0802-login-page-callback-redirect.md
+ */
+export function isValidCallbackUrl(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    // Protocol must be plain HTTP for loopback
+    if (parsed.protocol !== "http:") return false;
+    // Reject userinfo spoofing (e.g. http://127.0.0.1:pwd@evil.com)
+    if (parsed.username !== "" || parsed.password !== "") return false;
+    // Strictly restrict host to loopback addresses
+    if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
+      return false;
+    }
+    // Explicit port in unprivileged range required
+    if (!parsed.port) return false;
+    const port = parseInt(parsed.port, 10);
+    if (isNaN(port) || port < 1024 || port > 65535) return false;
+    // Blacklist sensitive internal database and control ports
+    if (port === 5432 || port === 6379 || port === 8080 || port === 8081) {
+      return false;
+    }
+    // Pathname must strictly be /callback with zero pre-existing search or hash
+    if (parsed.pathname !== "/callback") return false;
+    if (parsed.search !== "" || parsed.hash !== "") return false;
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -15,13 +52,21 @@ export interface LoginPageOptions {
  */
 export function renderLoginPageHtml(options?: LoginPageOptions): string {
   const serviceName = options?.serviceName ?? "RailFog Cloud";
-  const defaultOrgId = options?.defaultOrgId ?? "default-org";
+  const defaultOrgId = options?.orgId ?? options?.defaultOrgId ?? "default-org";
+
+  const rawCallback = options?.callbackUrl ?? "";
+  const validCallback = isValidCallbackUrl(rawCallback) ? rawCallback : "";
+
+  // Sanitize state nonce against reflected XSS
+  const rawState = options?.state ?? "";
+  const safeState = /^[a-zA-Z0-9_-]{1,128}$/.test(rawState) ? rawState : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
   <title>Login — ${serviceName}</title>
   <style>
     :root {
@@ -33,6 +78,7 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
       --accent: #3b82f6;
       --accent-hover: #2563eb;
       --success: #10b981;
+      --success-hover: #059669;
       --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
@@ -128,6 +174,13 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
     .btn:hover {
       background: var(--accent-hover);
     }
+    .btn-authorize {
+      background: var(--success);
+      margin-top: 0.75rem;
+    }
+    .btn-authorize:hover {
+      background: var(--success-hover);
+    }
     .key-box {
       margin-top: 1.5rem;
       padding: 1.25rem;
@@ -180,6 +233,15 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
       border-radius: 4px;
       font-weight: 600;
     }
+    .callback-notice {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 6px;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.82rem;
+      color: #93c5fd;
+      margin-bottom: 1.25rem;
+    }
   </style>
 </head>
 <body>
@@ -188,7 +250,14 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
       <div class="logo">RF</div>
       <h1>${serviceName}</h1>
     </div>
-    <p class="subtitle">Authenticate your terminal session by generating an API key and pasting it into your CLI prompt.</p>
+    
+    ${
+    validCallback
+      ? `<div class="callback-notice">🔗 Terminal CLI session detected. Click below to authorize directly.</div>`
+      : ""
+  }
+
+    <p class="subtitle">Authenticate your session by generating an API key for your RailFog CLI.</p>
 
     <div id="setup-view">
       <div class="form-group">
@@ -210,6 +279,18 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
         <span class="badge" id="status-badge">Ready</span>
       </div>
       <div class="key-display" id="key-text"></div>
+      
+      ${
+    validCallback
+      ? `
+      <button class="btn btn-authorize" id="authorize-btn" onclick="authorizeCli()">
+        🚀 Authorize CLI in Terminal
+      </button>
+      <div style="margin: 0.75rem 0; text-align: center; font-size: 0.8rem; color: var(--muted);">— or copy manually —</div>
+      `
+      : ""
+  }
+
       <button class="btn-copy" id="copy-btn" onclick="copyKey()">
         📋 Copy API Key
       </button>
@@ -217,9 +298,18 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
       <div class="steps">
         <strong>Next Steps:</strong>
         <ol>
+          ${
+    validCallback
+      ? `
+          <li>Click <strong>Authorize CLI in Terminal</strong> to log in automatically.</li>
+          <li>Or copy the key and paste into your terminal manually.</li>
+          `
+      : `
           <li>Click <strong>Copy API Key</strong> above.</li>
           <li>Return to your terminal window.</li>
           <li>Paste the key into the prompt and press <strong>Enter</strong>.</li>
+          `
+  }
         </ol>
       </div>
     </div>
@@ -227,6 +317,8 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
 
   <script>
     let activeKey = "";
+    const CALLBACK_URL = ${JSON.stringify(validCallback)};
+    const STATE_NONCE = ${JSON.stringify(safeState)};
 
     async function generateApiKey() {
       const orgId = document.getElementById("orgId").value || "${defaultOrgId}";
@@ -247,7 +339,7 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
           document.getElementById("key-text").innerText = activeKey;
           document.getElementById("key-box").style.display = "block";
           document.getElementById("setup-view").style.display = "none";
-          // Automatically try to copy immediately
+          // Try to copy immediately
           copyKey();
         } else {
           alert("Failed to generate key: " + (data.error?.message || "Unknown error"));
@@ -259,6 +351,13 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
         btn.disabled = false;
         btn.innerText = "Generate API Key";
       }
+    }
+
+    function authorizeCli() {
+      if (!activeKey || !CALLBACK_URL) return;
+      const target = CALLBACK_URL + "?token=" + encodeURIComponent(activeKey) + (STATE_NONCE ? "&state=" + encodeURIComponent(STATE_NONCE) : "");
+      // Use window.location.replace to prevent storing token in browser back-button history (PLAT-15)
+      window.location.replace(target);
     }
 
     async function copyKey() {
@@ -282,3 +381,5 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
 </body>
 </html>`;
 }
+
+export const renderLoginPage = renderLoginPageHtml;

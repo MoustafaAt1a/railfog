@@ -3,4 +3,5 @@
 export * from "./types.ts";
 export * from "./helpers.ts";
 export * from "./client.ts";
+export * from "./wrapper.ts";
 export * from "../../packages/errors/mod.ts";
