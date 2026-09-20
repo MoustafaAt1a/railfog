@@ -17,6 +17,7 @@ since correct task sizing depends on what's already built
 | 0.6 Public Beta | Real users, real workloads, real cost data | No major new features — stabilize |
 | 0.7 Repo Consolidation | Standardized `@railfog/*` workspaces, centralized unit tests | Clean codebase layout and structure alignment |
 | **0.75 Backing Services & Auth** | PostgreSQL persistence, Redis cache, persistent API key auth middleware | Connect Railway backing infrastructure and secure daemons |
+| **0.8 Developer Experience & UX Polish** | Zero-copy callback auth, interactive TUI (spinners/prompts), universal 1-line installers | Railway/Vercel-tier frictionless developer experience |
 | **1.0.0** | — | API stable, runtime stable, security tested, rollback reliable, export works, docs complete |
 
 ## Dependency notes for decomposition
