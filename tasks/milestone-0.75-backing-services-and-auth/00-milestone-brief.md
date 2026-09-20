@@ -1,7 +1,7 @@
-# Milestone 0.75 — Backing Services (PostgreSQL, Redis) and API Key Authentication
+# Milestone 0.75 — Backing Services (PostgreSQL, Redis), API Key Authentication, and CLI Login
 
-Goal (`roadmap.md`, `PLAT-16`, `PLAT-17`, `KV-1`..`KV-5`, `PLAT-6`, `PLAT-9`, `PLAT-15`):
-Implement production backing service providers for Redis caching (`REDIS_URL`) and PostgreSQL transactional persistence (`DATABASE_URL`), implement persistent API key storage and verification with Redis caching, attach API key authentication middleware to `railfog-control` and `railfog-runtime` daemons, and wire environment-based provider resolution so that Railway production deployments run with live database, caching, and API key protection while preserving local development parity (`PLAT-17`).
+Goal (`roadmap.md`, `PLAT-1`, `PLAT-6`, `PLAT-9`, `PLAT-12`, `PLAT-15`, `PLAT-16`, `PLAT-17`, `KV-1`..`KV-5`):
+Implement production backing service providers for Redis caching (`REDIS_URL`) and PostgreSQL transactional persistence (`DATABASE_URL`), implement persistent API key storage and verification with Redis caching, attach API key authentication middleware to `railfog-control` and `railfog-runtime` daemons, provide a web-based login and API key issuance UI on the control plane (`GET /login`), implement an interactive CLI login workflow (`rail login` -> browser -> copy/paste -> local persistence -> authenticated CLI commands), and wire environment-based provider resolution so that Railway production deployments run with live database, caching, and API key protection while preserving local development parity (`PLAT-17`).
 
 ## Dependency graph
 
@@ -21,8 +21,13 @@ Wave 3 (Authentication Middleware):
 Wave 4 (Daemon Resolution & Production Wiring):
   T-0755 (Wire backing services to control and runtime daemons)  — needs T-0751, T-0752, T-0753, T-0754
 
-Wave 5 (Full Verification & Security Audit):
-  T-0756 (Milestone 0.75 verification and integrity audit)       — needs T-0751, T-0752, T-0753, T-0754, T-0755
+Wave 5 (Web Login & CLI Authentication Flow):
+  T-0756 (Control plane web login page and API key issuance UI) — needs T-0753, T-0754, T-0755
+  T-0757 (CLI interactive login flow and credential management) — needs T-0756
+
+Wave 6 (Full Verification & Security Audit):
+  T-0758 (Milestone 0.75 verification and integrity audit)       — needs T-0751, T-0752, T-0753, T-0754,
+                                                                   T-0755, T-0756, T-0757
 ```
 
 Tasks within a wave have no dependency on each other and can be implemented in parallel. They only depend on tasks from earlier waves.
