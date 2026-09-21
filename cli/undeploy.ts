@@ -14,6 +14,7 @@ import {
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
+import { colors, glyphs } from "./ui.ts";
 
 export interface UndeployCommandOptions {
   cwd?: string;
@@ -100,7 +101,7 @@ export async function undeployCommand(
   }
 
   console.log(
-    `✔ Successfully undeployed project '${projectName}' from RailFog control plane.`,
+    `\n${glyphs.success}  ${colors.bold(colors.emerald("Successfully undeployed"))} project '${colors.bold(projectName)}' from RailFog control plane.\n`,
   );
 
   return {

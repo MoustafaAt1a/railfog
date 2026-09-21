@@ -63,16 +63,30 @@ import {
   type UpgradeResult,
 } from "./upgrade.ts";
 import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
+import {
+  colors,
+  glyphs,
+  renderBrandHeader,
+  renderCard,
+  renderErrorCard,
+  renderModernTable,
+} from "./ui.ts";
 
 export {
   checkProject,
   CLI_VERSION,
+  colors,
   deployCommand,
   exportCommand,
   formatLogEntry,
   formatUsageReport,
+  glyphs,
   importCommand,
   initCommand,
+  renderBrandHeader,
+  renderCard,
+  renderErrorCard,
+  renderModernTable,
   rollbackCommand,
   runAdd,
   runCheck,
@@ -104,6 +118,8 @@ export type {
   RollbackCommandResult,
   SecretCliOptions,
   SecretListEntry,
+  UndeployCommandOptions,
+  UndeployCommandResult,
   UpgradeOptions,
   UpgradeResult,
   UsageCliOptions,
@@ -179,7 +195,15 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
     content = await Deno.readTextFile(tomlPath);
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.error("Error: railfog.toml not found in current directory.");
+      console.error(
+        renderErrorCard({
+          code: "CONFIG_NOT_FOUND",
+          message: "Error: railfog.toml not found in current directory.",
+          location: tomlPath,
+          solution: "Run 'rail init' to scaffold a new RailFog application here.",
+          docs: "https://railfog.dev/docs/getting-started",
+        }),
+      );
       Deno.exit(1);
     }
     throw err;
@@ -192,29 +216,29 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
     { pattern?: string; function?: string }
   >;
 
-  console.log(`Application: ${appName}\n`);
+  console.log(`Application: ${colors.bold(colors.accent(appName))}\n`);
 
-  console.log("Functions:");
+  console.log(colors.bold("Functions:"));
   console.log("  NAME       ENTRY");
   for (const [name, fnConfig] of Object.entries(functions)) {
     const entry = (fnConfig?.entry as string) ??
       (fnConfig?.entrypoint as string) ?? "(no entry)";
-    console.log(`  ${name.padEnd(10)} ${entry}`);
+    console.log(`  ${colors.brand(name.padEnd(10))} ${colors.slate(entry)}`);
   }
   console.log();
 
-  console.log("Routes:");
+  console.log(colors.bold("Routes:"));
   console.log("  PATTERN         FUNCTION");
   for (const route of routes) {
     const pattern = route.pattern ?? "";
     const target = route.function ?? "";
-    console.log(`  ${pattern.padEnd(15)} ${target}`);
+    console.log(`  ${colors.accent(pattern.padEnd(15))} ${colors.emerald(target)}`);
   }
   console.log();
 
-  console.log("Backing Services:");
-  console.log("  KV & Queues: SQLite");
-  console.log("  Objects:     LocalFS");
+  console.log(colors.bold("Backing Services:"));
+  console.log(`  KV & Queues: SQLite`);
+  console.log(`  Objects:     LocalFS`);
 }
 
 function printDevHelp(): void {
@@ -242,7 +266,15 @@ export async function devCommand(
     content = await Deno.readTextFile(tomlPath);
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.error("Error: railfog.toml not found in current directory.");
+      console.error(
+        renderErrorCard({
+          code: "CONFIG_NOT_FOUND",
+          message: "Error: railfog.toml not found in current directory.",
+          location: tomlPath,
+          solution: "Run 'rail init' to scaffold a new RailFog application here.",
+          docs: "https://railfog.dev/docs/dev-server",
+        }),
+      );
       Deno.exit(1);
     }
     throw err;
@@ -258,25 +290,26 @@ export async function devCommand(
 }
 
 function printGeneralHelp(): void {
-  console.log(`RailFog CLI — Serverless Application Platform
-
-Usage:
+  console.log(renderBrandHeader(CLI_VERSION));
+  console.log(`
+${colors.bold("Usage:")}
   rail <command> [options]
 
-Development & Deployment:
+${colors.bold(colors.accent("⚡ Development & Deployment:"))}
   init      Initialize a new RailFog project in the current directory
   dev       Start the local development server with hot-reload
   deploy    Deploy functions and configuration to the Control Plane
+  undeploy  Safely undeploy and remove a project from the cloud
   status    Show status of functions and routes in railfog.toml
   check     Validate railfog.toml configuration and route patterns
   add       Add a dependency or primitive to deno.json
 
-Authentication & Identity:
+${colors.bold(colors.accent("🔐 Authentication & Identity:"))}
   login     Authenticate your session via browser or API token
   logout    Log out and remove local credentials
   whoami    Display currently authenticated organization and key
 
-Operations & Reliability:
+${colors.bold(colors.accent("📊 Operations & Reliability:"))}
   logs      Stream and filter structured runtime logs
   secrets   Manage encrypted project secrets (set, list, delete)
   rollback  Rollback a function to a previous revision instantly
@@ -285,14 +318,16 @@ Operations & Reliability:
   export    Export project state to a disaster recovery archive
   import    Import and restore project state from a disaster recovery archive
 
-Maintenance:
+${colors.bold(colors.accent("🔄 Maintenance:"))}
   upgrade   Upgrade the RailFog CLI to the latest version
   update    Alias for upgrade subcommand
   sync      Sync CLI with the latest git updates (alias for update)
 
-Options:
+${colors.bold("Options:")}
   -v, --version  Show CLI version
-  -h, --help     Show help information`);
+  -h, --help     Show help information
+
+${colors.dim("💡 Tip: Run 'rail <command> --help' for detailed documentation on any command.")}`);
 }
 
 function printLoginHelp(): void {
@@ -1320,11 +1355,14 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       } else {
         const suggestion = findClosestCommand(command);
         console.error(
-          `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync`,
+          renderErrorCard({
+            code: "UNKNOWN_COMMAND",
+            message: `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync`,
+            solution: suggestion
+              ? `Did you mean "rail ${suggestion}"?\nRun 'rail --help' to see all available commands.`
+              : "Run 'rail --help' to browse all available commands and flags.",
+          }),
         );
-        if (suggestion) {
-          console.error(`\nDid you mean "rail ${suggestion}"?`);
-        }
         Deno.exit(1);
       }
   }

@@ -6,6 +6,7 @@ import { CLI_VERSION } from "./version.ts";
 import { createSpinner } from "./spinner.ts";
 import { runInstaller } from "../scripts/install.ts";
 import { join } from "@std/path";
+import { colors, glyphs, renderCard } from "./ui.ts";
 
 /**
  * Configuration options for upgrading the RailFog CLI.
@@ -206,34 +207,18 @@ export function getInstalledMetadata(rootOrBinDir?: string): {
  * Prints styled completion box.
  */
 function printUpgradeBox(installedPath: string, targetVersion: string): void {
-  const lines = [
-    "RailFog CLI upgraded successfully!",
+  const card = renderCard("CLI Upgrade Complete", [
+    `${glyphs.success}  RailFog CLI upgraded successfully!`,
     "",
-    `Target:    ${targetVersion}`,
-    `Location:  ${installedPath}`,
+    `   ${colors.dim("Target:")}    ${colors.bold(colors.emerald(targetVersion))}`,
+    `   ${colors.dim("Location:")}  ${colors.slate(installedPath)}`,
     "",
-    "Run 'rail --version' or 'rail --help' to verify.",
-  ];
+    `   ${colors.amber("💡 Next:")}      Run 'rail --version' or 'rail --help' to verify.`,
+  ], {
+    borderColor: colors.emerald,
+  });
 
-  let maxLen = 40;
-  for (const line of lines) {
-    if (line.length > maxLen) {
-      maxLen = line.length;
-    }
-  }
-  const innerWidth = maxLen + 4;
-  const top = "┌" + "─".repeat(innerWidth) + "┐";
-  const bottom = "└" + "─".repeat(innerWidth) + "┘";
-
-  console.log("");
-  console.log(top);
-  for (const line of lines) {
-    const padded = "  " + line;
-    const padRight = " ".repeat(Math.max(0, innerWidth - padded.length));
-    console.log("│" + padded + padRight + "│");
-  }
-  console.log(bottom);
-  console.log("");
+  console.log("\n" + card + "\n");
 }
 
 /**
