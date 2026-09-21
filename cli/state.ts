@@ -29,6 +29,7 @@ import {
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
+import { createSpinner } from "./spinner.ts";
 import { colors, glyphs, renderCard, renderStatusBar } from "./ui.ts";
 
 export interface ExportCommandOptions {
@@ -102,38 +103,51 @@ export async function exportCommand(
 
   let archive: StateBackupArchive;
 
-  if (options?.stateBackupService) {
-    archive = await options.stateBackupService.exportProject({
-      orgId,
-      projectId: projectName,
-    });
-  } else {
-    const rawUrl = options?.controlPlaneUrl ??
-      Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
-      DEFAULT_CONTROL_PLANE_URL;
-    const baseUrl = rawUrl.replace(/\/+$/, "");
+  const spinner = (
+    typeof Deno.stdout.isTerminal === "function" &&
+    Deno.stdout.isTerminal() &&
+    !Deno.env.get("CI") &&
+    !Deno.env.get("NO_COLOR")
+  )
+    ? createSpinner().start(`Exporting disaster recovery snapshot for '${projectName}'...`)
+    : null;
 
-    const url = new URL(`${baseUrl}/export`);
-    url.searchParams.set("projectId", projectName);
-    url.searchParams.set("project", projectName);
-    url.searchParams.set("orgId", orgId);
-    url.searchParams.set("org", orgId);
-    const authHeaders = await resolveAuthHeader(options);
+  try {
+    if (options?.stateBackupService) {
+      archive = await options.stateBackupService.exportProject({
+        orgId,
+        projectId: projectName,
+      });
+    } else {
+      const rawUrl = options?.controlPlaneUrl ??
+        Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
+        DEFAULT_CONTROL_PLANE_URL;
+      const baseUrl = rawUrl.replace(/\/+$/, "");
 
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: { "accept": "application/json", ...authHeaders },
-    });
+      const url = new URL(`${baseUrl}/export`);
+      url.searchParams.set("projectId", projectName);
+      url.searchParams.set("project", projectName);
+      url.searchParams.set("orgId", orgId);
+      url.searchParams.set("org", orgId);
+      const authHeaders = await resolveAuthHeader(options);
 
-    if (!res.ok) {
-      const text = await res.text();
-      if (res.status === 400) {
-        throw new ValidationFailedError(`VALIDATION_FAILED: ${text}`);
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: { "accept": "application/json", ...authHeaders },
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 400) {
+          throw new ValidationFailedError(`VALIDATION_FAILED: ${text}`);
+        }
+        throw new Error(`Export failed: ${res.status} ${res.statusText}`);
       }
-      throw new Error(`Export failed: ${res.status} ${res.statusText}`);
-    }
 
-    archive = (await res.json()) as StateBackupArchive;
+      archive = (await res.json()) as StateBackupArchive;
+    }
+  } finally {
+    spinner?.stop();
   }
 
   const outputFile = options?.outputFile
@@ -248,42 +262,55 @@ export async function importCommand(
 
   let result: ImportProjectResult;
 
-  if (options.stateBackupService) {
-    result = await options.stateBackupService.importProject({
-      targetOrgId,
-      targetProjectId: targetProject,
-      archive,
-      overwriteKv: options.overwriteKv,
-    });
-  } else {
-    const rawUrl = options.controlPlaneUrl ??
-      Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
-      DEFAULT_CONTROL_PLANE_URL;
-    const baseUrl = rawUrl.replace(/\/+$/, "");
-    const authHeaders = await resolveAuthHeader(options);
+  const spinner = (
+    typeof Deno.stdout.isTerminal === "function" &&
+    Deno.stdout.isTerminal() &&
+    !Deno.env.get("CI") &&
+    !Deno.env.get("NO_COLOR")
+  )
+    ? createSpinner().start(`Importing state archive into '${targetProject}'...`)
+    : null;
 
-    const res = await fetch(`${baseUrl}/import`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...authHeaders },
-      body: JSON.stringify({
+  try {
+    if (options.stateBackupService) {
+      result = await options.stateBackupService.importProject({
         targetOrgId,
         targetProjectId: targetProject,
         archive,
         overwriteKv: options.overwriteKv,
-      }),
-    });
+      });
+    } else {
+      const rawUrl = options.controlPlaneUrl ??
+        Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
+        DEFAULT_CONTROL_PLANE_URL;
+      const baseUrl = rawUrl.replace(/\/+$/, "");
+      const authHeaders = await resolveAuthHeader(options);
 
-    if (!res.ok) {
-      const text = await res.text();
-      if (res.status === 409) {
-        throw new ConflictError(`CONFLICT: ${text}`);
-      } else if (res.status === 400) {
-        throw new ValidationFailedError(`VALIDATION_FAILED: ${text}`);
+      const res = await fetch(`${baseUrl}/import`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          targetOrgId,
+          targetProjectId: targetProject,
+          archive,
+          overwriteKv: options.overwriteKv,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 409) {
+          throw new ConflictError(`CONFLICT: ${text}`);
+        } else if (res.status === 400) {
+          throw new ValidationFailedError(`VALIDATION_FAILED: ${text}`);
+        }
+        throw new Error(`Import failed: ${res.status} ${res.statusText}`);
       }
-      throw new Error(`Import failed: ${res.status} ${res.statusText}`);
-    }
 
-    result = (await res.json()) as ImportProjectResult;
+      result = (await res.json()) as ImportProjectResult;
+    }
+  } finally {
+    spinner?.stop();
   }
 
   console.log(

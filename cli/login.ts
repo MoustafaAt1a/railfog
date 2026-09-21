@@ -188,6 +188,7 @@ export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
 
   let rawToken = options?.token?.trim();
   let session: CallbackServerSession | undefined;
+  let waitingInterval: ReturnType<typeof setInterval> | undefined;
 
   try {
     // 1. Non-interactive flow: explicit token provided
@@ -277,6 +278,26 @@ export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
       `Waiting for authorization in browser... (Press Ctrl+C to cancel, or run with --manual to paste key)`,
     );
 
+    // Live waiting pulse animation if terminal is interactive
+    if (
+      typeof Deno.stdout.isTerminal === "function" &&
+      Deno.stdout.isTerminal() &&
+      !Deno.env.get("CI") &&
+      !Deno.env.get("NO_COLOR")
+    ) {
+      const startTime = Date.now();
+      waitingInterval = setInterval(() => {
+        const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+        if (elapsedSec > 0) {
+          Deno.stdout.writeSync(
+            new TextEncoder().encode(
+              `\r\x1b[2K\x1b[38;2;89;168;216m[i]\x1b[39m Waiting for authorization in browser... \x1b[2m(${elapsedSec}s elapsed)\x1b[22m [Ctrl+C to cancel]`,
+            ),
+          );
+        }
+      }, 1000);
+    }
+
     // Await token from loopback callback server
     let tokenFromCallback: string | undefined;
     let orgIdFromCallback: string | undefined;
@@ -338,6 +359,13 @@ export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
       keyNameFromCallback,
     );
   } finally {
+    if (waitingInterval !== undefined) {
+      clearInterval(waitingInterval);
+      waitingInterval = undefined;
+      if (typeof Deno.stdout.isTerminal === "function" && Deno.stdout.isTerminal()) {
+        Deno.stdout.writeSync(new TextEncoder().encode("\r\x1b[2K"));
+      }
+    }
     // spec: contracts/platform.contract.md#PLAT-19 — Ensure listener teardown on all exit paths
     if (session) {
       try {

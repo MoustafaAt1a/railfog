@@ -348,6 +348,7 @@ export function renderModernTable(
 /**
  * Renders an ASCII visual progress bar.
  * Example: [==========----------] 50%  (2.4 MB / 4.8 MB)
+ * Shimmer: [=====>====----------] 50%  (2.4 MB / 4.8 MB)  1.8 MB/s
  */
 export function renderProgressBar(
   current: number,
@@ -356,6 +357,8 @@ export function renderProgressBar(
     width?: number;
     label?: string;
     unit?: string;
+    frame?: number;
+    speed?: string;
   },
 ): string {
   const width = options?.width ?? 24;
@@ -363,11 +366,18 @@ export function renderProgressBar(
   const filledCount = Math.round(pct * width);
   const emptyCount = width - filledCount;
 
-  const filledChar = "=";
-  const emptyChar = "-";
+  let bar: string;
+  if (options?.frame !== undefined && filledCount >= 3) {
+    const sweepPos = options.frame % filledCount;
+    let filledStr = "";
+    for (let i = 0; i < filledCount; i++) {
+      filledStr += i === sweepPos ? ">" : "=";
+    }
+    bar = colors.accent(filledStr) + colors.border("-".repeat(emptyCount));
+  } else {
+    bar = colors.accent("=".repeat(filledCount)) + colors.border("-".repeat(emptyCount));
+  }
 
-  const bar = colors.accent(filledChar.repeat(filledCount)) +
-    colors.border(emptyChar.repeat(emptyCount));
   const percentText = `${Math.round(pct * 100)}%`.padStart(4);
 
   let extra = "";
@@ -375,6 +385,9 @@ export function renderProgressBar(
     extra = ` ${colors.dim(options.label)}`;
   } else if (options?.unit) {
     extra = ` ${colors.dim(`(${current}/${total} ${options.unit})`)}`;
+  }
+  if (options?.speed) {
+    extra += ` ${colors.slate(options.speed)}`;
   }
 
   return `[${bar}] ${colors.bold(percentText)}${extra}`;

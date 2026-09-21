@@ -129,6 +129,7 @@ export class TerminalSpinner implements Spinner {
   private frameIndex = 0;
   private timerId: ReturnType<typeof setInterval> | undefined = undefined;
   private running = false;
+  private startTime = 0;
 
   constructor(options?: SpinnerOptions) {
     this.stream = options?.stream ?? Deno.stdout;
@@ -167,6 +168,7 @@ export class TerminalSpinner implements Spinner {
     this.message = message;
     this.frameIndex = 0;
     this.running = true;
+    this.startTime = Date.now();
 
     // spec: docs/contracts/platform.contract.md#PLAT-19 — Animated interactive render vs static fallback
     if (this.isInteractive) {
@@ -178,8 +180,12 @@ export class TerminalSpinner implements Spinner {
       this.timerId = setInterval(() => {
         this.frameIndex = (this.frameIndex + 1) % SPINNER_FRAMES.length;
         const currentFrame = SPINNER_FRAMES[this.frameIndex];
+        const elapsed = Date.now() - this.startTime;
+        const timeBadge = elapsed >= 1000
+          ? ` ${dim(`(${(elapsed / 1000).toFixed(1)}s)`)}`
+          : "";
         this.write(
-          `${CLEAR_LINE}${COLOR_CYAN}${currentFrame}${COLOR_RESET} ${this.message}`,
+          `${CLEAR_LINE}${COLOR_CYAN}${currentFrame}${COLOR_RESET} ${this.message}${timeBadge}`,
         );
       }, this.intervalMs);
     }

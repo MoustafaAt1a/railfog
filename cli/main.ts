@@ -597,6 +597,134 @@ export function findClosestCommand(cmd: string): string | null {
   return closest;
 }
 
+/**
+ * Prompts the user to select an action in the interactive Project Launcher.
+ * Supports smooth Arrow Up/Down navigation and Enter/number selection.
+ */
+async function promptActionSelection(appName: string, cwd: string): Promise<string> {
+  const actions = [
+    { key: "1", cmd: "dev", desc: "Start local development server with hot-reload" },
+    { key: "2", cmd: "status", desc: "Inspect local functions, routes & providers" },
+    { key: "3", cmd: "check", desc: "Run Qodana inspections on railfog.toml" },
+    { key: "4", cmd: "deploy", desc: "Deploy project to Railway / RailFog Cloud" },
+    { key: "5", cmd: "logs", desc: "Stream cloud runtime execution logs" },
+    { key: "0", cmd: "help", desc: "Display full CLI reference manual" },
+  ];
+
+  // Try raw interactive arrow-key navigation if both stdin and stdout are interactive TTYs
+  if (
+    typeof Deno.stdin.setRaw === "function" &&
+    typeof Deno.stdin.isTerminal === "function" &&
+    Deno.stdin.isTerminal() &&
+    typeof Deno.stdout.isTerminal === "function" &&
+    Deno.stdout.isTerminal() &&
+    !Deno.env.get("CI")
+  ) {
+    let selectedIndex = 0;
+
+    const renderLines = () => {
+      const cardLines = [
+        `Active Project: ${colors.bold(colors.accent(appName))}`,
+        `Location:       ${cwd}`,
+        "",
+        ...actions.map((a, i) => {
+          const isSel = i === selectedIndex;
+          const ptr = isSel ? colors.accent("-->") : "   ";
+          const keyBadge = colors.accent(`[${a.key}]`);
+          const cmdText = isSel
+            ? colors.bold(colors.accent(a.cmd.padEnd(8)))
+            : colors.bold(a.cmd.padEnd(8));
+          const descText = isSel ? a.desc : colors.dim(a.desc);
+          return `${ptr} ${keyBadge} ${cmdText} ${descText}`;
+        }),
+      ];
+      return renderCard("RailFog Project Launcher", cardLines);
+    };
+
+    let lineCount = 0;
+    const draw = (initial = false) => {
+      if (!initial && lineCount > 0) {
+        Deno.stdout.writeSync(new TextEncoder().encode(`\x1b[${lineCount}A\r`));
+      }
+      const menu = renderLines();
+      const promptLine = `  ${colors.dim("Use [Up/Down] arrows or type [0-5], then press [Enter] (default: dev):")}\x1b[K\n`;
+      const fullText = menu + "\n" + promptLine;
+      Deno.stdout.writeSync(new TextEncoder().encode(fullText));
+      lineCount = fullText.split("\n").length - 1;
+    };
+
+    try {
+      Deno.stdin.setRaw(true);
+      draw(true);
+      const buf = new Uint8Array(8);
+
+      while (true) {
+        const n = await Deno.stdin.read(buf);
+        if (n === null || n === 0) break;
+
+        // Ctrl+C (3)
+        if (buf[0] === 3) {
+          Deno.stdin.setRaw(false);
+          Deno.exit(0);
+        }
+        // Enter: 13 (\r) or 10 (\n)
+        if (buf[0] === 13 || buf[0] === 10) {
+          Deno.stdin.setRaw(false);
+          return actions[selectedIndex].key;
+        }
+        // Arrow Up: \x1b[A (27, 91, 65)
+        if (buf[0] === 27 && buf[1] === 91 && buf[2] === 65) {
+          selectedIndex = (selectedIndex - 1 + actions.length) % actions.length;
+          draw();
+          continue;
+        }
+        // Arrow Down: \x1b[B (27, 91, 66)
+        if (buf[0] === 27 && buf[1] === 91 && buf[2] === 66) {
+          selectedIndex = (selectedIndex + 1) % actions.length;
+          draw();
+          continue;
+        }
+        // Digits '0' through '5'
+        const char = String.fromCharCode(buf[0]);
+        if (char >= "0" && char <= "5") {
+          Deno.stdin.setRaw(false);
+          return char;
+        }
+        // 'q' or ESC (27 without brackets)
+        if (char === "q" || (buf[0] === 27 && n === 1)) {
+          Deno.stdin.setRaw(false);
+          return "q";
+        }
+      }
+    } catch {
+      // Fallback to normal prompt if raw mode throws
+    } finally {
+      try {
+        Deno.stdin.setRaw(false);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Fallback prompt for non-raw interactive terminals
+  console.log(
+    renderCard(
+      "RailFog Project Launcher",
+      [
+        `Active Project: ${colors.bold(colors.accent(appName))}`,
+        `Location:       ${cwd}`,
+        "",
+        ...actions.map((a) =>
+          `  ${colors.accent(`[${a.key}]`)} ${colors.bold(a.cmd.padEnd(8))} ${a.desc}`
+        ),
+      ],
+    ),
+  );
+  const choice = prompt("Select an action [0-5] (default: 1 dev):");
+  return choice?.trim().toLowerCase() ?? "";
+}
+
 export async function main(args: string[] = Deno.args): Promise<void> {
   // spec: PLAT-19, T-0814 AC 1 — Top-level --version and -v flag handling
   if (
@@ -1438,25 +1566,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           }
 
           if (hasToml) {
-            console.log(
-              renderCard(
-                "RailFog Project Launcher",
-                [
-                  `Active Project: ${colors.bold(colors.accent(appName))}`,
-                  `Location:       ${Deno.cwd()}`,
-                  "",
-                  `  ${colors.accent("[1]")} ${colors.bold("dev")}       Start local development server with hot-reload`,
-                  `  ${colors.accent("[2]")} ${colors.bold("status")}    Inspect local functions, routes & providers`,
-                  `  ${colors.accent("[3]")} ${colors.bold("check")}     Run Qodana inspections on railfog.toml`,
-                  `  ${colors.accent("[4]")} ${colors.bold("deploy")}    Deploy project to Railway / RailFog Cloud`,
-                  `  ${colors.accent("[5]")} ${colors.bold("logs")}      Stream cloud runtime execution logs`,
-                  `  ${colors.accent("[0]")} ${colors.bold("help")}      Display full CLI reference manual`,
-                ],
-              ),
-            );
-
-            const choice = prompt("Select an action [0-5] (default: 1 dev):");
-            const trimmed = choice?.trim().toLowerCase() ?? "";
+            const trimmed = await promptActionSelection(appName, Deno.cwd());
 
             if (trimmed === "1" || trimmed === "dev" || trimmed === "") {
               await devCommand(Deno.cwd());
