@@ -589,8 +589,6 @@ const KNOWN_COMMANDS = [
   "sync",
   "completions",
   "completion",
-  "logo",
-  "banner",
 ];
 
 export function findClosestCommand(cmd: string): string | null {
@@ -1554,54 +1552,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
-    case "logo":
-    case "banner": {
-      let animated = false;
-      let durationMs = 0;
-      let colorScheme: "white-gray" | "white" | "gray" | undefined;
-      for (let i = 1; i < args.length; i++) {
-        const arg = args[i];
-        if (arg === "-h" || arg === "--help") {
-          console.log(`RailFog CLI - Locomotive Logo & Brand Banner
 
-Usage:
-  rail logo [options]
-
-Options:
-  -c, --color <scheme>  Monochrome color scheme: white-gray (default), white, gray
-  -a, --animate         Run the locomotive pulse animation
-  -d, --duration <sec>  Duration to run animation in seconds (default: continuous)
-  -h, --help            Show this help message
-`);
-          return;
-        } else if ((arg === "-c" || arg === "--color") && args[i + 1]) {
-          const val = args[i + 1];
-          if (val === "white" || val === "gray" || val === "white-gray") {
-            colorScheme = val;
-          }
-          i++;
-        } else if (arg.startsWith("--color=")) {
-          const val = arg.slice("--color=".length);
-          if (val === "white" || val === "gray" || val === "white-gray") {
-            colorScheme = val;
-          }
-        } else if (arg === "-a" || arg === "--animate" || arg === "--animated") {
-          animated = true;
-        } else if ((arg === "-d" || arg === "--duration") && args[i + 1]) {
-          durationMs = parseFloat(args[i + 1]) * 1000;
-          i++;
-        } else if (arg.startsWith("--duration=")) {
-          durationMs = parseFloat(arg.slice("--duration=".length)) * 1000;
-        }
-      }
-
-      if (animated) {
-        await animateSteamTrain({ durationMs, version: CLI_VERSION });
-      } else {
-        console.log(renderBrandHeader(CLI_VERSION, "production", { colorScheme }));
-      }
-      break;
-    }
     default:
       if (!command) {
         // Interactive Project Launcher: when executed without arguments inside an active project in a TTY terminal
