@@ -12,7 +12,7 @@
 
 import { dirname, isAbsolute, join, normalize, relative } from "@std/path";
 import { parse } from "@std/toml";
-import { colors, renderInspectionGutter, renderModernTable } from "./ui.ts";
+import { colors, renderInspectionGutter } from "./ui.ts";
 
 // spec: contracts/functions.contract.md#FN-5 — Resource limits ceilings
 export const DEFAULT_MEMORY_MB = 128;

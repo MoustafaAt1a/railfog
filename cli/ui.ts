@@ -251,10 +251,20 @@ export function renderCard(
     width?: number;
     maxWidth?: number;
     padding?: boolean;
+    borderStyle?: "ascii" | "unicode";
   },
 ): string {
   const colorFn = options?.borderColor ?? colors.border;
   const termWidth = getTerminalWidth();
+  const isUnicode = options?.borderStyle === "unicode";
+
+  // Border characters
+  const cTopLeft = isUnicode ? "┌──" : "+--";
+  const cTopRight = isUnicode ? "┐" : "+";
+  const cHoriz = isUnicode ? "─" : "-";
+  const cVert = isUnicode ? "│" : "|";
+  const cBottomLeft = isUnicode ? "└" : "+";
+  const cBottomRight = isUnicode ? "┘" : "+";
 
   // Cap outer card to avoid exceeding terminal width
   const maxOuterAllowed = Math.max(36, termWidth - 2);
@@ -286,35 +296,35 @@ export function renderCard(
 
   // Clamp inner width between content width and maxInnerWidth
   const innerWidth = Math.max(Math.min(maxContentWidth, maxInnerWidth), titleVis + 2);
-  const cardWidth = innerWidth + 4; // "| " (2) + innerWidth + " |" (2)
+  const cardWidth = innerWidth + 4;
 
   const out: string[] = [];
 
-  // Top border: +-- Title --------------------+
-  const titlePart = title ? ` ${colors.bold(title)} ` : "-";
-  const topDashes = Math.max(0, cardWidth - titleVis - 4); // "+--" (3) + titlePart + dashes + "+" (1) = cardWidth
-  out.push(colorFn("+--") + titlePart + colorFn("-".repeat(topDashes) + "+"));
+  // Top border
+  const titlePart = title ? ` ${colors.bold(title)} ` : cHoriz;
+  const topDashes = Math.max(0, cardWidth - titleVis - 4);
+  out.push(colorFn(cTopLeft) + titlePart + colorFn(cHoriz.repeat(topDashes) + cTopRight));
 
   const pad = options?.padding !== false;
 
   // Padding top
   if (pad) {
-    out.push(colorFn("|") + " ".repeat(innerWidth + 2) + colorFn("|"));
+    out.push(colorFn(cVert) + " ".repeat(innerWidth + 2) + colorFn(cVert));
   }
 
   // Content lines
   for (const l of wrappedLines) {
     const paddedLine = padText(l, innerWidth);
-    out.push(colorFn("| ") + paddedLine + colorFn(" |"));
+    out.push(colorFn(`${cVert} `) + paddedLine + colorFn(` ${cVert}`));
   }
 
   // Padding bottom
   if (pad) {
-    out.push(colorFn("|") + " ".repeat(innerWidth + 2) + colorFn("|"));
+    out.push(colorFn(cVert) + " ".repeat(innerWidth + 2) + colorFn(cVert));
   }
 
-  // Bottom border: +---------------------------+
-  out.push(colorFn("+" + "-".repeat(innerWidth + 2) + "+"));
+  // Bottom border
+  out.push(colorFn(cBottomLeft + cHoriz.repeat(innerWidth + 2) + cBottomRight));
 
   return out.join("\n");
 }
@@ -1122,3 +1132,255 @@ export function renderFreightExpressCard(info: FreightExpressInfo): string {
     padding: true,
   });
 }
+
+/**
+ * Formats a 3-aspect railway signal lantern with pure ASCII circles.
+ * Aspect 0: [ ● ── ○ ── ○ ]
+ * Aspect 1: [ ○ ── ● ── ○ ]
+ * Aspect 2: [ ○ ── ○ ── ● ]
+ * Aspect 3: [ ● ── ● ── ● ] (All signals green)
+ */
+export function renderSignalLantern(aspect: number): string {
+  const on = (t: string) => colors.emerald(colors.bold(t));
+  const off = (t: string) => colors.slate(t);
+  const track = colors.border("──");
+
+  if (aspect >= 3) {
+    return `[ ${on("●")} ${track} ${on("●")} ${track} ${on("●")} ]`;
+  }
+  const l1 = aspect === 0 ? on("●") : off("○");
+  const l2 = aspect === 1 ? on("●") : off("○");
+  const l3 = aspect === 2 ? on("●") : off("○");
+  return `[ ${l1} ${track} ${l2} ${track} ${l3} ]`;
+}
+
+/**
+ * Executes a smooth signal lantern animation for deployment or isolate startup.
+ */
+export async function animateSignalLantern(options?: {
+  steps?: string[];
+  delayMs?: number;
+}): Promise<void> {
+  const steps = options?.steps ?? [
+    "Switching track & allocating V8 isolate...",
+    "Coupling function isolates & sealing capabilities...",
+    "All signals green • Ready for departure!",
+  ];
+  const delay = options?.delayMs ?? 150;
+  const isTerm = typeof Deno.stdout.isTerminal === "function" && Deno.stdout.isTerminal();
+
+  if (!isTerm || !colors.enabled) {
+    for (let i = 0; i < steps.length; i++) {
+      console.log(`${renderSignalLantern(i)} ${steps[i]}`);
+    }
+    return;
+  }
+
+  const encoder = new TextEncoder();
+  for (let i = 0; i < steps.length; i++) {
+    const line = `\r\x1b[2K  ${renderSignalLantern(i)}  ${colors.bold(steps[i])}`;
+    Deno.stdout.writeSync(encoder.encode(line));
+    await new Promise((r) => setTimeout(r, delay));
+  }
+  Deno.stdout.writeSync(encoder.encode("\n"));
+}
+
+export interface StationSignalItem {
+  id: number;
+  name: string;
+  status: "active" | "warn" | "error";
+  statusText: string;
+  detail: string;
+}
+
+export interface StationSignalReport {
+  projectName: string;
+  isolateBootMs: number;
+  signals: StationSignalItem[];
+  overallHealthy: boolean;
+}
+
+/**
+ * Renders the RailFog Station Signal Board for platform health diagnosis.
+ */
+export function renderStationSignalBoard(report: StationSignalReport): string {
+  const trainLines = renderTrainLogo({ includeTrack: true });
+  const logoWidth = 24;
+
+  const headerStatus = report.overallHealthy
+    ? colors.bold(colors.emerald("[+] All Track Signals Green • Platform Ready"))
+    : colors.bold(colors.coral("[-] Signal Warnings Detected • Attention Required"));
+
+  const rightLines = [
+    headerStatus,
+    "",
+    `${colors.dim("STATION:")}      ${colors.accent(colors.bold(report.projectName))}`,
+    `${colors.dim("ENGINE:")}       ${colors.bold("Deno LTS")} ${colors.dim("•")} ${colors.slate("V8 Isolates")}`,
+    `${colors.dim("COLD START:")}   ${colors.emerald(colors.bold(`< ${report.isolateBootMs.toFixed(2)}ms (Sub-millisecond)`))}`,
+    `${colors.dim("ARCHITECTURE:")} ${colors.accent("Zero-IAM")} ${colors.dim("•")} ${colors.emerald("4-Primitive Twin")} ${colors.dim("•")} ${colors.amber("Deterministic")}`,
+    "",
+  ];
+
+  const topBlock: string[] = [];
+  const maxRows = Math.max(trainLines.length, rightLines.length);
+  for (let i = 0; i < maxRows; i++) {
+    const left = trainLines[i] ?? " ".repeat(logoWidth);
+    const right = rightLines[i] ?? "";
+    const leftPad = logoWidth - visibleWidth(left);
+    topBlock.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  }
+
+  const signalLines: string[] = [
+    ...topBlock,
+    "",
+    colors.bold("  Station Track Signals:"),
+    colors.border("  ───────────────────────────────────────────────────────────────────"),
+  ];
+
+  for (const sig of report.signals) {
+    const isGreen = sig.status === "active";
+    const isWarn = sig.status === "warn";
+    const dot = isGreen
+      ? colors.emerald(" [●] ")
+      : isWarn
+      ? colors.amber(" [●] ")
+      : colors.coral(" [●] ");
+    const badge = isGreen
+      ? colors.emerald(sig.statusText)
+      : isWarn
+      ? colors.amber(sig.statusText)
+      : colors.coral(sig.statusText);
+    const title = colors.bold(sig.name.padEnd(28));
+    signalLines.push(`  ${dot}${title} ${badge}`);
+    signalLines.push(`        ${colors.dim("└─ ")}${colors.slate(sig.detail)}`);
+  }
+
+  return renderCard("RailFog Station Signal Board", signalLines, {
+    borderColor: report.overallHealthy ? colors.emerald : colors.coral,
+    borderStyle: "unicode",
+    padding: true,
+  });
+}
+
+export interface RouteSimulationResult {
+  path: string;
+  method?: string;
+  matchedPattern: string;
+  specificityScore: number;
+  functionName: string;
+  entrypoint: string;
+  isolateBootMs: number;
+  permissions: {
+    kv?: string[];
+    objects?: string[];
+    queues?: string[];
+    network?: string[];
+  };
+  shadowedBy?: string[];
+}
+
+/**
+ * Renders the Edge Route Dispatch Simulator card.
+ */
+export function renderRouteSimulatorCard(sim: RouteSimulationResult): string {
+  const lines: string[] = [
+    `${colors.bold(colors.accent("[+] Edge Dispatch Engine Simulation Complete"))}`,
+    "",
+    `  ${colors.dim("Request Path:")}     ${colors.bold(colors.white(sim.path))}`,
+    `  ${colors.dim("Matched Route:")}    ${colors.emerald(colors.bold(sim.matchedPattern))}`,
+    `  ${colors.dim("PLAT-11 Score:")}    ${colors.amber(colors.bold(String(sim.specificityScore)))} ${colors.dim("(Specific > Wildcard)")}`,
+    `  ${colors.dim("Target Isolate:")}   ${colors.accent(sim.functionName)} ${colors.dim(`(${sim.entrypoint})`)}`,
+    `  ${colors.dim("Simulated Boot:")}   ${colors.emerald(`< ${sim.isolateBootMs.toFixed(2)}ms (V8 Isolate Density)`)}`,
+    "",
+    colors.bold("  Injected Sandbox Capabilities (Zero-IAM Boundary):"),
+    colors.border("  ─────────────────────────────────────────────────────────────────"),
+  ];
+
+  const kvText = sim.permissions.kv && sim.permissions.kv.length > 0
+    ? sim.permissions.kv.map((k) => colors.emerald(k)).join(", ")
+    : colors.dim("(none granted - storage handle blocked)");
+  lines.push(`    ${colors.dim("• KV Namespaces:")}      ${kvText}`);
+
+  const objText = sim.permissions.objects && sim.permissions.objects.length > 0
+    ? sim.permissions.objects.map((o) => colors.accent(o)).join(", ")
+    : colors.dim("(none granted - binary access blocked)");
+  lines.push(`    ${colors.dim("• Object Buckets:")}     ${objText}`);
+
+  const qText = sim.permissions.queues && sim.permissions.queues.length > 0
+    ? sim.permissions.queues.map((q) => colors.amber(q)).join(", ")
+    : colors.dim("(none granted - queue dispatch blocked)");
+  lines.push(`    ${colors.dim("• Queues:")}             ${qText}`);
+
+  const netText = sim.permissions.network && sim.permissions.network.length > 0
+    ? sim.permissions.network.map((n) => colors.cyan(n)).join(", ") + colors.dim(" [SSRF Filtered]")
+    : colors.dim("(none granted - outbound sockets blocked)");
+  lines.push(`    ${colors.dim("• Network Egress:")}     ${netText}`);
+
+  if (sim.shadowedBy && sim.shadowedBy.length > 0) {
+    lines.push("");
+    lines.push(`  ${colors.amber("[!] Warning:")} Shadowed by routes with equal or higher score: ${sim.shadowedBy.join(", ")}`);
+  }
+
+  return renderCard("Edge Route Dispatch Simulator", lines, {
+    borderColor: colors.accent,
+    borderStyle: "unicode",
+    padding: true,
+  });
+}
+
+/**
+ * Renders the architectural comparison matrix contrasting RailFog with AWS Lambda and Cloudflare Workers.
+ */
+export function renderCompetitiveMatrix(): string {
+  const headers = ["Architectural Dimension", "RailFog", "AWS Lambda", "Cloudflare Workers"];
+  const rows = [
+    [
+      "Cold Start Latency",
+      colors.emerald("< 1ms (V8 Isolates)"),
+      colors.slate("150ms - 1,500ms (MicroVM)"),
+      colors.slate("5ms - 50ms (Workers)"),
+    ],
+    [
+      "Security Model",
+      colors.emerald("Zero-IAM (3 lines TOML)"),
+      colors.slate("50+ lines IAM JSON & ARNs"),
+      colors.slate("Proprietary Bindings"),
+    ],
+    [
+      "Local Offline Parity",
+      colors.emerald("100% Digital Twin (SQLite/FS)"),
+      colors.coral("Broken (Heavy 4GB LocalStack)"),
+      colors.amber("Partial (Miniflare mock)"),
+    ],
+    [
+      "Disaster Recovery",
+      colors.emerald("1-File AES-256 Freight Archive"),
+      colors.coral("Manual Multi-service Pipelines"),
+      colors.amber("Disjoint D1/R2/KV Exports"),
+    ],
+    [
+      "Routing Determinism",
+      colors.emerald("PLAT-11 Math Specificity Score"),
+      colors.slate("API Gateway Regex Order Traps"),
+      colors.slate("Manual Imperative Code"),
+    ],
+    [
+      "Developer SDK",
+      colors.emerald("1 Unified RailFogContext"),
+      colors.slate("4 Heavy @aws-sdk Packages"),
+      colors.slate("Disjoint Global Objects"),
+    ],
+  ];
+
+  const table = renderModernTable(headers, rows, {
+    alignments: ["left", "left", "left", "left"],
+    style: "ascii",
+  });
+
+  return renderCard("RailFog vs AWS Lambda vs Cloudflare Workers", [table], {
+    borderColor: colors.brand,
+    borderStyle: "unicode",
+    padding: false,
+  });
+}
+

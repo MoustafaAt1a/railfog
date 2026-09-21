@@ -74,18 +74,24 @@ import {
   type UpgradeResult,
 } from "./upgrade.ts";
 import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
+import { runDoctor } from "./doctor.ts";
+import { runSimulate } from "./simulate.ts";
 import {
+  animateSignalLantern,
   animateSteamTrain,
   colors,
   glyphs,
   renderBoardingPass,
   renderBrandHeader,
   renderCard,
+  renderCompetitiveMatrix,
   renderDepartureBoard,
   renderErrorCard,
   renderFreightExpressCard,
   renderModernTable,
   renderReleaseTrainCard,
+  renderRouteSimulatorCard,
+  renderStationSignalBoard,
   renderStatusBar,
   renderTrainLogo,
   renderTree,
@@ -93,6 +99,7 @@ import {
 } from "./ui.ts";
 
 export {
+  animateSignalLantern,
   animateSteamTrain,
   checkProject,
   CLI_VERSION,
@@ -113,26 +120,33 @@ export {
   renderBoardingPass,
   renderBrandHeader,
   renderCard,
+  renderCompetitiveMatrix,
   renderDepartureBoard,
   renderErrorCard,
   renderFreightExpressCard,
   renderModernTable,
   renderReleaseTrainCard,
+  renderRouteSimulatorCard,
+  renderStationSignalBoard,
+  renderStatusBar,
   renderTrainLogo,
+  renderTree,
   rollbackCommand,
   runAdd,
   runCheck,
   runCompletions,
+  runDoctor,
   runInit,
   runInteractiveInit,
-  undeployCommand,
   runLogin,
   runLogout,
   runLogs,
   runSecrets,
+  runSimulate,
   runUpgrade,
   runUsage,
   runWhoami,
+  undeployCommand,
   wrapText,
 };
 export type {
@@ -380,6 +394,9 @@ ${colors.bold(colors.accent("== [Project & Build] =="))}
   undeploy  Safely undeploy and remove a project from the cloud
   status    Show status of functions and routes in railfog.toml
   check     Validate railfog.toml configuration and route patterns
+  simulate  Simulate edge route dispatch & capability matrix (alias: sim)
+  doctor    Inspect platform health, track signals & V8 isolate benchmark
+  compare   Display architectural comparison vs AWS Lambda & Cloudflare
   add       Add a dependency or primitive to deno.json
 
 ${colors.bold(colors.accent("== [Security & Identity] =="))}
@@ -407,6 +424,32 @@ ${colors.bold("Options:")}
   -h, --help     Show help information
 
 ${colors.amber(colors.bold("[Tip]"))} Run 'rail <command> --help' for detailed documentation on any command.`);
+}
+
+function printDoctorHelp(): void {
+  console.log(`RailFog CLI - Platform health & track signal inspector
+
+Usage:
+  rail doctor [options]
+
+Options:
+  -c, --compare    Display architectural comparison vs AWS Lambda & Cloudflare Workers
+  -h, --help       Show help for doctor command`);
+}
+
+function printSimulateHelp(): void {
+  console.log(`RailFog CLI - Edge route dispatch & capability simulator
+
+Usage:
+  rail simulate <path> [options]
+
+Arguments:
+  <path>              HTTP request path to evaluate (e.g. /api/users/123)
+
+Options:
+  -m, --method <str>  HTTP method to simulate (default: GET)
+  --dir <path>        Target project directory (default: current directory)
+  -h, --help          Show help for simulate command`);
 }
 
 function printLoginHelp(): void {
@@ -596,6 +639,10 @@ const KNOWN_COMMANDS = [
   "deploy",
   "status",
   "check",
+  "doctor",
+  "simulate",
+  "sim",
+  "compare",
   "add",
   "login",
   "logout",
@@ -640,6 +687,8 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
     { key: "3", tag: "[CHECK]", cmd: "check", desc: "Inspect track & signal (Validate railfog.toml schema)" },
     { key: "4", tag: "[DEPLOY]", cmd: "deploy", desc: "Board express to cloud (Deploy revision to Edge)" },
     { key: "5", tag: "[LOGS]", cmd: "logs", desc: "Stream runtime logs (Follow execution traffic)" },
+    { key: "6", tag: "[DOCTOR]", cmd: "doctor", desc: "Inspect station signals & V8 isolate health" },
+    { key: "7", tag: "[SIMULATE]", cmd: "simulate", desc: "Simulate edge route dispatch & capabilities" },
     { key: "0", tag: "[HELP]", cmd: "help", desc: "Station handbook (Display full CLI command manual)" },
   ];
 
@@ -665,8 +714,8 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
           const keyBadge = colors.accent(`[${a.key}]`);
           const tagBadge = isSel ? colors.bold(colors.white(a.tag)) : colors.slate(a.tag);
           const cmdText = isSel
-            ? colors.bold(colors.accent(a.cmd.padEnd(7)))
-            : colors.bold(a.cmd.padEnd(7));
+            ? colors.bold(colors.accent(a.cmd.padEnd(8)))
+            : colors.bold(a.cmd.padEnd(8));
           const descText = isSel ? a.desc : colors.dim(a.desc);
           return `${ptr} ${keyBadge} ${tagBadge} ${cmdText} ${descText}`;
         }),
@@ -680,7 +729,7 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
         Deno.stdout.writeSync(new TextEncoder().encode(`\x1b[${lineCount}A\r`));
       }
       const menu = renderLines();
-      const promptLine = `  ${colors.dim("Use [Up/Down] arrows or type [0-5], then press [Enter] (default: dev):")}\x1b[K\n`;
+      const promptLine = `  ${colors.dim("Use [Up/Down] arrows or type [0-7], then press [Enter] (default: dev):")}\x1b[K\n`;
       const fullText = menu + "\n" + promptLine;
       Deno.stdout.writeSync(new TextEncoder().encode(fullText));
       lineCount = fullText.split("\n").length - 1;
@@ -753,7 +802,7 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
       ],
     ),
   );
-  const choice = prompt("Select an action [0-5] (default: 1 dev):");
+  const choice = prompt("Select an action [0-7] (default: 1 dev):");
   return choice?.trim().toLowerCase() ?? "";
 }
 
@@ -876,6 +925,66 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       if (exitCode !== 0) {
         Deno.exit(exitCode);
       }
+      break;
+    }
+    case "doctor": {
+      let compare = false;
+      let targetPath: string | undefined;
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printDoctorHelp();
+          return;
+        }
+        if (arg === "-c" || arg === "--compare") {
+          compare = true;
+        } else if (!arg.startsWith("-") && !targetPath) {
+          targetPath = arg;
+        }
+      }
+      const res = await runDoctor({ cwd: targetPath ?? Deno.cwd(), compare });
+      if (!res.healthy) {
+        Deno.exit(1);
+      }
+      break;
+    }
+    case "simulate":
+    case "sim": {
+      let method: string | undefined;
+      let targetPath: string | undefined;
+      let targetDir: string | undefined;
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printSimulateHelp();
+          return;
+        }
+        if (arg === "-m" || arg === "--method") {
+          method = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--method=")) {
+          method = arg.slice("--method=".length);
+        } else if (arg === "--dir" && args[i + 1]) {
+          targetDir = args[i + 1];
+          i++;
+        } else if (!arg.startsWith("-") && !targetPath) {
+          targetPath = arg;
+        }
+      }
+      if (!targetPath) {
+        targetPath = "/";
+      }
+      try {
+        await runSimulate(targetPath, { cwd: targetDir ?? Deno.cwd(), method });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        Deno.exit(1);
+      }
+      break;
+    }
+    case "compare": {
+      console.log("\n" + renderCompetitiveMatrix() + "\n");
       break;
     }
     case "dev": {
@@ -1615,6 +1724,12 @@ export async function main(args: string[] = Deno.args): Promise<void> {
               return;
             } else if (trimmed === "5" || trimmed === "logs") {
               await main(["logs"]);
+              return;
+            } else if (trimmed === "6" || trimmed === "doctor") {
+              await runDoctor({ cwd: Deno.cwd() });
+              return;
+            } else if (trimmed === "7" || trimmed === "simulate") {
+              await runSimulate("/", { cwd: Deno.cwd() });
               return;
             } else if (trimmed === "0" || trimmed === "help") {
               printGeneralHelp();

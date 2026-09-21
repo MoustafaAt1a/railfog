@@ -1,15 +1,20 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
+  animateSignalLantern,
   animateSteamTrain,
   colors,
   getTerminalWidth,
   renderBoardingPass,
   renderBrandHeader,
   renderCard,
+  renderCompetitiveMatrix,
   renderDepartureBoard,
   renderErrorCard,
   renderFreightExpressCard,
   renderReleaseTrainCard,
+  renderRouteSimulatorCard,
+  renderSignalLantern,
+  renderStationSignalBoard,
   renderTrainLogo,
   stripAnsi,
   visibleWidth,
@@ -225,5 +230,78 @@ Deno.test("UI (Unit): renderFreightExpressCard formats state export and restore 
   });
   assertStringIncludes(resCard, "Freight Express: State Restore");
   assertStringIncludes(resCard, "RESTORE COMPLETE");
+});
+
+Deno.test("UI (Unit): renderSignalLantern formats 3-aspect railway signal lantern correctly", () => {
+  const aspect0 = stripAnsi(renderSignalLantern(0));
+  assertEquals(aspect0, "[ ● ── ○ ── ○ ]");
+
+  const aspect1 = stripAnsi(renderSignalLantern(1));
+  assertEquals(aspect1, "[ ○ ── ● ── ○ ]");
+
+  const aspect2 = stripAnsi(renderSignalLantern(2));
+  assertEquals(aspect2, "[ ○ ── ○ ── ● ]");
+
+  const aspect3 = stripAnsi(renderSignalLantern(3));
+  assertEquals(aspect3, "[ ● ── ● ── ● ]");
+});
+
+Deno.test("UI (Unit): animateSignalLantern executes without throwing", async () => {
+  await animateSignalLantern({ delayMs: 1, steps: ["Step 1", "Step 2"] });
+});
+
+Deno.test("UI (Unit): renderStationSignalBoard formats multi-track diagnostics correctly", () => {
+  const board = renderStationSignalBoard({
+    projectName: "test-station",
+    isolateBootMs: 0.42,
+    overallHealthy: true,
+    signals: [
+      { id: 1, name: "V8 Cold Start", status: "active", statusText: "PASS", detail: "Local isolate ready in 0.42ms" },
+      { id: 2, name: "Storage Twin", status: "active", statusText: "PASS", detail: "SQLite backend responsive" },
+    ],
+  });
+  assertStringIncludes(board, "RailFog Station Signal Board");
+  assertStringIncludes(board, "test-station");
+  assertStringIncludes(board, "V8 Cold Start");
+  assertStringIncludes(board, "Storage Twin");
+  assertStringIncludes(board, "0.42ms");
+  assertStringIncludes(board, "PASS");
+});
+
+Deno.test("UI (Unit): renderRouteSimulatorCard displays route simulation metrics", () => {
+  const card = renderRouteSimulatorCard({
+    method: "POST",
+    path: "/api/orders/checkout",
+    matchedPattern: "/api/orders/*",
+    specificityScore: 21,
+    functionName: "orders-api",
+    entrypoint: "functions/orders.ts",
+    isolateBootMs: 0.35,
+    permissions: {
+      kv: ["orders_kv"],
+      objects: [],
+      queues: ["order_events"],
+      network: ["api.stripe.com"],
+    },
+  });
+  assertStringIncludes(card, "Edge Route Dispatch Simulator");
+  assertStringIncludes(card, "/api/orders/checkout");
+  assertStringIncludes(card, "/api/orders/*");
+  assertStringIncludes(card, "orders-api");
+  assertStringIncludes(card, "functions/orders.ts");
+  assertStringIncludes(card, "orders_kv");
+  assertStringIncludes(card, "api.stripe.com");
+});
+
+Deno.test("UI (Unit): renderCompetitiveMatrix formats architecture comparison table without emojis", () => {
+  const matrix = renderCompetitiveMatrix();
+  assertStringIncludes(matrix, "RailFog vs AWS Lambda vs Cloudflare Workers");
+  assertStringIncludes(matrix, "AWS Lambda");
+  assertStringIncludes(matrix, "Cloudflare Workers");
+  assertStringIncludes(matrix, "Local Offline Parity");
+  assertStringIncludes(matrix, "100% Digital Twin (SQLite/FS)");
+  assertStringIncludes(matrix, "Disaster Recovery");
+  // Ensure no emojis
+  assertEquals(/[\u{1F300}-\u{1F9FF}]/u.test(matrix), false, "Competitive matrix must have 0 emojis");
 });
 

@@ -12,7 +12,7 @@ import { join, resolve } from "@std/path";
 import { parse } from "@std/toml";
 import { LocalEncryptedSecretStore } from "../packages/policy/secret-store.ts";
 import { SecretRedactor } from "../packages/logging/secret-redactor.ts";
-import { colors, renderModernTable, renderStatusBar } from "./ui.ts";
+import { renderModernTable, renderStatusBar } from "./ui.ts";
 
 // spec: tasks/milestone-0.5-developer-experience/T-0506-cli-secrets-management.md — Valid secret identifier regex
 export const VALID_SECRET_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
