@@ -83,6 +83,7 @@ import {
   renderModernTable,
   renderStatusBar,
   renderTree,
+  wrapText,
 } from "./ui.ts";
 
 export {
@@ -120,6 +121,7 @@ export {
   runUpgrade,
   runUsage,
   runWhoami,
+  wrapText,
 };
 export type {
   AddOptions,

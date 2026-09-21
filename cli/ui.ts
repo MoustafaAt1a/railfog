@@ -20,6 +20,8 @@ import { isColorSupported } from "./spinner.ts";
 
 // deno-lint-ignore no-control-regex
 const ANSI_REGEX = /\x1b\[[0-9;?]*[a-zA-Z]/g;
+// deno-lint-ignore no-control-regex
+const ANSI_PREFIX_REGEX = /^\x1b\[[0-9;?]*[a-zA-Z]/;
 
 /**
  * Strips ANSI escape sequences from text to measure real visible width.
@@ -150,7 +152,10 @@ export function padText(
 export function getTerminalWidth(): number {
   try {
     if (typeof Deno.consoleSize === "function") {
-      return Math.min(Deno.consoleSize().columns || 80, 100);
+      const cols = Deno.consoleSize().columns;
+      if (typeof cols === "number" && cols > 0) {
+        return Math.max(cols, 40);
+      }
     }
   } catch {
     // Fallback
@@ -159,7 +164,80 @@ export function getTerminalWidth(): number {
 }
 
 /**
+ * Wraps text into multiple lines respecting ANSI escape sequences and word boundaries.
+ */
+export function wrapText(text: string, maxWidth: number): string[] {
+  if (maxWidth <= 10) maxWidth = 10;
+  if (visibleWidth(text) <= maxWidth) {
+    return [text];
+  }
+
+  const lines: string[] = [];
+  const paragraphs = text.split("\n");
+
+  for (const para of paragraphs) {
+    if (visibleWidth(para) <= maxWidth) {
+      lines.push(para);
+      continue;
+    }
+
+    const indentMatch = para.match(/^(\s+)/);
+    const lineIndent = indentMatch ? indentMatch[1] : "";
+    const trimmedPara = para.trimStart();
+    const words = trimmedPara.split(/\s+/);
+    let currentLine = lineIndent;
+
+    for (const word of words) {
+      if (!word) continue;
+
+      if (currentLine === lineIndent) {
+        if (visibleWidth(currentLine + word) > maxWidth) {
+          // Hard wrap a single word that exceeds maxWidth
+          let rem = word;
+          while (visibleWidth(currentLine + rem) > maxWidth) {
+            let sliceIdx = 0;
+            let curVis = visibleWidth(currentLine);
+            while (sliceIdx < rem.length && curVis < maxWidth) {
+              if (rem[sliceIdx] === "\x1b") {
+                const m = rem.slice(sliceIdx).match(ANSI_PREFIX_REGEX);
+                if (m) {
+                  sliceIdx += m[0].length;
+                  continue;
+                }
+              }
+              sliceIdx++;
+              curVis = visibleWidth(currentLine + rem.slice(0, sliceIdx));
+            }
+            lines.push(currentLine + rem.slice(0, sliceIdx));
+            rem = rem.slice(sliceIdx);
+            currentLine = lineIndent;
+          }
+          currentLine = lineIndent + rem;
+        } else {
+          currentLine += word;
+        }
+      } else {
+        const candidate = currentLine + " " + word;
+        if (visibleWidth(candidate) <= maxWidth) {
+          currentLine = candidate;
+        } else {
+          lines.push(currentLine);
+          currentLine = lineIndent + word;
+        }
+      }
+    }
+
+    if (currentLine && currentLine !== lineIndent) {
+      lines.push(currentLine);
+    }
+  }
+
+  return lines;
+}
+
+/**
  * Renders a clean card with pure ASCII borders.
+ * Automatically wraps content to fit within the terminal boundaries.
  *
  * +-- Title -----------------------------+
  * |   Content                            |
@@ -171,27 +249,53 @@ export function renderCard(
   options?: {
     borderColor?: (t: string) => string;
     width?: number;
+    maxWidth?: number;
     padding?: boolean;
   },
 ): string {
   const colorFn = options?.borderColor ?? colors.border;
-  const termWidth = options?.width ?? Math.min(getTerminalWidth(), 80);
+  const termWidth = getTerminalWidth();
 
-  // Measure content lines
-  const pad = options?.padding !== false;
-  let maxContentWidth = title ? visibleWidth(title) + 6 : 20;
-  for (const l of lines) {
-    maxContentWidth = Math.max(maxContentWidth, visibleWidth(l));
+  // Cap outer card to avoid exceeding terminal width
+  const maxOuterAllowed = Math.max(36, termWidth - 2);
+  const preferredMaxOuter = options?.maxWidth ?? 80;
+  const targetOuterMax = Math.min(preferredMaxOuter, maxOuterAllowed);
+
+  // Available width for content inside "| " and " |" (4 characters total)
+  let maxInnerWidth = Math.max(20, targetOuterMax - 4);
+  if (options?.width) {
+    maxInnerWidth = Math.max(20, Math.min(options.width - 4, maxOuterAllowed - 4));
   }
-  const innerWidth = Math.max(maxContentWidth, Math.min(termWidth - 4, 76));
+
+  // Pre-wrap all lines to guarantee they never overflow maxInnerWidth
+  const wrappedLines: string[] = [];
+  const titleVis = title ? visibleWidth(title) + 2 : 1;
+  let maxContentWidth = Math.max(titleVis + 2, 20);
+
+  for (const l of lines) {
+    if (!l) {
+      wrappedLines.push("");
+      continue;
+    }
+    const chunks = wrapText(l, maxInnerWidth);
+    for (const chunk of chunks) {
+      wrappedLines.push(chunk);
+      maxContentWidth = Math.max(maxContentWidth, visibleWidth(chunk));
+    }
+  }
+
+  // Clamp inner width between content width and maxInnerWidth
+  const innerWidth = Math.max(Math.min(maxContentWidth, maxInnerWidth), titleVis + 2);
+  const cardWidth = innerWidth + 4; // "| " (2) + innerWidth + " |" (2)
 
   const out: string[] = [];
 
   // Top border: +-- Title --------------------+
   const titlePart = title ? ` ${colors.bold(title)} ` : "-";
-  const titleVis = title ? visibleWidth(title) + 2 : 1;
-  const topDashes = Math.max(0, innerWidth - titleVis + 1);
+  const topDashes = Math.max(0, cardWidth - titleVis - 4); // "+--" (3) + titlePart + dashes + "+" (1) = cardWidth
   out.push(colorFn("+--") + titlePart + colorFn("-".repeat(topDashes) + "+"));
+
+  const pad = options?.padding !== false;
 
   // Padding top
   if (pad) {
@@ -199,7 +303,7 @@ export function renderCard(
   }
 
   // Content lines
-  for (const l of lines) {
+  for (const l of wrappedLines) {
     const paddedLine = padText(l, innerWidth);
     out.push(colorFn("| ") + paddedLine + colorFn(" |"));
   }
@@ -217,6 +321,7 @@ export function renderCard(
 
 /**
  * Renders an actionable ASCII error card with remediation hints.
+ * Automatically structures and wraps messages, locations, and solution hints.
  */
 export function renderErrorCard(err: {
   code: string;
@@ -229,7 +334,17 @@ export function renderErrorCard(err: {
 }): string {
   const lines: string[] = [];
 
-  lines.push(`${colors.coral(colors.bold("[-]"))}  ${colors.bold(err.message)}`);
+  // If the error message has "Available commands:", split into structured blocks
+  const rawMsg = err.message;
+  if (rawMsg.includes(". Available commands: ")) {
+    const parts = rawMsg.split(". Available commands: ");
+    lines.push(`${colors.coral(colors.bold("[-]"))}  ${colors.bold(parts[0] + ".")}`);
+    lines.push("");
+    lines.push(`   ${colors.dim("Available commands:")}`);
+    lines.push(`   ${colors.slate(parts[1])}`);
+  } else {
+    lines.push(`${colors.coral(colors.bold("[-]"))}  ${colors.bold(rawMsg)}`);
+  }
 
   if (err.location) {
     lines.push("");

@@ -1,0 +1,88 @@
+import { assertEquals, assertStringIncludes } from "@std/assert";
+import {
+  colors,
+  getTerminalWidth,
+  renderCard,
+  renderErrorCard,
+  stripAnsi,
+  visibleWidth,
+  wrapText,
+} from "../../cli/ui.ts";
+
+Deno.test("UI (Unit): wrapText wraps long lines at word boundaries", () => {
+  const text = "This is a long sentence that should be wrapped across multiple lines cleanly.";
+  const wrapped = wrapText(text, 25);
+  for (const line of wrapped) {
+    assertEquals(visibleWidth(line) <= 25, true, `Line should be <= 25 cols: "${line}"`);
+  }
+  assertEquals(wrapped.join(" "), text);
+});
+
+Deno.test("UI (Unit): wrapText preserves leading indentation on wrapped continuation lines", () => {
+  const text = "   init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets";
+  const wrapped = wrapText(text, 35);
+  assertEquals(wrapped.length > 1, true, "Should wrap into multiple lines");
+  for (const line of wrapped) {
+    assertEquals(line.startsWith("   "), true, `Continuation line should preserve indent: "${line}"`);
+    assertEquals(visibleWidth(line) <= 35, true, `Line width <= 35: "${line}"`);
+  }
+});
+
+Deno.test("UI (Unit): wrapText handles ANSI escape sequences without measuring escape chars", () => {
+  const colored = `${colors.coral("Error:")} ${colors.bold("This is a styled error message that must wrap without breaking color codes.")}`;
+  const wrapped = wrapText(colored, 30);
+  for (const line of wrapped) {
+    assertEquals(visibleWidth(line) <= 30, true, `Visible width should be <= 30: "${stripAnsi(line)}"`);
+  }
+});
+
+Deno.test("UI (Unit): renderCard produces uniform width across top border, content, and bottom border", () => {
+  const card = renderCard("Test Card", [
+    "Short line",
+    "A much longer line that provides more details inside the card component",
+  ], { width: 60 });
+
+  const lines = card.split("\n");
+  const firstLineWidth = visibleWidth(lines[0]);
+
+  for (let i = 0; i < lines.length; i++) {
+    const w = visibleWidth(lines[i]);
+    assertEquals(w, firstLineWidth, `Line ${i} width (${w}) must equal first line width (${firstLineWidth})`);
+  }
+});
+
+Deno.test("UI (Unit): renderCard automatically wraps long lines without overflowing box width", () => {
+  const longContent = "A".repeat(120);
+  const card = renderCard("Overflow Test", [longContent], { width: 50 });
+
+  const lines = card.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const w = visibleWidth(lines[i]);
+    assertEquals(w <= 50, true, `Line ${i} width (${w}) should be <= 50 cols`);
+  }
+});
+
+Deno.test("UI (Unit): renderErrorCard formats UNKNOWN_COMMAND responsively without border corruption", () => {
+  const card = renderErrorCard({
+    code: "UNKNOWN_COMMAND",
+    message: 'Error: Unknown command "xyz". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, completions',
+    solution: 'Did you mean "rail dev"?\nRun \'rail --help\' to see all available commands.',
+  });
+
+  const lines = card.split("\n");
+  const expectedWidth = visibleWidth(lines[0]);
+
+  for (let i = 0; i < lines.length; i++) {
+    const w = visibleWidth(lines[i]);
+    assertEquals(w, expectedWidth, `Error card line ${i} width (${w}) must match top border (${expectedWidth})`);
+  }
+
+  assertStringIncludes(card, "Unknown command");
+  assertStringIncludes(card, "Available commands:");
+  assertStringIncludes(card, "How to fix:");
+});
+
+Deno.test("UI (Unit): getTerminalWidth returns a safe positive number", () => {
+  const w = getTerminalWidth();
+  assertEquals(w >= 40, true, `Terminal width should be at least 40: ${w}`);
+});
