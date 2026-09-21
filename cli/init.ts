@@ -370,10 +370,10 @@ export function renderSummaryBox(
     "Project created successfully!",
     "",
     "Created files:",
-    ...filesList.map((f) => `  • ${f}`),
+    ...filesList.map((f) => `  * ${f}`),
     "",
     "Configured deno.json tasks:",
-    ...tasksList.map((t) => `  • ${t}`),
+    ...tasksList.map((t) => `  * ${t}`),
     "",
     "Next steps:",
     ...nextSteps.map((s) => `  ${s}`),
@@ -387,14 +387,14 @@ export function renderSummaryBox(
   }
   const innerWidth = maxLen + 4;
 
-  const top = "┌" + "─".repeat(innerWidth) + "┐";
-  const bottom = "└" + "─".repeat(innerWidth) + "┘";
+  const top = "+" + "-".repeat(innerWidth) + "+";
+  const bottom = "+" + "-".repeat(innerWidth) + "+";
   const output: string[] = [top];
 
   for (const line of contentLines) {
     const padded = "  " + line;
     const padRight = " ".repeat(Math.max(0, innerWidth - padded.length));
-    output.push("│" + padded + padRight + "│");
+    output.push("|" + padded + padRight + "|");
   }
   output.push(bottom);
 

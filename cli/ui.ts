@@ -78,23 +78,25 @@ export const colors = {
 };
 
 /**
- * Unicode icons and glyphs.
+ * Clean ASCII icons and status tags.
+ * Pure 7-bit ASCII characters guarantee universal cross-platform rendering
+ * on all terminal emulators, codepages, and shell environments.
  */
 export const glyphs = {
-  success: colors.emerald("✔"),
-  fail: colors.coral("✖"),
-  info: colors.accent("ℹ"),
-  warn: colors.amber("⚠"),
-  arrow: colors.accent("➜"),
-  subArrow: colors.slate("↳"),
-  bullet: colors.brand("●"),
-  sparkle: colors.purple("✦"),
-  cloud: colors.accent("☁"),
-  shield: colors.brand("🛡️"),
-  key: colors.amber("🔑"),
-  box: colors.accent("📦"),
-  rocket: colors.accent("🚀"),
-  dot: colors.dim("·"),
+  success: colors.emerald("[+]"),
+  fail: colors.coral("[-]"),
+  info: colors.accent("[i]"),
+  warn: colors.amber("[!]"),
+  arrow: colors.accent("->"),
+  subArrow: colors.slate("|->"),
+  bullet: colors.brand("*"),
+  sparkle: colors.purple("*"),
+  cloud: colors.accent("[cloud]"),
+  shield: colors.brand("[sec]"),
+  key: colors.amber("[key]"),
+  box: colors.accent("[pkg]"),
+  rocket: colors.accent("=>"),
+  dot: colors.dim("-"),
 };
 
 /**
@@ -155,11 +157,11 @@ export function getTerminalWidth(): number {
 }
 
 /**
- * Renders a modern card with rounded borders.
+ * Renders a clean card with pure ASCII borders.
  *
- * ╭─ Title ──────────────────────────────╮
- * │  Content                            │
- * ╰──────────────────────────────────────╯
+ * +-- Title -----------------------------+
+ * |   Content                            |
+ * +--------------------------------------+
  */
 export function renderCard(
   title: string,
@@ -175,7 +177,7 @@ export function renderCard(
 
   // Measure content lines
   const pad = options?.padding !== false;
-  let maxContentWidth = title ? visibleWidth(title) + 4 : 20;
+  let maxContentWidth = title ? visibleWidth(title) + 6 : 20;
   for (const l of lines) {
     maxContentWidth = Math.max(maxContentWidth, visibleWidth(l));
   }
@@ -183,36 +185,36 @@ export function renderCard(
 
   const out: string[] = [];
 
-  // Top border: ╭─ Title ───────╮
-  const titlePart = title ? ` ${colors.bold(title)} ` : "─";
+  // Top border: +-- Title --------------------+
+  const titlePart = title ? ` ${colors.bold(title)} ` : "-";
   const titleVis = title ? visibleWidth(title) + 2 : 1;
-  const topDashes = Math.max(0, innerWidth - titleVis + 2);
-  out.push(colorFn("╭─") + titlePart + colorFn("─".repeat(topDashes) + "╮"));
+  const topDashes = Math.max(0, innerWidth - titleVis + 1);
+  out.push(colorFn("+--") + titlePart + colorFn("-".repeat(topDashes) + "+"));
 
   // Padding top
   if (pad) {
-    out.push(colorFn("│") + " ".repeat(innerWidth + 2) + colorFn("│"));
+    out.push(colorFn("|") + " ".repeat(innerWidth + 2) + colorFn("|"));
   }
 
   // Content lines
   for (const l of lines) {
     const paddedLine = padText(l, innerWidth);
-    out.push(colorFn("│ ") + paddedLine + colorFn(" │"));
+    out.push(colorFn("| ") + paddedLine + colorFn(" |"));
   }
 
   // Padding bottom
   if (pad) {
-    out.push(colorFn("│") + " ".repeat(innerWidth + 2) + colorFn("│"));
+    out.push(colorFn("|") + " ".repeat(innerWidth + 2) + colorFn("|"));
   }
 
-  // Bottom border: ╰────────────╯
-  out.push(colorFn("╰" + "─".repeat(innerWidth + 2) + "╯"));
+  // Bottom border: +---------------------------+
+  out.push(colorFn("+" + "-".repeat(innerWidth + 2) + "+"));
 
   return out.join("\n");
 }
 
 /**
- * Renders an actionable Claude Code / Cloudflare style error card with remediation hints.
+ * Renders an actionable ASCII error card with remediation hints.
  */
 export function renderErrorCard(err: {
   code: string;
@@ -225,7 +227,7 @@ export function renderErrorCard(err: {
 }): string {
   const lines: string[] = [];
 
-  lines.push(`${colors.coral(colors.bold("✖"))}  ${colors.bold(err.message)}`);
+  lines.push(`${colors.coral(colors.bold("[-]"))}  ${colors.bold(err.message)}`);
 
   if (err.location) {
     lines.push("");
@@ -235,7 +237,7 @@ export function renderErrorCard(err: {
   const remedy = err.solution || err.hint;
   if (remedy) {
     lines.push("");
-    lines.push(`   ${colors.amber(colors.bold("💡 How to fix:"))}`);
+    lines.push(`   ${colors.amber(colors.bold(">> How to fix:"))}`);
     const remedyLines = remedy.split("\n");
     for (const r of remedyLines) {
       lines.push(`   ${colors.slate(r)}`);
@@ -259,14 +261,14 @@ export function renderErrorCard(err: {
 }
 
 /**
- * Renders a modern Unicode table with clean borders.
+ * Renders a table with pure ASCII borders.
  */
 export function renderModernTable(
   headers: string[],
   rows: string[][],
   options?: {
     alignments?: Array<"left" | "right" | "center">;
-    style?: "rounded" | "clean" | "compact";
+    style?: "ascii" | "clean";
   },
 ): string {
   if (!headers || headers.length === 0) return "";
@@ -285,48 +287,48 @@ export function renderModernTable(
   }
 
   const alignments = options?.alignments ?? [];
-  const style = options?.style ?? "rounded";
+  const style = options?.style ?? "ascii";
 
-  if (style === "rounded") {
+  if (style === "ascii") {
     const out: string[] = [];
-    // ╭──────┬──────╮
-    const top = "╭" + colWidths.map((w) => "─".repeat(w + 2)).join("┬") + "╮";
+    // +------+------+
+    const top = "+" + colWidths.map((w) => "-".repeat(w + 2)).join("+") + "+";
     out.push(colors.border(top));
 
-    // │ Header │ Header │
+    // | Header | Header |
     const hCells = headers.map((h, i) =>
       " " + colors.bold(colors.accent(padText(h, colWidths[i], alignments[i] ?? "left"))) + " "
     );
-    out.push(colors.border("│") + hCells.join(colors.border("│")) + colors.border("│"));
+    out.push(colors.border("|") + hCells.join(colors.border("|")) + colors.border("|"));
 
-    // ├──────┼──────┤
-    const mid = "├" + colWidths.map((w) => "─".repeat(w + 2)).join("┼") + "┤";
+    // +------+------+
+    const mid = "+" + colWidths.map((w) => "-".repeat(w + 2)).join("+") + "+";
     out.push(colors.border(mid));
 
-    // │ Data │ Data │
+    // | Data | Data |
     for (const row of safeRows) {
       const cells = [];
       for (let i = 0; i < colCount; i++) {
         const val = row[i] ?? "";
         cells.push(" " + padText(val, colWidths[i], alignments[i] ?? "left") + " ");
       }
-      out.push(colors.border("│") + cells.join(colors.border("│")) + colors.border("│"));
+      out.push(colors.border("|") + cells.join(colors.border("|")) + colors.border("|"));
     }
 
-    // ╰──────┴──────╯
-    const bot = "╰" + colWidths.map((w) => "─".repeat(w + 2)).join("┴") + "╯";
+    // +------+------+
+    const bot = "+" + colWidths.map((w) => "-".repeat(w + 2)).join("+") + "+";
     out.push(colors.border(bot));
     return out.join("\n");
   }
 
-  // Clean / Modern minimal style
+  // Clean / minimal style
   const out: string[] = [];
   const hCells = headers.map((h, i) =>
     colors.bold(colors.accent(padText(h, colWidths[i], alignments[i] ?? "left")))
   );
   out.push("  " + hCells.join("   "));
 
-  const divCells = colWidths.map((w) => "─".repeat(w));
+  const divCells = colWidths.map((w) => "-".repeat(w));
   out.push(colors.border("  " + divCells.join("   ")));
 
   for (const row of safeRows) {
@@ -342,8 +344,8 @@ export function renderModernTable(
 }
 
 /**
- * Renders a visual Unicode progress bar.
- * Example: [██████████░░░░░░░░░░] 50%  (2.4 MB / 4.8 MB)
+ * Renders an ASCII visual progress bar.
+ * Example: [==========----------] 50%  (2.4 MB / 4.8 MB)
  */
 export function renderProgressBar(
   current: number,
@@ -359,8 +361,8 @@ export function renderProgressBar(
   const filledCount = Math.round(pct * width);
   const emptyCount = width - filledCount;
 
-  const filledChar = "█";
-  const emptyChar = "░";
+  const filledChar = "=";
+  const emptyChar = "-";
 
   const bar = colors.accent(filledChar.repeat(filledCount)) +
     colors.border(emptyChar.repeat(emptyCount));
@@ -377,15 +379,15 @@ export function renderProgressBar(
 }
 
 /**
- * Renders the official RailFog CLI Brand Header.
+ * Renders the official RailFog CLI Brand Header in pure ASCII.
  */
 export function renderBrandHeader(version: string, envName: string = "production"): string {
-  const logo = colors.brand(colors.bold("▲ RailFog"));
+  const logo = colors.brand(colors.bold("[RailFog]"));
   const verBadge = colors.bgMuted(`v${version}`);
   const envBadge = envName === "production"
     ? colors.bgSuccess("production")
     : colors.bgAccent(envName);
-  const tagline = colors.dim("Minimal Edge Infrastructure · Functions · KV · Objects · Queues");
+  const tagline = colors.dim("Minimal Edge Infrastructure - Functions - KV - Objects - Queues");
 
   return [
     `  ${logo}  ${verBadge}  ${envBadge}`,

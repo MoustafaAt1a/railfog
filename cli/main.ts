@@ -171,7 +171,7 @@ export async function addCommand(
   cwd: string = Deno.cwd(),
 ): Promise<AddResult> {
   const result = await runAdd({ packageOrPrimitive, cwd });
-  console.log(`✓ Added ${result.addedImport} to deno.json`);
+  console.log(`${glyphs.success} Added ${result.addedImport} to deno.json`);
   return result;
 }
 
@@ -295,7 +295,7 @@ function printGeneralHelp(): void {
 ${colors.bold("Usage:")}
   rail <command> [options]
 
-${colors.bold(colors.accent("⚡ Development & Deployment:"))}
+${colors.bold(colors.accent("== Development & Deployment =="))}
   init      Initialize a new RailFog project in the current directory
   dev       Start the local development server with hot-reload
   deploy    Deploy functions and configuration to the Control Plane
@@ -304,12 +304,12 @@ ${colors.bold(colors.accent("⚡ Development & Deployment:"))}
   check     Validate railfog.toml configuration and route patterns
   add       Add a dependency or primitive to deno.json
 
-${colors.bold(colors.accent("🔐 Authentication & Identity:"))}
+${colors.bold(colors.accent("== Authentication & Identity =="))}
   login     Authenticate your session via browser or API token
   logout    Log out and remove local credentials
   whoami    Display currently authenticated organization and key
 
-${colors.bold(colors.accent("📊 Operations & Reliability:"))}
+${colors.bold(colors.accent("== Operations & Reliability =="))}
   logs      Stream and filter structured runtime logs
   secrets   Manage encrypted project secrets (set, list, delete)
   rollback  Rollback a function to a previous revision instantly
@@ -318,7 +318,7 @@ ${colors.bold(colors.accent("📊 Operations & Reliability:"))}
   export    Export project state to a disaster recovery archive
   import    Import and restore project state from a disaster recovery archive
 
-${colors.bold(colors.accent("🔄 Maintenance:"))}
+${colors.bold(colors.accent("== Maintenance =="))}
   upgrade   Upgrade the RailFog CLI to the latest version
   update    Alias for upgrade subcommand
   sync      Sync CLI with the latest git updates (alias for update)
@@ -327,7 +327,7 @@ ${colors.bold("Options:")}
   -v, --version  Show CLI version
   -h, --help     Show help information
 
-${colors.dim("💡 Tip: Run 'rail <command> --help' for detailed documentation on any command.")}`);
+${colors.dim("Tip: Run 'rail <command> --help' for detailed documentation on any command.")}`);
 }
 
 function printLoginHelp(): void {

@@ -138,7 +138,7 @@ async function verifyAndSaveToken(
     if (!res.ok) {
       // spec: contracts/platform.contract.md#PLAT-15 — Zero raw secret leakage in errors
       console.error(
-        `\x1b[31m✗ Authentication failed: Invalid or revoked API key (status ${res.status}).\x1b[0m`,
+        `\x1b[31m[-] Authentication failed: Invalid or revoked API key (status ${res.status}).\x1b[0m`,
       );
       return { ok: false, orgId: "" };
     }
@@ -159,7 +159,7 @@ async function verifyAndSaveToken(
       configPath,
     );
 
-    console.log(`\n\x1b[32m✓ Successfully authenticated as ${orgId}!\x1b[0m`);
+    console.log(`\n\x1b[32m[+] Successfully authenticated as ${orgId}!\x1b[0m`);
     console.log(`Credentials saved to ~/.railfog/config.json\n`);
 
     return { ok: true, orgId };
@@ -167,7 +167,7 @@ async function verifyAndSaveToken(
     const msg = err instanceof Error ? err.message : String(err);
     // spec: contracts/platform.contract.md#PLAT-15 — Zero raw secret leakage on network error
     const sanitized = sanitizeError(msg, rawToken);
-    console.error(`\x1b[31m✗ Connection error: ${sanitized}\x1b[0m`);
+    console.error(`\x1b[31m[-] Connection error: ${sanitized}\x1b[0m`);
     return { ok: false, orgId: "" };
   }
 }
@@ -323,7 +323,7 @@ export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
       await session.close();
       session = undefined;
       const sanitized = sanitizeError(errMsg);
-      console.error(`\x1b[31m✗ Authorization error: ${sanitized}\x1b[0m`);
+      console.error(`\x1b[31m[-] Authorization error: ${sanitized}\x1b[0m`);
       return { ok: false, orgId: "" };
     }
 
@@ -355,7 +355,7 @@ export async function runLogout(
   options?: { configPath?: string },
 ): Promise<void> {
   await clearCliConfig(options?.configPath);
-  console.log(`\x1b[32m✓ Successfully logged out of RailFog.\x1b[0m`);
+  console.log(`\x1b[32m[+] Successfully logged out of RailFog.\x1b[0m`);
 }
 
 /**

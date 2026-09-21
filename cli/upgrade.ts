@@ -213,7 +213,7 @@ function printUpgradeBox(installedPath: string, targetVersion: string): void {
     `   ${colors.dim("Target:")}    ${colors.bold(colors.emerald(targetVersion))}`,
     `   ${colors.dim("Location:")}  ${colors.slate(installedPath)}`,
     "",
-    `   ${colors.amber("💡 Next:")}      Run 'rail --version' or 'rail --help' to verify.`,
+    `   ${colors.amber(">> Next:")}      Run 'rail --version' or 'rail --help' to verify.`,
   ], {
     borderColor: colors.emerald,
   });
