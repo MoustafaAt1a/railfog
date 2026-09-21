@@ -17,8 +17,9 @@ const STYLE_BOLD = "\x1b[1m";
 const STYLE_DIM = "\x1b[2m";
 const STYLE_RESET = "\x1b[22m";
 
-const SYMBOL_SUCCESS = "✔";
-const SYMBOL_FAIL = "✖";
+// JetBrains / RailFog pure ASCII status indicators
+export const SYMBOL_SUCCESS = "[+]";
+export const SYMBOL_FAIL = "[-]";
 
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0804-terminal-status-spinners.md#Acceptance criteria AC1
 // Cycling frames: Braille step indicator characters
@@ -117,6 +118,8 @@ export interface SpinnerOptions {
   intervalMs?: number;
   style?: SpinnerStyle;
   frames?: readonly string[] | string[];
+  successSymbol?: string;
+  failSymbol?: string;
 }
 
 export interface Spinner {
@@ -142,10 +145,14 @@ export class TerminalSpinner implements Spinner {
   private running = false;
   private startTime = 0;
   private frames: readonly string[];
+  private successSymbol: string;
+  private failSymbol: string;
 
   constructor(options?: SpinnerOptions) {
     this.stream = options?.stream ?? Deno.stdout;
     this.intervalMs = options?.intervalMs ?? DEFAULT_INTERVAL_MS;
+    this.successSymbol = options?.successSymbol ?? SYMBOL_SUCCESS;
+    this.failSymbol = options?.failSymbol ?? SYMBOL_FAIL;
     if (options?.frames && options.frames.length > 0) {
       this.frames = options.frames;
     } else if (options?.style && SPINNER_STYLES[options.style]) {
@@ -248,10 +255,10 @@ export class TerminalSpinner implements Spinner {
 
     if (this.isInteractive) {
       this.write(
-        `${CLEAR_LINE}${CURSOR_SHOW}${COLOR_GREEN}${SYMBOL_SUCCESS}${COLOR_RESET}${formattedMsg}\n`,
+        `${CLEAR_LINE}${CURSOR_SHOW}${COLOR_GREEN}${this.successSymbol}${COLOR_RESET}${formattedMsg}\n`,
       );
     } else {
-      this.write(`${SYMBOL_SUCCESS}${formattedMsg}\n`);
+      this.write(`${this.successSymbol}${formattedMsg}\n`);
     }
   }
 
@@ -275,10 +282,10 @@ export class TerminalSpinner implements Spinner {
 
     if (this.isInteractive) {
       this.write(
-        `${CLEAR_LINE}${CURSOR_SHOW}${COLOR_RED}${SYMBOL_FAIL}${COLOR_RESET}${formattedMsg}\n`,
+        `${CLEAR_LINE}${CURSOR_SHOW}${COLOR_RED}${this.failSymbol}${COLOR_RESET}${formattedMsg}\n`,
       );
     } else {
-      this.write(`${SYMBOL_FAIL}${formattedMsg}\n`);
+      this.write(`${this.failSymbol}${formattedMsg}\n`);
     }
   }
 

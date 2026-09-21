@@ -3,7 +3,7 @@
 // cli/upgrade.ts — RailFog CLI self-upgrade engine and version checking
 
 import { CLI_VERSION } from "./version.ts";
-import { createSpinner } from "./spinner.ts";
+import { createWheelSpinner } from "./spinner.ts";
 import { runInstaller } from "../scripts/install.ts";
 import { join } from "@std/path";
 import { colors, glyphs, renderCard } from "./ui.ts";
@@ -411,7 +411,7 @@ export async function runUpgrade(
   }
 
   // spec: PLAT-19, T-0814 AC 4, 5 — Execute installer with progress spinner
-  const spinner = createSpinner();
+  const spinner = createWheelSpinner();
   const commitSuffix = resolvedCommit ? ` (${resolvedCommit.slice(0, 7)})` : "";
   spinner.start(
     options?.local

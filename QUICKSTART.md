@@ -220,10 +220,10 @@ rail deploy
 Deployment output:
 
 ```text
-✔ Packaging function sources and calculating SHA-256 hashes
-✔ Validating configuration and capability permissions
-✔ Uploading snapshot bundle to Control Plane
-✔ Verifying deployment activation and health check
+[+] Packaging function sources and calculating SHA-256 hashes
+[+] Validating configuration and capability permissions
+[+] Uploading snapshot bundle to Control Plane
+[+] Verifying deployment activation and health check
 
 Deployment complete!
   Project:   my-edge-app

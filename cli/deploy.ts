@@ -26,7 +26,13 @@ import { ValidationFailedError } from "../packages/errors/mod.ts";
 import { SecretRedactor } from "../packages/logging/secret-redactor.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
 import { normalizeFunctions } from "./check.ts";
-import { bold, createSpinner, dim, green } from "./spinner.ts";
+import {
+  bold,
+  createSignalSpinner,
+  createWheelSpinner,
+  dim,
+  green,
+} from "./spinner.ts";
 import { renderReleaseTrainCard } from "./ui.ts";
 
 export interface DeployProgressCallbacks {
@@ -497,7 +503,7 @@ export async function runDeploy(
   // Step 1: Packaging function sources and calculating SHA-256 hashes (OBJ-4)
   // ---------------------------------------------------------------------------
   callbacks?.onStepStart?.(STEP_PACKAGING);
-  const step1Spinner = !isJson ? createSpinner() : null;
+  const step1Spinner = !isJson ? createWheelSpinner() : null;
   step1Spinner?.start(STEP_PACKAGING);
 
   const packagedFunctions: Array<{
@@ -636,7 +642,7 @@ export async function runDeploy(
   // Step 2: Static validation of routes, schema, and capability permissions (PLAT-3, PLAT-6)
   // ---------------------------------------------------------------------------
   callbacks?.onStepStart?.(STEP_VALIDATION);
-  const step2Spinner = !isJson ? createSpinner() : null;
+  const step2Spinner = !isJson ? createSignalSpinner() : null;
   step2Spinner?.start(STEP_VALIDATION);
 
   try {
@@ -780,7 +786,7 @@ export async function runDeploy(
   // Step 3: Uploading snapshot bundle to Control Plane (PLAT-1, PLAT-8)
   // ---------------------------------------------------------------------------
   callbacks?.onStepStart?.(STEP_UPLOAD);
-  const step3Spinner = !isJson ? createSpinner() : null;
+  const step3Spinner = !isJson ? createWheelSpinner() : null;
   step3Spinner?.start(STEP_UPLOAD);
 
   let lastRevisionId = "";
@@ -894,7 +900,7 @@ export async function runDeploy(
   // Step 4: Verifying deployment activation and health check (PLAT-3)
   // ---------------------------------------------------------------------------
   callbacks?.onStepStart?.(STEP_VERIFICATION);
-  const step4Spinner = !isJson ? createSpinner() : null;
+  const step4Spinner = !isJson ? createSignalSpinner() : null;
   step4Spinner?.start(STEP_VERIFICATION);
 
   try {

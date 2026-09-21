@@ -29,7 +29,7 @@ import {
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
-import { createSpinner } from "./spinner.ts";
+import { createTrackSpinner } from "./spinner.ts";
 import { renderFreightExpressCard, renderStatusBar } from "./ui.ts";
 
 export interface ExportCommandOptions {
@@ -109,7 +109,7 @@ export async function exportCommand(
     !Deno.env.get("CI") &&
     !Deno.env.get("NO_COLOR")
   )
-    ? createSpinner().start(`Exporting disaster recovery snapshot for '${projectName}'...`)
+    ? createTrackSpinner().start(`Exporting disaster recovery snapshot for '${projectName}'...`)
     : null;
 
   try {
@@ -276,7 +276,7 @@ export async function importCommand(
     !Deno.env.get("CI") &&
     !Deno.env.get("NO_COLOR")
   )
-    ? createSpinner().start(`Importing state archive into '${targetProject}'...`)
+    ? createTrackSpinner().start(`Importing state archive into '${targetProject}'...`)
     : null;
 
   try {

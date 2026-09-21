@@ -71,13 +71,13 @@ function hasAnsiColor(text: string): boolean {
 function hasGreenOrCheckmark(text: string): boolean {
   // deno-lint-ignore no-control-regex
   const hasGreen = /\x1b\[(?:32|92)m/.test(text);
-  return hasGreen || text.includes("✔") || text.includes("√");
+  return hasGreen || text.includes("✔") || text.includes("√") || text.includes("[+]");
 }
 
 function hasRedOrCross(text: string): boolean {
   // deno-lint-ignore no-control-regex
   const hasRed = /\x1b\[(?:31|91)m/.test(text);
-  return hasRed || text.includes("✖") || text.includes("×");
+  return hasRed || text.includes("✖") || text.includes("×") || text.includes("[-]");
 }
 
 /**
@@ -284,8 +284,8 @@ Deno.test("PLAT-19: stop() halts animation and restores cursor without printing 
 
   const output = stream.text;
   assertStringIncludes(output, "\x1b[?25h", "stop() must restore cursor");
-  assertFalse(output.includes("✔"), "stop() must not print success checkmark");
-  assertFalse(output.includes("✖"), "stop() must not print failure cross");
+  assertFalse(output.includes("✔") || output.includes("[+]"), "stop() must not print success indicator");
+  assertFalse(output.includes("✖") || output.includes("[-]"), "stop() must not print failure indicator");
 });
 
 Deno.test("PLAT-19: calling stop(), succeed(), or fail() multiple times is idempotent", () => {

@@ -301,7 +301,7 @@ function hasAnsiEscape(text: string): boolean {
 function hasGreenOrCheckmark(text: string): boolean {
   // deno-lint-ignore no-control-regex
   return /\x1b\[(?:32|92)m/.test(text) || text.includes("✔") ||
-    text.includes("√");
+    text.includes("√") || text.includes("[+]");
 }
 
 /**
@@ -310,7 +310,7 @@ function hasGreenOrCheckmark(text: string): boolean {
 function hasRedOrCross(text: string): boolean {
   // deno-lint-ignore no-control-regex
   return /\x1b\[(?:31|91)m/.test(text) || text.includes("✖") ||
-    text.includes("×");
+    text.includes("×") || text.includes("[-]");
 }
 
 // ============================================================================
