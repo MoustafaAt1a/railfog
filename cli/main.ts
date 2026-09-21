@@ -75,8 +75,10 @@ import {
 } from "./upgrade.ts";
 import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
 import {
+  animateSteamTrain,
   colors,
   glyphs,
+  renderBoardingPass,
   renderBrandHeader,
   renderCard,
   renderErrorCard,
@@ -84,10 +86,13 @@ import {
   renderStatusBar,
   renderTrainLogo,
   renderTree,
+  STEAM_PARTICLES_FRAMES,
+  styleSteam,
   wrapText,
 } from "./ui.ts";
 
 export {
+  animateSteamTrain,
   checkProject,
   CLI_VERSION,
   colors,
@@ -104,6 +109,7 @@ export {
   importCommand,
   initCommand,
   printCompletionsHelp,
+  renderBoardingPass,
   renderBrandHeader,
   renderCard,
   renderErrorCard,
@@ -123,6 +129,8 @@ export {
   runUpgrade,
   runUsage,
   runWhoami,
+  STEAM_PARTICLES_FRAMES,
+  styleSteam,
   wrapText,
 };
 export type {
@@ -585,6 +593,8 @@ const KNOWN_COMMANDS = [
   "sync",
   "completions",
   "completion",
+  "logo",
+  "banner",
 ];
 
 export function findClosestCommand(cmd: string): string | null {
@@ -1545,6 +1555,41 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       const res = runCompletions(shellArg);
       if (!res.ok) {
         Deno.exit(1);
+      }
+      break;
+    }
+    case "logo":
+    case "banner": {
+      let animated = false;
+      let durationMs = 0;
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          console.log(`RailFog CLI - Locomotive Logo & Real-Time Steam Plume
+
+Usage:
+  rail logo [options]
+
+Options:
+  -a, --animate         Run the real-time live steam plume animation
+  -d, --duration <sec>  Duration to run animation in seconds (default: continuous)
+  -h, --help            Show this help message
+`);
+          return;
+        } else if (arg === "-a" || arg === "--animate" || arg === "--animated") {
+          animated = true;
+        } else if ((arg === "-d" || arg === "--duration") && args[i + 1]) {
+          durationMs = parseFloat(args[i + 1]) * 1000;
+          i++;
+        } else if (arg.startsWith("--duration=")) {
+          durationMs = parseFloat(arg.slice("--duration=".length)) * 1000;
+        }
+      }
+
+      if (animated) {
+        await animateSteamTrain({ durationMs, version: CLI_VERSION });
+      } else {
+        console.log(renderBrandHeader(CLI_VERSION));
       }
       break;
     }
