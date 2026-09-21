@@ -1150,22 +1150,39 @@ if (import.meta.main) {
 
   const port = parseInt(Deno.env.get("PORT") || "8081", 10);
   const host = Deno.env.get("HOST") || "0.0.0.0";
-  let storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR");
-  if (!storageDir) {
-    try {
-      await Deno.mkdir(".railfog/objects", { recursive: true });
-      storageDir = ".railfog/objects";
-    } catch {
-      // Fallback to /tmp/railfog/objects if current directory is not writable (e.g. unprivileged Docker container)
-      storageDir = "/tmp/railfog/objects";
+  let storage: import("../../primitives/objects/object-provider.ts").ObjectProvider;
+  const s3Endpoint = Deno.env.get("OBJECTS_ENDPOINT") || Deno.env.get("R2_ENDPOINT");
+  const s3Bucket = Deno.env.get("OBJECTS_BUCKET") || Deno.env.get("R2_BUCKET_NAME");
+  const s3AccessKey = Deno.env.get("OBJECTS_ACCESS_KEY_ID") || Deno.env.get("R2_ACCESS_KEY_ID");
+  const s3SecretKey = Deno.env.get("OBJECTS_SECRET_ACCESS_KEY") || Deno.env.get("R2_SECRET_ACCESS_KEY");
+
+  if (s3Endpoint && s3Bucket && s3AccessKey && s3SecretKey) {
+    const { R2Provider } = await import("../../providers/objects/r2-provider.ts");
+    storage = new R2Provider({
+      endpoint: s3Endpoint,
+      bucket: s3Bucket,
+      accessKeyId: s3AccessKey,
+      secretAccessKey: s3SecretKey,
+    });
+    console.log("[railfog-control] using S3/R2 remote object storage provider for artifacts");
+  } else {
+    let storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR");
+    if (!storageDir) {
       try {
-        await Deno.mkdir(storageDir, { recursive: true });
+        await Deno.mkdir(".railfog/objects", { recursive: true });
+        storageDir = ".railfog/objects";
       } catch {
-        // Best effort
+        // Fallback to /tmp/railfog/objects if current directory is not writable (e.g. unprivileged Docker container)
+        storageDir = "/tmp/railfog/objects";
+        try {
+          await Deno.mkdir(storageDir, { recursive: true });
+        } catch {
+          // Best effort
+        }
       }
     }
+    storage = new LocalFSProvider(storageDir);
   }
-  const storage = new LocalFSProvider(storageDir);
 
   const databaseUrl = Deno.env.get("DATABASE_URL");
   const redisUrl = Deno.env.get("REDIS_URL");
