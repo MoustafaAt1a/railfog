@@ -290,11 +290,17 @@ export async function startRuntimeServer(
             queueName: string,
             message: unknown,
             projectId: string,
+            messageId?: string,
           ) => Promise<void> | void,
         ) => void;
       }
     ).setQueueDispatcher(
-      async (queueName: string, message: unknown, projectId: string) => {
+      async (
+        queueName: string,
+        message: unknown,
+        projectId: string,
+        messageId?: string,
+      ) => {
         try {
           const snap = projectSnapshots.get(projectId) ?? currentSnapshot;
           if (!snap) return;
@@ -365,7 +371,7 @@ export async function startRuntimeServer(
             memoryMb: targetFnSnap.limits.memory_mb,
           };
 
-          const workerReqId = generateUlid();
+          const workerReqId = messageId ?? generateUlid();
           const rawPayload = typeof message === "string"
             ? message
             : JSON.stringify(message);
@@ -380,6 +386,7 @@ export async function startRuntimeServer(
               "x-railfog-function": targetFnName,
               "x-railfog-revision": targetFnSnap.revisionId,
               "x-railfog-org": options.orgId ?? "default-org",
+              "x-railfog-message-id": workerReqId,
               "x-request-id": workerReqId,
               "request-id": workerReqId,
               "content-type": "application/json",

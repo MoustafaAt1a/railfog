@@ -438,11 +438,12 @@ function createMockQueueBinding(
     queueName: string,
     body: unknown,
     projectId: string,
+    messageId?: string,
   ) => Promise<void> | void,
   defaultQueueName = "default",
 ): QueueBinding {
   return {
-    send(arg1: unknown, arg2?: unknown) {
+    send(arg1: unknown, arg2?: unknown, arg3?: unknown) {
       tracker.recordQueueOp();
       const id = `msg-${generateUlid()}`;
       let queue = defaultQueueName;
@@ -452,6 +453,13 @@ function createMockQueueBinding(
       if (typeof arg1 === "string" && arg2 !== undefined) {
         queue = arg1;
         body = arg2;
+        if (
+          arg3 &&
+          typeof arg3 === "object" &&
+          "delay" in (arg3 as Record<string, unknown>)
+        ) {
+          delay = (arg3 as { delay?: number }).delay ?? 0;
+        }
       } else if (
         arg2 &&
         typeof arg2 === "object" &&
@@ -468,7 +476,7 @@ function createMockQueueBinding(
                 setTimeout(r, Math.min(delay * 1000, 900000))
               );
             }
-            await queueDispatcher(queue, body, projectId);
+            await queueDispatcher(queue, body, projectId, id);
           } catch (e) {
             console.error(`[Queue Dispatcher] Error delivering ${id}:`, e);
           }
@@ -485,7 +493,7 @@ function createMockQueueBinding(
           const id = results[i].id;
           queueMicrotask(async () => {
             try {
-              await queueDispatcher(defaultQueueName, body, projectId);
+              await queueDispatcher(defaultQueueName, body, projectId, id);
             } catch (e) {
               console.error(
                 `[Queue Dispatcher] Error delivering batch ${id}:`,
@@ -521,6 +529,7 @@ export class LocalIsolationProvider implements IsolationProvider {
     queueName: string,
     body: unknown,
     projectId: string,
+    messageId?: string,
   ) => Promise<void> | void;
 
   constructor(options?: LocalIsolationOptions) {
@@ -575,6 +584,7 @@ export class LocalIsolationProvider implements IsolationProvider {
       queueName: string,
       body: unknown,
       projectId: string,
+      messageId?: string,
     ) => Promise<void> | void,
   ): void {
     this.queueDispatcher = dispatcher;
@@ -990,7 +1000,8 @@ export class LocalIsolationProvider implements IsolationProvider {
           }
         }
         const queueMsgObj: Record<string, unknown> = {
-          id: invocation?.requestId ?? ctx.requestId,
+          id: requestHeaders.get("x-railfog-message-id") ??
+            invocation?.requestId ?? ctx.requestId,
           body: parsedPayload,
           attempts: 1,
           timestamp: Date.now(),
