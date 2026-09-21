@@ -57,6 +57,7 @@ export interface DeploySummary {
   elapsedMs: number;
   runtimeUrl: string;
   functions: { name: string; route?: string }[];
+  revisions?: Record<string, string>;
 }
 
 export interface DeployCommandOptions {
@@ -207,7 +208,14 @@ function printSummaryCard(
   console.log(bold(green("Deployment complete!")));
   console.log("");
   console.log(`  ${bold("Project:")}   ${summary.project}`);
-  console.log(`  ${bold("Revision:")}  ${summary.revision}`);
+  if (summary.revisions && Object.keys(summary.revisions).length > 1) {
+    console.log(`  ${bold("Revisions:")}`);
+    for (const [fn, rev] of Object.entries(summary.revisions)) {
+      console.log(`    ${fn.padEnd(14)} ${dim("->")}  ${rev}`);
+    }
+  } else {
+    console.log(`  ${bold("Revision:")}  ${summary.revision}`);
+  }
   console.log(`  ${bold("Duration:")}  ${durationStr}`);
   console.log(`  ${bold("Runtime:")}   ${summary.runtimeUrl}`);
 
@@ -759,6 +767,7 @@ export async function runDeploy(
 
   let lastRevisionId = "";
   let lastState = "";
+  const functionRevisions: Record<string, string> = {};
   const rawUrl = options?.controlUrl ??
     options?.controlPlaneUrl ??
     safeEnvGet("RAILFOG_CONTROL_PLANE_URL") ??
@@ -790,6 +799,7 @@ export async function runDeploy(
         }
         lastRevisionId = deployRes.revisionId;
         lastState = deployRes.state;
+        functionRevisions[item.name] = deployRes.revisionId;
       }
     } else {
       for (const item of packagedFunctions) {
@@ -849,6 +859,7 @@ export async function runDeploy(
         };
         lastRevisionId = json.revisionId;
         lastState = json.state;
+        functionRevisions[item.name] = json.revisionId;
       }
     }
 
@@ -957,6 +968,7 @@ export async function runDeploy(
     elapsedMs,
     runtimeUrl,
     functions: summaryFunctions,
+    revisions: functionRevisions,
   };
 
   if (isJson) {
