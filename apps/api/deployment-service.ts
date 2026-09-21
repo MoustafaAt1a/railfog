@@ -537,6 +537,18 @@ export class DeploymentService {
   }
 
   /**
+   * Deletes a project, unregistering all revisions, active pointers, routes, and metadata.
+   * Spec-anchor: docs/contracts/platform.contract.md#PLAT-18
+   */
+  deleteProject(project: string): boolean {
+    const hadRev = this.revisions.delete(project);
+    const hadPtr = this.activePointers.delete(project);
+    const hadRts = this.projectRoutes.delete(project);
+    const hadMeta = this.projectMetadata.delete(project);
+    return hadRev || hadPtr || hadRts || hadMeta;
+  }
+
+  /**
    * Retrieves artifact bundle bytes from content-addressed object storage.
    * Spec-anchor: docs/contracts/objects.contract.md#OBJ-4
    */

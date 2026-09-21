@@ -700,8 +700,31 @@ export async function startControlServer(
 
       // Pattern: /v1/projects/:projectId/:action
       const projectMatch = pathname.match(
-        /^\/v1\/projects\/([^/]+)\/(snapshot|deploy|rollback|export|import|logs)$/,
+        /^\/v1\/projects\/([^/]+)\/(snapshot|deploy|rollback|export|import|logs|delete|undeploy)$/,
       );
+
+      // Undeploy / Delete project endpoint (PLAT-18)
+      if (
+        (projectMatch && (projectMatch[2] === "delete" || projectMatch[2] === "undeploy")) ||
+        (pathname.match(/^\/v1\/projects\/([^/]+)$/) && req.method === "DELETE")
+      ) {
+        const directMatch = pathname.match(/^\/v1\/projects\/([^/]+)$/);
+        const projectId = decodeURIComponent(
+          projectMatch ? projectMatch[1] : (directMatch ? directMatch[1] : ""),
+        );
+        const deleted = options.deploymentService.deleteProject?.(projectId) ?? false;
+        return new Response(
+          JSON.stringify({ ok: true, deleted, projectId, request_id: requestId }),
+          {
+            status: HTTP_STATUS_OK,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          },
+        );
+      }
 
       // Logs Route: Proxy to runtime data plane or return empty array
       if (projectMatch && projectMatch[2] === "logs") {

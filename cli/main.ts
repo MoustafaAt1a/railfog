@@ -33,6 +33,11 @@ import {
   type RollbackCommandResult,
 } from "./rollback.ts";
 import {
+  undeployCommand,
+  type UndeployCommandOptions,
+  type UndeployCommandResult,
+} from "./undeploy.ts";
+import {
   exportCommand,
   type ExportCommandOptions,
   importCommand,
@@ -73,6 +78,7 @@ export {
   runCheck,
   runInit,
   runInteractiveInit,
+  undeployCommand,
   runLogin,
   runLogout,
   runLogs,
@@ -483,6 +489,7 @@ const KNOWN_COMMANDS = [
   "logs",
   "secrets",
   "rollback",
+  "undeploy",
   "usage",
   "cost",
   "export",
@@ -829,6 +836,42 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           project,
           functionName,
           targetRevisionId,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        Deno.exit(1);
+      }
+      break;
+    }
+    case "undeploy": {
+      let project: string | undefined;
+      let controlPlaneUrl: string | undefined;
+
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          console.log(`Usage: rail undeploy [--project <project>] [options]`);
+          return;
+        }
+        if (arg === "--project" && args[i + 1]) {
+          project = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--project=")) {
+          project = arg.slice("--project=".length);
+        } else if (arg === "--control-plane-url" && args[i + 1]) {
+          controlPlaneUrl = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        }
+      }
+
+      try {
+        await undeployCommand({
+          cwd: Deno.cwd(),
+          controlPlaneUrl,
+          project,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
