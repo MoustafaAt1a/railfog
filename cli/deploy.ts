@@ -526,8 +526,16 @@ export async function runDeploy(
         );
       }
 
-      // Check direct path first, then fallback to functions/<entry>
+      // spec: docs/contracts/platform.contract.md#PLAT-6 — Lexical path traversal validation
       let resolvedEntry = resolve(cwd, fnConfig.entry);
+      const rel = relative(cwd, resolvedEntry);
+      if (rel.startsWith("..") || isAbsolute(rel) || rel === "") {
+        throw new ValidationFailedError(
+          `VALIDATION_FAILED: Entrypoint '${fnConfig.entry}' escapes project directory (PLAT-6)`,
+        );
+      }
+
+      // Check direct path first, then fallback to functions/<entry>
       let realEntry: string | undefined;
       try {
         const candidate = await Deno.realPath(resolvedEntry);
@@ -541,6 +549,12 @@ export async function runDeploy(
 
       if (!realEntry && !isAbsolute(fnConfig.entry)) {
         const fallback = resolve(cwd, "functions", fnConfig.entry);
+        const relFallback = relative(cwd, fallback);
+        if (relFallback.startsWith("..") || isAbsolute(relFallback) || relFallback === "") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Entrypoint '${fnConfig.entry}' escapes project directory (PLAT-6)`,
+          );
+        }
         try {
           const candidate = await Deno.realPath(fallback);
           const stat = await Deno.stat(candidate);
@@ -557,14 +571,6 @@ export async function runDeploy(
       if (!realEntry) {
         throw new ValidationFailedError(
           `VALIDATION_FAILED: Entrypoint file '${fnConfig.entry}' does not exist (PLAT-3)`,
-        );
-      }
-
-      // spec: docs/contracts/platform.contract.md#PLAT-6 — Lexical path traversal validation
-      const rel = relative(cwd, resolvedEntry);
-      if (rel.startsWith("..") || isAbsolute(rel) || rel === "") {
-        throw new ValidationFailedError(
-          `VALIDATION_FAILED: Entrypoint '${fnConfig.entry}' escapes project directory (PLAT-6)`,
         );
       }
 

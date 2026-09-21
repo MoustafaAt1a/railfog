@@ -13,6 +13,7 @@
 
 import { basename, join, relative, resolve } from "@std/path";
 import { type Choice, selectPrompt, type WriterSync } from "./prompt.ts";
+import { colors, renderTrainLogo, visibleWidth } from "./ui.ts";
 
 export interface InitOptions {
   directory: string;
@@ -334,6 +335,7 @@ function isTerminalEnvironment(writer?: WriterSync): boolean {
 
 /**
  * Renders a styled completion summary box displaying created files, configured tasks, and next steps.
+ * Incorporates the RailFog train locomotive logo and Unicode box borders in JetBrains style.
  *
  * @spec contracts/platform.contract.md#PLAT-19 — Completion summary box and next steps
  */
@@ -366,8 +368,38 @@ export function renderSummaryBox(
     "lint  - deno lint",
   ];
 
-  const contentLines: string[] = [
-    "Project created successfully!",
+  const projectName = basename(resolve(result.targetDir)) || "railfog-app";
+  const isWorkedExample = result.filesCreated.some((f) => f.includes("processor.ts"));
+  const templateName = isWorkedExample ? "Worked Example" : "Minimal Starter";
+
+  const trainLines = renderTrainLogo({
+    includeTrack: true,
+    colorScheme: "white-gray",
+  });
+  const logoWidth = 24;
+
+  const rightLines: string[] = [
+    "",
+    colors.bold(colors.emerald("[+] Project created successfully!")),
+    "",
+    `${colors.slate("Station:")}     ${colors.bold(projectName)}`,
+    `${colors.slate("Template:")}    ${colors.accent(templateName)}`,
+    `${colors.slate("Platform:")}    ${colors.dim("Deno LTS • V8 Isolates")}`,
+    `${colors.slate("Primitives:")}  ${colors.accent("FN")} ${colors.dim("•")} ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${colors.amber("QUEUES")}`,
+    "",
+    "",
+  ];
+
+  const headerLines: string[] = [];
+  const maxHeaderRows = Math.max(trainLines.length, rightLines.length);
+  for (let i = 0; i < maxHeaderRows; i++) {
+    const left = trainLines[i] ?? " ".repeat(logoWidth);
+    const right = rightLines[i] ?? "";
+    const leftPad = logoWidth - visibleWidth(left);
+    headerLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  }
+
+  const detailLines: string[] = [
     "",
     "Created files:",
     ...filesList.map((f) => `  * ${f}`),
@@ -379,26 +411,43 @@ export function renderSummaryBox(
     ...nextSteps.map((s) => `  ${s}`),
   ];
 
-  let maxLen = 40;
-  for (const line of contentLines) {
-    if (line.length > maxLen) {
-      maxLen = line.length;
+  const allContent = [...headerLines, ...detailLines];
+
+  let maxContentWidth = 64;
+  for (const line of allContent) {
+    const w = visibleWidth(line);
+    if (w > maxContentWidth) {
+      maxContentWidth = w;
     }
   }
-  const innerWidth = maxLen + 4;
 
-  const top = "+" + "-".repeat(innerWidth) + "+";
-  const bottom = "+" + "-".repeat(innerWidth) + "+";
-  const output: string[] = [top];
+  const titleText = " RailFog Station Ticket: Project Scaffolded ";
+  const titleVis = visibleWidth(titleText);
+  const totalWidth = Math.max(maxContentWidth + 6, titleVis + 8);
+  const topDashes = totalWidth - 4 - titleVis;
 
-  for (const line of contentLines) {
-    const padded = "  " + line;
-    const padRight = " ".repeat(Math.max(0, innerWidth - padded.length));
-    output.push("|" + padded + padRight + "|");
+  const borderColor = colors.emerald;
+  const top = borderColor("┌──" + titleText + "─".repeat(Math.max(0, topDashes)) + "┐");
+  const bottom = borderColor("└" + "─".repeat(Math.max(0, totalWidth - 2)) + "┘");
+  const padLine = borderColor("│") + " ".repeat(Math.max(0, totalWidth - 2)) + borderColor("│");
+
+  const output: string[] = [
+    "",
+    top,
+    padLine,
+  ];
+
+  for (const line of allContent) {
+    const vLen = visibleWidth(line);
+    const padRight = " ".repeat(Math.max(0, totalWidth - 4 - vLen));
+    output.push(borderColor("│") + "  " + line + padRight + borderColor("│"));
   }
-  output.push(bottom);
 
-  const boxText = "\n" + output.join("\n") + "\n";
+  output.push(padLine);
+  output.push(bottom);
+  output.push("");
+
+  const boxText = output.join("\n") + "\n";
   writer.writeSync(new TextEncoder().encode(boxText));
 }
 
