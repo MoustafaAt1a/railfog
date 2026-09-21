@@ -325,15 +325,48 @@ export async function startRuntimeServer(
         );
       }
 
-      // spec: contracts/platform.contract.md#PLAT-8, PLAT-11, PLAT-12 — Route matching against local snapshot
-      const requestedProject = req.headers.get("x-railfog-project")?.trim();
+      // spec: contracts/platform.contract.md#PLAT-7, PLAT-8, PLAT-11, PLAT-15 — Multi-tenant project resolution
+      let requestedProject = req.headers.get("x-railfog-project")?.trim();
+      let lookupPath = url.pathname;
+
+      // 1. Subdomain resolution: e.g. "cloud-demo.railfog-runtime-production.up.railway.app" -> "cloud-demo"
+      const hostHeader = req.headers.get("host") || url.host;
+      if (!requestedProject && hostHeader) {
+        const hostname = hostHeader.split(":")[0];
+        const parts = hostname.split(".");
+        if (parts.length >= 3) {
+          const subdomain = parts[0].toLowerCase();
+          if (
+            projectSnapshots.has(subdomain) ||
+            (currentSnapshot && options.projectId.toLowerCase() === subdomain)
+          ) {
+            requestedProject = subdomain;
+          }
+        }
+      }
+
+      // 2. Path-prefix resolution: e.g. "/cloud-demo/api/hello" -> project "cloud-demo", route "/api/hello"
+      if (!requestedProject) {
+        const candidateProjects = new Set<string>();
+        if (options.projectId) candidateProjects.add(options.projectId);
+        for (const p of projectSnapshots.keys()) candidateProjects.add(p);
+
+        for (const pId of candidateProjects) {
+          if (url.pathname === `/${pId}` || url.pathname.startsWith(`/${pId}/`)) {
+            requestedProject = pId;
+            lookupPath = url.pathname.slice(pId.length + 1) || "/";
+            break;
+          }
+        }
+      }
+
       let activeSnapshot: RoutingSnapshot | null = null;
       let winningRoute: { pattern: string; function: string } | null = null;
       let resolvedProjectId = options.projectId;
 
       if (requestedProject && projectSnapshots.has(requestedProject)) {
         const snap = projectSnapshots.get(requestedProject)!;
-        const match = matchRoute(snap.routes, url.pathname);
+        const match = matchRoute(snap.routes, lookupPath);
         if (match) {
           activeSnapshot = snap;
           winningRoute = match;
@@ -342,7 +375,7 @@ export async function startRuntimeServer(
       }
 
       if (!winningRoute && currentSnapshot && currentSnapshot.routes.length > 0) {
-        const match = matchRoute(currentSnapshot.routes, url.pathname);
+        const match = matchRoute(currentSnapshot.routes, lookupPath);
         if (match) {
           activeSnapshot = currentSnapshot;
           winningRoute = match;
@@ -353,7 +386,7 @@ export async function startRuntimeServer(
       if (!winningRoute) {
         // Match against any discovered project snapshots
         for (const [pId, snap] of projectSnapshots.entries()) {
-          const match = matchRoute(snap.routes, url.pathname);
+          const match = matchRoute(snap.routes, lookupPath);
           if (match) {
             activeSnapshot = snap;
             winningRoute = match;
@@ -465,10 +498,13 @@ export async function startRuntimeServer(
       }
 
       // spec: contracts/platform.contract.md#PLAT-4, FN-6, FN-8 — Fresh InvocationRequest container
+      const routedUrl = new URL(req.url);
+      routedUrl.pathname = lookupPath;
+
       const invocation: InvocationRequest = {
         requestId,
         method: req.method,
-        url: req.url,
+        url: routedUrl.toString(),
         headers: invocationHeaders,
         body: bodyBytes,
       };

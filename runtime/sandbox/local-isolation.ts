@@ -147,11 +147,18 @@ function getHeader(
 }
 
 /**
- * Creates an empty/mock KV binding wired to the invocation operation counter.
- * Spec-anchor: docs/contracts/functions.contract.md#FN-5.
+ * Creates a KV binding wired to the invocation operation counter and backed by a tenant-scoped persistent Map.
+ * Spec-anchor: docs/contracts/functions.contract.md#FN-5, docs/contracts/platform.contract.md#PLAT-7.
  */
-function createMockKvBinding(tracker: InvocationTracker): KVBinding {
-  const store = new Map<string, unknown>();
+function createMockKvBinding(
+  tracker: InvocationTracker,
+  store: Map<string, unknown> = new Map<string, unknown>(),
+): KVBinding {
+  const normalizeKey = (key: unknown): string => {
+    if (Array.isArray(key)) return JSON.stringify(key);
+    if (typeof key === "string") return JSON.stringify([key]);
+    return JSON.stringify(key);
+  };
 
   const builder: KVAtomicBuilder = {
     check(_key: string[], _version: number) {
@@ -160,12 +167,12 @@ function createMockKvBinding(tracker: InvocationTracker): KVBinding {
     },
     set(key: string[], value: unknown) {
       tracker.recordKvOp();
-      store.set(JSON.stringify(key), value);
+      store.set(normalizeKey(key), value);
       return this;
     },
     delete(key: string[]) {
       tracker.recordKvOp();
-      store.delete(JSON.stringify(key));
+      store.delete(normalizeKey(key));
       return this;
     },
     commit() {
@@ -174,27 +181,39 @@ function createMockKvBinding(tracker: InvocationTracker): KVBinding {
   };
 
   return {
-    get(key: string[]) {
+    get(key: string[] | string) {
       tracker.recordKvOp();
-      return Promise.resolve(store.get(JSON.stringify(key)) ?? null);
+      const normKey = normalizeKey(key);
+      if (store.has(normKey)) {
+        return Promise.resolve(store.get(normKey) ?? null);
+      }
+      if (typeof key === "string" && store.has(key)) {
+        return Promise.resolve(store.get(key) ?? null);
+      }
+      return Promise.resolve(null);
     },
-    set(key: string[], value: unknown, _opts?: { ttl?: number }) {
+    set(key: string[] | string, value: unknown, _opts?: { ttl?: number }) {
       tracker.recordKvOp();
-      store.set(JSON.stringify(key), value);
+      store.set(normalizeKey(key), value);
       return Promise.resolve();
     },
-    delete(key: string[]) {
+    delete(key: string[] | string) {
       tracker.recordKvOp();
-      store.delete(JSON.stringify(key));
+      store.delete(normalizeKey(key));
       return Promise.resolve();
     },
-    list(prefix: string[]) {
+    list(prefix: string[] | string) {
       tracker.recordKvOp();
       const keys: { key: string[]; value: unknown }[] = [];
+      const prefixArr = Array.isArray(prefix) ? prefix : [prefix];
       for (const [kStr, val] of store.entries()) {
-        const parsed = JSON.parse(kStr) as string[];
-        if (prefix.every((seg, idx) => parsed[idx] === seg)) {
-          keys.push({ key: parsed, value: val });
+        try {
+          const parsed = JSON.parse(kStr) as string[];
+          if (Array.isArray(parsed) && prefixArr.every((seg, idx) => parsed[idx] === seg)) {
+            keys.push({ key: parsed, value: val });
+          }
+        } catch {
+          // ignore non-json keys
         }
       }
       return Promise.resolve({ keys });
@@ -282,6 +301,8 @@ export class LocalIsolationProvider implements IsolationProvider {
   private readonly tempDir: string;
   private fileGeneration = 0;
   private readonly trackedOrgs = new Set<string>(KNOWN_ORG_CANDIDATES);
+  // Persistent tenant-isolated key-value stores per PLAT-7
+  private readonly projectKvStores = new Map<string, Map<string, unknown>>();
 
   constructor(options?: LocalIsolationOptions) {
     this.maxWarmInstances = options?.maxWarmInstances;
@@ -634,6 +655,13 @@ export class LocalIsolationProvider implements IsolationProvider {
       | Record<string, unknown>
       | undefined;
 
+    const tenantKey = `${meta.orgId ?? "default-org"}/${meta.project}`;
+    let kvStore = this.projectKvStores.get(tenantKey);
+    if (!kvStore) {
+      kvStore = new Map<string, unknown>();
+      this.projectKvStores.set(tenantKey, kvStore);
+    }
+
     const ctx: RailFogContext = {
       requestId: invocation?.requestId ?? generateUlid(),
       project: meta.project,
@@ -643,7 +671,7 @@ export class LocalIsolationProvider implements IsolationProvider {
       timeRemaining(): number {
         return Math.max(0, deadline - Date.now());
       },
-      kv: (customContext?.kv as KVBinding) ?? createMockKvBinding(tracker),
+      kv: (customContext?.kv as KVBinding) ?? createMockKvBinding(tracker, kvStore),
       objects: (customContext?.objects as ObjectBinding) ??
         createMockObjectBinding(tracker),
       queues: (customContext?.queues as QueueBinding) ??
