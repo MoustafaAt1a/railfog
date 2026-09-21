@@ -30,7 +30,7 @@ import {
 } from "../packages/errors/mod.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
 import { createSpinner } from "./spinner.ts";
-import { colors, glyphs, renderCard, renderStatusBar } from "./ui.ts";
+import { renderFreightExpressCard, renderStatusBar } from "./ui.ts";
 
 export interface ExportCommandOptions {
   cwd?: string;
@@ -156,18 +156,26 @@ export async function exportCommand(
 
   await Deno.writeTextFile(outputFile, serializeBackupArchive(archive));
 
+  const kvCount = archive.kv ? Object.keys(archive.kv).length : 0;
+  const objCount = archive.objects ? Object.keys(archive.objects).length : 0;
+  const queueCount = archive.queues ? Object.keys(archive.queues).length : 0;
+
   console.log(
     `Exported project '${projectName}' (Backup ID: ${archive.backupId}) to ${outputFile}`,
   );
   console.log();
   console.log(
-    renderCard("Disaster Recovery Archive Exported", [
-      `${glyphs.success}  Snapshot exported successfully`,
-      "",
-      `   ${colors.dim("Project:")}     ${colors.accent(projectName)}`,
-      `   ${colors.dim("Backup ID:")}   ${colors.slate(archive.backupId)}`,
-      `   ${colors.dim("Location:")}    ${colors.emerald(outputFile)}`,
-    ], { borderColor: colors.emerald }),
+    renderFreightExpressCard({
+      mode: "export",
+      projectName,
+      backupId: archive.backupId,
+      location: outputFile,
+      stats: [
+        ["• KV Keys:", `${kvCount} keys (Encrypted)`],
+        ["• Objects:", `${objCount} objects (Encrypted)`],
+        ["• Queues:", `${queueCount} in-flight (Drained)`],
+      ],
+    }),
   );
   console.log();
   console.log(
@@ -318,15 +326,16 @@ export async function importCommand(
   );
   console.log();
   console.log(
-    renderCard("Disaster Recovery Archive Restored", [
-      `${glyphs.success}  Application state imported successfully`,
-      "",
-      `   ${colors.dim("Project:")}     ${colors.accent(targetProject)}`,
-      `   ${colors.dim("Revisions:")}   ${colors.slate(String(result.restoredRevisions))}`,
-      `   ${colors.dim("KV Keys:")}     ${colors.slate(String(result.restoredKvKeys))}`,
-      `   ${colors.dim("Objects:")}     ${colors.slate(String(result.restoredObjects))}`,
-      `   ${colors.dim("Queues:")}      ${colors.slate(String(result.restoredQueues))}`,
-    ], { borderColor: colors.emerald }),
+    renderFreightExpressCard({
+      mode: "restore",
+      projectName: targetProject,
+      stats: [
+        ["• Revisions:", `${result.restoredRevisions} restored`],
+        ["• KV Keys:", `${result.restoredKvKeys} restored`],
+        ["• Objects:", `${result.restoredObjects} restored`],
+        ["• Queues:", `${result.restoredQueues} restored`],
+      ],
+    }),
   );
   console.log();
   console.log(

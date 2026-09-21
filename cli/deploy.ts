@@ -27,6 +27,7 @@ import { SecretRedactor } from "../packages/logging/secret-redactor.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
 import { normalizeFunctions } from "./check.ts";
 import { bold, createSpinner, dim, green } from "./spinner.ts";
+import { renderReleaseTrainCard } from "./ui.ts";
 
 export interface DeployProgressCallbacks {
   onStepStart?: (step: string) => void;
@@ -204,6 +205,17 @@ function printSummaryCard(
     ? `${summary.elapsedMs}ms`
     : `${(summary.elapsedMs / 1000).toFixed(2)}s`;
 
+  console.log("");
+  console.log(
+    renderReleaseTrainCard({
+      project: summary.project,
+      revision: summary.revision,
+      duration: durationStr,
+      runtimeUrl: summary.runtimeUrl,
+      routesCount: routes.length,
+      functionsCount: summary.revisions ? Object.keys(summary.revisions).length : 1,
+    }),
+  );
   console.log("");
   console.log(bold(green("Deployment complete!")));
   console.log("");

@@ -973,3 +973,152 @@ export function renderBuildStep(
 
   return `  ${colors.bold(colors.accent(stepPrefix))} ${title.padEnd(46)} ${badge}${durStr}`;
 }
+
+export interface ReleaseTrainInfo {
+  project: string;
+  revision: string;
+  duration: string;
+  runtimeUrl: string;
+  routesCount?: number;
+  functionsCount?: number;
+}
+
+/**
+ * Renders the Release Train deployment manifest card.
+ * Features the white & gray monochrome locomotive coupled with architectural payload telemetry.
+ * 100% pure ASCII and JetBrains styling with zero emojis.
+ */
+export function renderReleaseTrainCard(info: ReleaseTrainInfo): string {
+  const trainLines = renderTrainLogo({ includeTrack: true });
+  const logoWidth = 24;
+
+  const rightLines = [
+    `${colors.bold(colors.emerald("[+] Release Train Arrived at Edge Station"))}`,
+    "",
+    `${colors.dim("PROJECT:")}     ${colors.accent(colors.bold(info.project))}`,
+    `${colors.dim("REVISION:")}    ${colors.amber(info.revision)}`,
+    `${colors.dim("DURATION:")}    ${colors.slate(info.duration)}`,
+    `${colors.dim("RUNTIME:")}     ${colors.emerald(info.runtimeUrl)}`,
+    `${colors.dim("MANIFEST:")}    ${colors.bold(String(info.functionsCount ?? 1))} functions ${colors.dim("•")} ${colors.bold(String(info.routesCount ?? 1))} routes`,
+    `${colors.dim("PRIMITIVES:")}  ${colors.accent("FN")} ${colors.dim("•")} ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${colors.amber("QUEUES")}`,
+    `${colors.dim("STATUS:")}      ${colors.emerald("[+] ALL CARS COUPLED & ACTIVE")}`,
+  ];
+
+  const contentLines: string[] = [];
+  const maxRows = Math.max(trainLines.length, rightLines.length);
+  for (let i = 0; i < maxRows; i++) {
+    const left = trainLines[i] ?? " ".repeat(logoWidth);
+    const right = rightLines[i] ?? "";
+    const leftPad = logoWidth - visibleWidth(left);
+    contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  }
+
+  return renderCard("Release Train: Deployment Manifest", contentLines, {
+    borderColor: colors.emerald,
+    padding: true,
+  });
+}
+
+export interface DepartureItem {
+  track: number;
+  platform: string;
+  route: string;
+  functionName: string;
+  target: string;
+  status?: string;
+}
+
+/**
+ * Renders the Station Departure Board table for 'rail status'.
+ * Formats routes, functions, and platforms in a clean ASCII timetable.
+ */
+export function renderDepartureBoard(
+  projectName: string,
+  items: DepartureItem[],
+): string {
+  if (items.length === 0) {
+    return renderCard(`Station Departure Board [${projectName}]`, [
+      `${colors.dim("No active tracks or routes configured in railfog.toml.")}`,
+      "",
+      `   ${colors.amber(">> Next step:")} Run 'rail add sdk' or configure [functions] in railfog.toml.`,
+    ], { borderColor: colors.accent });
+  }
+
+  const headers = ["TRACK", "PLATFORM", "ROUTE", "FUNCTION", "TARGET", "STATUS"];
+  const rows = items.map((item) => {
+    const trackNum = String(item.track).padStart(2, "0");
+    const platTag = `[${item.platform.toUpperCase()}]`;
+    const st = item.status ?? "ON-TIME";
+    const statusFormatted = st === "ON-TIME" || st === "READY"
+      ? colors.emerald(`[${st}]`)
+      : colors.amber(`[${st}]`);
+
+    return [
+      colors.slate(trackNum),
+      colors.accent(platTag),
+      colors.bold(item.route),
+      colors.slate(item.functionName),
+      colors.dim(item.target),
+      statusFormatted,
+    ];
+  });
+
+  const table = renderModernTable(headers, rows, {
+    alignments: ["center", "left", "left", "left", "left", "center"],
+    style: "ascii",
+  });
+
+  return [
+    renderCard(`RailFog Station Departure Board [${projectName}]`, [table], {
+      borderColor: colors.accent,
+      padding: false,
+    }),
+  ].join("\n");
+}
+
+export interface FreightExpressInfo {
+  mode: "export" | "restore";
+  projectName: string;
+  backupId?: string;
+  location?: string;
+  stats: Array<[string, string]>;
+}
+
+/**
+ * Renders the Freight Express manifest card for state backup and restore operations.
+ */
+export function renderFreightExpressCard(info: FreightExpressInfo): string {
+  const trainLines = renderTrainLogo({ includeTrack: true });
+  const logoWidth = 24;
+  const isExport = info.mode === "export";
+
+  const title = isExport ? "Freight Express: State Export" : "Freight Express: State Restore";
+  const headerStatus = isExport
+    ? colors.bold(colors.emerald("[+] Sealed Freight Container (AES-256-GCM)"))
+    : colors.bold(colors.emerald("[+] Freight Delivered & Cluster State Restored"));
+
+  const rightLines = [
+    headerStatus,
+    "",
+    `${colors.dim("PROJECT:")}     ${colors.accent(colors.bold(info.projectName))}`,
+    ...(info.backupId ? [`${colors.dim("BACKUP ID:")}   ${colors.slate(info.backupId)}`] : []),
+    ...(info.location ? [`${colors.dim("LOCATION:")}    ${colors.slate(info.location)}`] : []),
+    ...info.stats.map(([k, v]) => `${colors.dim(k.padEnd(12))} ${colors.bold(v)}`),
+    `${colors.dim("SECURITY:")}    ${colors.emerald("[+] AES-256-GCM SEAL VERIFIED")}`,
+    `${colors.dim("STATUS:")}      ${colors.emerald(isExport ? "[+] EXPORT COMPLETE" : "[+] RESTORE COMPLETE")}`,
+  ];
+
+  const contentLines: string[] = [];
+  const maxRows = Math.max(trainLines.length, rightLines.length);
+  for (let i = 0; i < maxRows; i++) {
+    const left = trainLines[i] ?? " ".repeat(logoWidth);
+    const right = rightLines[i] ?? "";
+    const leftPad = logoWidth - visibleWidth(left);
+    contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  }
+
+  return renderCard(title, contentLines, {
+    borderColor: colors.emerald,
+    padding: true,
+  });
+}

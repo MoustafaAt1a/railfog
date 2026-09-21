@@ -6,7 +6,10 @@ import {
   renderBoardingPass,
   renderBrandHeader,
   renderCard,
+  renderDepartureBoard,
   renderErrorCard,
+  renderFreightExpressCard,
+  renderReleaseTrainCard,
   renderTrainLogo,
   stripAnsi,
   visibleWidth,
@@ -172,5 +175,55 @@ Deno.test("UI (Unit): renderBrandHeader renders ultra-compact badge on tiny scre
   const banner = renderBrandHeader("0.8.0", "production", { width: 35 });
   assertStringIncludes(banner, "RailFog");
   assertStringIncludes(banner, "v0.8.0");
+});
+
+Deno.test("UI (Unit): renderReleaseTrainCard outputs structured train deployment manifest", () => {
+  const card = renderReleaseTrainCard({
+    project: "demo-service",
+    revision: "rev_01J8Z...",
+    duration: "24ms",
+    runtimeUrl: "http://127.0.0.1:8080",
+    functionsCount: 3,
+    routesCount: 5,
+  });
+  assertStringIncludes(card, "Release Train: Deployment Manifest");
+  assertStringIncludes(card, "demo-service");
+  assertStringIncludes(card, "rev_01J8Z...");
+  assertStringIncludes(card, "┌──────┐");
+  assertStringIncludes(card, "ALL CARS COUPLED & ACTIVE");
+});
+
+Deno.test("UI (Unit): renderDepartureBoard formats station timetable table", () => {
+  const board = renderDepartureBoard("demo-service", [
+    { track: 1, platform: "HTTP", route: "/api/*", functionName: "api", target: "functions/api.ts", status: "READY" },
+    { track: 2, platform: "QUEUE", route: "job-events", functionName: "worker", target: "functions/worker.ts", status: "READY" },
+  ]);
+  assertStringIncludes(board, "Station Departure Board");
+  assertStringIncludes(board, "TRACK");
+  assertStringIncludes(board, "PLATFORM");
+  assertStringIncludes(board, "/api/*");
+  assertStringIncludes(board, "job-events");
+});
+
+Deno.test("UI (Unit): renderFreightExpressCard formats state export and restore manifests", () => {
+  const expCard = renderFreightExpressCard({
+    mode: "export",
+    projectName: "demo-service",
+    backupId: "bak_01...",
+    location: "./backup.json",
+    stats: [["• KV:", "12 keys"], ["• Objects:", "4 objs"]],
+  });
+  assertStringIncludes(expCard, "Freight Express: State Export");
+  assertStringIncludes(expCard, "demo-service");
+  assertStringIncludes(expCard, "bak_01...");
+  assertStringIncludes(expCard, "┌──────┐");
+
+  const resCard = renderFreightExpressCard({
+    mode: "restore",
+    projectName: "demo-service",
+    stats: [["• KV Keys:", "12 restored"]],
+  });
+  assertStringIncludes(resCard, "Freight Express: State Restore");
+  assertStringIncludes(resCard, "RESTORE COMPLETE");
 });
 

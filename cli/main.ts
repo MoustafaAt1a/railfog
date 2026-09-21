@@ -81,8 +81,11 @@ import {
   renderBoardingPass,
   renderBrandHeader,
   renderCard,
+  renderDepartureBoard,
   renderErrorCard,
+  renderFreightExpressCard,
   renderModernTable,
+  renderReleaseTrainCard,
   renderStatusBar,
   renderTrainLogo,
   renderTree,
@@ -110,8 +113,11 @@ export {
   renderBoardingPass,
   renderBrandHeader,
   renderCard,
+  renderDepartureBoard,
   renderErrorCard,
+  renderFreightExpressCard,
   renderModernTable,
+  renderReleaseTrainCard,
   renderTrainLogo,
   rollbackCommand,
   runAdd,
@@ -283,11 +289,29 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
     ],
   );
 
+  const departureItems = routes.map((r, idx) => {
+    const fnName = r.function ?? "(unmapped)";
+    const fnConfig = functions[fnName];
+    const target = (fnConfig?.entry as string) ??
+      (fnConfig?.entrypoint as string) ?? "(inline)";
+    return {
+      track: idx + 1,
+      platform: "HTTP",
+      route: r.pattern ?? "/*",
+      functionName: fnName,
+      target,
+      status: "READY",
+    };
+  });
+
+  console.log(renderDepartureBoard(appName, departureItems));
+  console.log();
   console.log(tree);
   console.log();
   console.log(
     renderStatusBar([
       { label: "Project", value: appName },
+      { label: "Tracks", value: String(departureItems.length) },
       { label: "Functions", value: String(fnEntries.length) },
       { label: "Routes", value: String(routes.length) },
       { label: "Status", value: "Ready" },
@@ -611,12 +635,12 @@ export function findClosestCommand(cmd: string): string | null {
  */
 async function promptActionSelection(appName: string, cwd: string): Promise<string> {
   const actions = [
-    { key: "1", cmd: "dev", desc: "Start local development server with hot-reload" },
-    { key: "2", cmd: "status", desc: "Inspect local functions, routes & providers" },
-    { key: "3", cmd: "check", desc: "Run Qodana inspections on railfog.toml" },
-    { key: "4", cmd: "deploy", desc: "Deploy project to Railway / RailFog Cloud" },
-    { key: "5", cmd: "logs", desc: "Stream cloud runtime execution logs" },
-    { key: "0", cmd: "help", desc: "Display full CLI reference manual" },
+    { key: "1", tag: "[DEV]", cmd: "dev", desc: "Depart local station (Start dev server with hot-reload)" },
+    { key: "2", tag: "[STATUS]", cmd: "status", desc: "Check route schedule (Inspect functions & routes)" },
+    { key: "3", tag: "[CHECK]", cmd: "check", desc: "Inspect track & signal (Validate railfog.toml schema)" },
+    { key: "4", tag: "[DEPLOY]", cmd: "deploy", desc: "Board express to cloud (Deploy revision to Edge)" },
+    { key: "5", tag: "[LOGS]", cmd: "logs", desc: "Stream runtime logs (Follow execution traffic)" },
+    { key: "0", tag: "[HELP]", cmd: "help", desc: "Station handbook (Display full CLI command manual)" },
   ];
 
   // Try raw interactive arrow-key navigation if both stdin and stdout are interactive TTYs
@@ -639,14 +663,15 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
           const isSel = i === selectedIndex;
           const ptr = isSel ? colors.accent("-->") : "   ";
           const keyBadge = colors.accent(`[${a.key}]`);
+          const tagBadge = isSel ? colors.bold(colors.white(a.tag)) : colors.slate(a.tag);
           const cmdText = isSel
-            ? colors.bold(colors.accent(a.cmd.padEnd(8)))
-            : colors.bold(a.cmd.padEnd(8));
+            ? colors.bold(colors.accent(a.cmd.padEnd(7)))
+            : colors.bold(a.cmd.padEnd(7));
           const descText = isSel ? a.desc : colors.dim(a.desc);
-          return `${ptr} ${keyBadge} ${cmdText} ${descText}`;
+          return `${ptr} ${keyBadge} ${tagBadge} ${cmdText} ${descText}`;
         }),
       ];
-      return renderCard("RailFog Project Launcher", cardLines);
+      return renderCard("RailFog Station Launcher", cardLines);
     };
 
     let lineCount = 0;
@@ -684,24 +709,23 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
         if (buf[0] === 27 && buf[1] === 91 && buf[2] === 65) {
           selectedIndex = (selectedIndex - 1 + actions.length) % actions.length;
           draw();
-          continue;
         }
         // Arrow Down: \x1b[B (27, 91, 66)
         if (buf[0] === 27 && buf[1] === 91 && buf[2] === 66) {
           selectedIndex = (selectedIndex + 1) % actions.length;
           draw();
-          continue;
         }
-        // Digits '0' through '5'
+        // Direct number keys '0' through '5'
         const char = String.fromCharCode(buf[0]);
-        if (char >= "0" && char <= "5") {
+        const match = actions.find((a) => a.key === char);
+        if (match) {
           Deno.stdin.setRaw(false);
-          return char;
+          return match.key;
         }
-        // 'q' or ESC (27 without brackets)
-        if (char === "q" || (buf[0] === 27 && n === 1)) {
+        // 'q' or 'Q' to quit
+        if (char === "q" || char === "Q") {
           Deno.stdin.setRaw(false);
-          return "q";
+          Deno.exit(0);
         }
       }
     } catch {
@@ -718,13 +742,13 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
   // Fallback prompt for non-raw interactive terminals
   console.log(
     renderCard(
-      "RailFog Project Launcher",
+      "RailFog Station Launcher",
       [
         `Active Project: ${colors.bold(colors.accent(appName))}`,
         `Location:       ${cwd}`,
         "",
         ...actions.map((a) =>
-          `  ${colors.accent(`[${a.key}]`)} ${colors.bold(a.cmd.padEnd(8))} ${a.desc}`
+          `  ${colors.accent(`[${a.key}]`)} ${colors.slate(a.tag)} ${colors.bold(a.cmd.padEnd(7))} ${a.desc}`
         ),
       ],
     ),
