@@ -356,6 +356,39 @@ export class DeployDiagnosticsAnalyzer {
         continue;
       }
 
+      // 0. Static syntax and export validation for function source files (FN-1)
+      if (CODE_FILE_REGEX.test(file.relPath)) {
+        const stripped = content
+          .replace(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g, "")
+          .replace(/'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g, "");
+
+        let openBraces = 0;
+        for (const char of stripped) {
+          if (char === "{") openBraces++;
+          else if (char === "}") openBraces--;
+        }
+
+        if (openBraces !== 0) {
+          issues.push({
+            category: "permissions",
+            severity: "error",
+            message:
+              `Syntax Error: Unbalanced curly braces detected (unclosed: ${openBraces}). Ensure all functions and blocks in '${file.relPath}' are properly closed.`,
+            sourceFile: file.relPath,
+          });
+        }
+
+        if (!/\bexport\s+default\b/.test(content)) {
+          issues.push({
+            category: "permissions",
+            severity: "error",
+            message:
+              `Function module '${file.relPath}' must export a default handler function (FN-1).`,
+            sourceFile: file.relPath,
+          });
+        }
+      }
+
       // 1. Secret Audit (PLAT-6, PLAT-15)
       SECRET_ACCESS_REGEX.lastIndex = 0;
       let secretMatch: RegExpExecArray | null;

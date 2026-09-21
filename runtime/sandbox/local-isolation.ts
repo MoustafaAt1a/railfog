@@ -754,7 +754,15 @@ export class LocalIsolationProvider implements IsolationProvider {
     await Deno.writeFile(filePath, codeBytes);
 
     const fileUrl = toFileUrl(filePath).href;
-    const mod = await import(fileUrl);
+    let mod: Record<string, unknown>;
+    try {
+      mod = await import(fileUrl);
+    } catch (importErr) {
+      const errMsg = importErr instanceof Error ? importErr.message : String(importErr);
+      throw new ValidationFailedError(
+        `Failed to load function module: ${errMsg}`,
+      );
+    }
 
     if (!mod || typeof mod.default !== "function") {
       throw new ValidationFailedError(
