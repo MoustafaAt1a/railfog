@@ -57,6 +57,16 @@ import {
 } from "./logs.ts";
 import { formatUsageReport, runUsage, type UsageCliOptions } from "./usage.ts";
 import { runLogin, runLogout, runWhoami, systemOpenBrowser } from "./login.ts";
+import {
+  generateBashCompletion,
+  generateCompletions,
+  generateFishCompletion,
+  generatePowerShellCompletion,
+  generateZshCompletion,
+  printCompletionsHelp,
+  runCompletions,
+  type SupportedShell,
+} from "./completions.ts";
 import { CLI_VERSION } from "./version.ts";
 import {
   runUpgrade,
@@ -83,9 +93,15 @@ export {
   exportCommand,
   formatLogEntry,
   formatUsageReport,
+  generateBashCompletion,
+  generateCompletions,
+  generateFishCompletion,
+  generatePowerShellCompletion,
+  generateZshCompletion,
   glyphs,
   importCommand,
   initCommand,
+  printCompletionsHelp,
   renderBrandHeader,
   renderCard,
   renderErrorCard,
@@ -93,6 +109,7 @@ export {
   rollbackCommand,
   runAdd,
   runCheck,
+  runCompletions,
   runInit,
   runInteractiveInit,
   undeployCommand,
@@ -127,6 +144,7 @@ export type {
   UpgradeResult,
   UsageCliOptions,
   ValidationIssue,
+  SupportedShell,
 };
 
 export type { LocalServer, RailfogConfig };
@@ -347,9 +365,10 @@ ${colors.bold(colors.accent("== [Services & Observability] =="))}
   import    Import and restore project state from a disaster recovery archive
 
 ${colors.bold(colors.accent("== [System & Maintenance] =="))}
-  upgrade   Upgrade the RailFog CLI to the latest version
-  update    Alias for upgrade subcommand
-  sync      Sync CLI with the latest git updates (alias for update)
+  upgrade      Upgrade the RailFog CLI to the latest version
+  update       Alias for upgrade subcommand
+  sync         Sync CLI with the latest git updates (alias for update)
+  completions  Generate shell auto-completion scripts (pwsh, bash, zsh, fish)
 
 ${colors.bold("Options:")}
   -v, --version  Show CLI version
@@ -560,6 +579,8 @@ const KNOWN_COMMANDS = [
   "upgrade",
   "update",
   "sync",
+  "completions",
+  "completion",
 ];
 
 export function findClosestCommand(cmd: string): string | null {
@@ -1376,8 +1397,96 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+    case "completions":
+    case "completion": {
+      let shellArg: string | undefined;
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printCompletionsHelp();
+          return;
+        }
+        if (!arg.startsWith("-") && !shellArg) {
+          shellArg = arg;
+        }
+      }
+      const res = runCompletions(shellArg);
+      if (!res.ok) {
+        Deno.exit(1);
+      }
+      break;
+    }
     default:
       if (!command) {
+        // Interactive Project Launcher: when executed without arguments inside an active project in a TTY terminal
+        if (Deno.stdin.isTerminal?.()) {
+          const tomlPath = join(Deno.cwd(), "railfog.toml");
+          let hasToml = false;
+          let appName = "(unnamed)";
+          try {
+            const stat = await Deno.stat(tomlPath);
+            if (stat.isFile) {
+              hasToml = true;
+              const content = await Deno.readTextFile(tomlPath);
+              const parsed = parse(content) as Record<string, unknown>;
+              if (typeof parsed.name === "string") {
+                appName = parsed.name;
+              }
+            }
+          } catch {
+            // Not a project folder
+          }
+
+          if (hasToml) {
+            console.log(
+              renderCard(
+                "RailFog Project Launcher",
+                [
+                  `Active Project: ${colors.bold(colors.accent(appName))}`,
+                  `Location:       ${Deno.cwd()}`,
+                  "",
+                  `  ${colors.accent("[1]")} ${colors.bold("dev")}       Start local development server with hot-reload`,
+                  `  ${colors.accent("[2]")} ${colors.bold("status")}    Inspect local functions, routes & providers`,
+                  `  ${colors.accent("[3]")} ${colors.bold("check")}     Run Qodana inspections on railfog.toml`,
+                  `  ${colors.accent("[4]")} ${colors.bold("deploy")}    Deploy project to Railway / RailFog Cloud`,
+                  `  ${colors.accent("[5]")} ${colors.bold("logs")}      Stream cloud runtime execution logs`,
+                  `  ${colors.accent("[0]")} ${colors.bold("help")}      Display full CLI reference manual`,
+                ],
+              ),
+            );
+
+            const choice = prompt("Select an action [0-5] (default: 1 dev):");
+            const trimmed = choice?.trim().toLowerCase() ?? "";
+
+            if (trimmed === "1" || trimmed === "dev" || trimmed === "") {
+              await devCommand(Deno.cwd());
+              return;
+            } else if (trimmed === "2" || trimmed === "status") {
+              await statusCommand(Deno.cwd());
+              return;
+            } else if (trimmed === "3" || trimmed === "check") {
+              await runCheck(Deno.cwd());
+              return;
+            } else if (trimmed === "4" || trimmed === "deploy") {
+              await main(["deploy"]);
+              return;
+            } else if (trimmed === "5" || trimmed === "logs") {
+              await main(["logs"]);
+              return;
+            } else if (trimmed === "0" || trimmed === "help") {
+              printGeneralHelp();
+              return;
+            } else if (trimmed === "q" || trimmed === "exit") {
+              return;
+            } else {
+              console.log(
+                colors.coral(`Unknown choice "${trimmed}". Exiting.`),
+              );
+              return;
+            }
+          }
+        }
+
         printGeneralHelp();
         return;
       } else {
@@ -1385,7 +1494,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         console.error(
           renderErrorCard({
             code: "UNKNOWN_COMMAND",
-            message: `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync`,
+            message: `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, completions`,
             solution: suggestion
               ? `Did you mean "rail ${suggestion}"?\nRun 'rail --help' to see all available commands.`
               : "Run 'rail --help' to browse all available commands and flags.",
