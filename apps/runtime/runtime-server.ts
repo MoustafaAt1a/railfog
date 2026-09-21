@@ -149,6 +149,8 @@ export async function startRuntimeServer(
   options: RuntimeServerOptions,
 ): Promise<RuntimeServer> {
   let currentSnapshot: RoutingSnapshot | null = null;
+  const projectSnapshots = new Map<string, RoutingSnapshot>();
+  const artifactCache = new Map<string, Uint8Array>();
   let isClosed = false;
   let timerId: ReturnType<typeof setInterval> | undefined = undefined;
 
@@ -157,68 +159,38 @@ export async function startRuntimeServer(
     try {
       const cachedText = await Deno.readTextFile(options.snapshotDiskCachePath);
       currentSnapshot = validateRoutingSnapshot(JSON.parse(cachedText));
+      if (currentSnapshot) {
+        projectSnapshots.set(options.projectId, currentSnapshot);
+      }
     } catch {
       // Non-fatal: disk cache absent or corrupt, proceed with initial fetch
     }
   }
 
-  // spec: contracts/platform.contract.md#PLAT-8 — Step 2: Initial snapshot fetch from control plane
-  if (options.controlPlaneUrl) {
+  // spec: contracts/platform.contract.md#PLAT-8 — Helper to fetch and update snapshot for a given project
+  const fetchSnapshotForProject = async (
+    pId: string,
+  ): Promise<RoutingSnapshot | null> => {
+    if (!options.controlPlaneUrl) return null;
     try {
+      const existing = pId === options.projectId
+        ? currentSnapshot
+        : projectSnapshots.get(pId);
       const headers: Record<string, string> = {};
-      if (currentSnapshot) {
-        headers["if-none-match"] = `"${currentSnapshot.version}"`;
+      if (existing) {
+        headers["if-none-match"] = `"${existing.version}"`;
       }
-      const snapshotUrl =
-        `${options.controlPlaneUrl}/v1/projects/${options.projectId}/snapshot`;
+      const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
+      const snapshotUrl = `${baseUrl}/v1/projects/${encodeURIComponent(pId)}/snapshot`;
       const res = await fetch(snapshotUrl, { headers });
+      if (isClosed) return null;
+
       if (res.status === 200) {
         const payload = await res.json();
         const validated = validateRoutingSnapshot(payload);
-        // spec: contracts/platform.contract.md#PLAT-8 — Monotonic version update (reject stale replay/downgrades)
-        if (!currentSnapshot || validated.version > currentSnapshot.version) {
-          currentSnapshot = validated;
-          if (options.snapshotDiskCachePath) {
-            await writeSnapshotDiskCache(
-              options.snapshotDiskCachePath,
-              validated,
-            );
-          }
-        }
-      }
-      // Fail-static: On 304, 404, 503, keep currentSnapshot if loaded from disk cache
-    } catch {
-      // Fail-static: Control plane unreachable at startup; proceed with disk snapshot if present
-    }
-  }
-
-  // spec: contracts/platform.contract.md#PLAT-8 — Step 3: Background snapshot polling (~5s interval)
-  if (options.controlPlaneUrl) {
-    const pollInterval = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    let isPolling = false;
-
-    const pollControlPlane = async () => {
-      if (isClosed || isPolling) {
-        return;
-      }
-      isPolling = true;
-      try {
-        const headers: Record<string, string> = {};
-        if (currentSnapshot) {
-          headers["if-none-match"] = `"${currentSnapshot.version}"`;
-        }
-        const snapshotUrl =
-          `${options.controlPlaneUrl}/v1/projects/${options.projectId}/snapshot`;
-        const res = await fetch(snapshotUrl, { headers });
-        if (isClosed) {
-          return;
-        }
-
-        if (res.status === 200) {
-          const payload = await res.json();
-          const validated = validateRoutingSnapshot(payload);
-          // spec: contracts/platform.contract.md#PLAT-8 — Monotonic version update (reject stale replay/downgrades)
-          if (!currentSnapshot || validated.version > currentSnapshot.version) {
+        if (!existing || validated.version > existing.version) {
+          projectSnapshots.set(pId, validated);
+          if (pId === options.projectId) {
             currentSnapshot = validated;
             if (options.snapshotDiskCachePath) {
               await writeSnapshotDiskCache(
@@ -227,16 +199,66 @@ export async function startRuntimeServer(
               );
             }
           }
+          return validated;
         }
-        // spec: contracts/platform.contract.md#PLAT-8 — 304 Not Modified: keep current snapshot
-      } catch {
-        // spec: contracts/platform.contract.md#PLAT-8 — Network failure/outage: swallow error, fail-static
+      }
+    } catch {
+      // Fail-static: Control plane unreachable; proceed with cached snapshot
+    }
+    return null;
+  };
+
+  // spec: contracts/platform.contract.md#PLAT-8 — Discover and poll all active projects from control plane
+  const pollControlPlane = async () => {
+    if (isClosed) return;
+    try {
+      await fetchSnapshotForProject(options.projectId);
+
+      if (options.controlPlaneUrl) {
+        const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
+        const projectsUrl = `${baseUrl}/v1/projects`;
+        try {
+          const pRes = await fetch(projectsUrl);
+          if (!isClosed && pRes.status === 200) {
+            const data = (await pRes.json()) as { projects?: string[] };
+            if (Array.isArray(data.projects)) {
+              for (const p of data.projects) {
+                if (p !== options.projectId) {
+                  await fetchSnapshotForProject(p);
+                }
+              }
+            }
+          }
+        } catch {
+          // Fail-static
+        }
+      }
+    } catch {
+      // Fail-static
+    }
+  };
+
+  // spec: contracts/platform.contract.md#PLAT-8 — Step 2: Initial snapshot fetch from control plane
+  if (options.controlPlaneUrl) {
+    await pollControlPlane();
+  }
+
+  // spec: contracts/platform.contract.md#PLAT-8 — Step 3: Background snapshot polling (~5s interval)
+  if (options.controlPlaneUrl) {
+    const pollInterval = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    let isPolling = false;
+
+    const runPoll = async () => {
+      if (isClosed || isPolling) return;
+      isPolling = true;
+      try {
+        await pollControlPlane();
       } finally {
         isPolling = false;
       }
     };
 
-    timerId = setInterval(pollControlPlane, pollInterval);
+    timerId = setInterval(runPoll, pollInterval);
   }
 
   // spec: contracts/platform.contract.md#PLAT-1, PLAT-4, FN-8 — Request dispatch handler
@@ -304,18 +326,44 @@ export async function startRuntimeServer(
       }
 
       // spec: contracts/platform.contract.md#PLAT-8, PLAT-11, PLAT-12 — Route matching against local snapshot
-      if (!currentSnapshot || currentSnapshot.routes.length === 0) {
-        return createErrorResponse(
-          404,
-          "RESOURCE_NOT_FOUND",
-          `No route matching path: ${url.pathname}`,
-          requestId,
-        );
+      const requestedProject = req.headers.get("x-railfog-project")?.trim();
+      let activeSnapshot: RoutingSnapshot | null = null;
+      let winningRoute: { pattern: string; function: string } | null = null;
+      let resolvedProjectId = options.projectId;
+
+      if (requestedProject && projectSnapshots.has(requestedProject)) {
+        const snap = projectSnapshots.get(requestedProject)!;
+        const match = matchRoute(snap.routes, url.pathname);
+        if (match) {
+          activeSnapshot = snap;
+          winningRoute = match;
+          resolvedProjectId = requestedProject;
+        }
       }
 
-      // spec: contracts/platform.contract.md#PLAT-11 — Deterministic route matching via specificity score
-      const winningRoute = matchRoute(currentSnapshot.routes, url.pathname);
+      if (!winningRoute && currentSnapshot && currentSnapshot.routes.length > 0) {
+        const match = matchRoute(currentSnapshot.routes, url.pathname);
+        if (match) {
+          activeSnapshot = currentSnapshot;
+          winningRoute = match;
+          resolvedProjectId = options.projectId;
+        }
+      }
+
       if (!winningRoute) {
+        // Match against any discovered project snapshots
+        for (const [pId, snap] of projectSnapshots.entries()) {
+          const match = matchRoute(snap.routes, url.pathname);
+          if (match) {
+            activeSnapshot = snap;
+            winningRoute = match;
+            resolvedProjectId = pId;
+            break;
+          }
+        }
+      }
+
+      if (!activeSnapshot || !winningRoute) {
         return createErrorResponse(
           404,
           "RESOURCE_NOT_FOUND",
@@ -326,10 +374,10 @@ export async function startRuntimeServer(
 
       // spec: contracts/platform.contract.md#PLAT-8, PLAT-12 — Safe function metadata lookup (prototype pollution defense)
       const fnSnapshot = Object.hasOwn(
-          currentSnapshot.functions,
+          activeSnapshot.functions,
           winningRoute.function,
         )
-        ? currentSnapshot.functions[winningRoute.function]
+        ? activeSnapshot.functions[winningRoute.function]
         : undefined;
 
       if (!fnSnapshot) {
@@ -341,12 +389,31 @@ export async function startRuntimeServer(
         );
       }
 
+      // spec: contracts/objects.contract.md#OBJ-4, PLAT-4 — Load real artifact code bytes
+      let artifactCode = artifactCache.get(fnSnapshot.artifactId);
+      if (
+        (!artifactCode || artifactCode.byteLength === 0) &&
+        options.controlPlaneUrl
+      ) {
+        try {
+          const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
+          const artUrl = `${baseUrl}/v1/artifacts/${encodeURIComponent(fnSnapshot.artifactId)}`;
+          const artRes = await fetch(artUrl);
+          if (artRes.status === 200) {
+            artifactCode = new Uint8Array(await artRes.arrayBuffer());
+            artifactCache.set(fnSnapshot.artifactId, artifactCode);
+          }
+        } catch {
+          // Fallback to empty if fetch fails
+        }
+      }
+
       // spec: contracts/platform.contract.md#PLAT-4, PLAT-16 — Build deployment artifact descriptor
       const artifact: Artifact = {
         id: fnSnapshot.artifactId,
         integrity: fnSnapshot.artifactId,
         entrypoint: "index.ts",
-        code: new Uint8Array(),
+        code: artifactCode ?? new Uint8Array(),
       };
 
       // spec: contracts/functions.contract.md#FN-5 — Resource limits
@@ -363,6 +430,10 @@ export async function startRuntimeServer(
       }
       invocationHeaders["x-request-id"] = requestId;
       invocationHeaders["request-id"] = requestId;
+      invocationHeaders["x-railfog-project"] = resolvedProjectId;
+      invocationHeaders["x-railfog-function"] = winningRoute.function;
+      invocationHeaders["x-railfog-revision"] = fnSnapshot.revisionId;
+      invocationHeaders["x-railfog-org"] = options.orgId ?? "default-org";
 
       // spec: contracts/functions.contract.md#FN-5 — Request body size limit (10MB default, reject with 413 PAYLOAD_TOO_LARGE)
       const maxRequestBodyBytes = 10 * 1024 * 1024;

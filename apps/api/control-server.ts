@@ -35,6 +35,7 @@ import {
   PermissionDeniedError,
   RailFogError,
   type RailFogErrorCode,
+  ResourceNotFoundError,
   ValidationFailedError,
 } from "../../packages/errors/mod.ts";
 import type {
@@ -397,20 +398,20 @@ export async function startControlServer(
       .join(";");
 
     let state = snapshotStates.get(projectId);
-    if (!state) {
-      const distributor = new SnapshotDistributor();
-      const routes = Object.keys(activeRevisions).sort().map((fn) => ({
+    const declaredRoutes = options.deploymentService.getProjectRoutes?.(projectId);
+    const routes = (declaredRoutes && declaredRoutes.length > 0)
+      ? declaredRoutes
+      : Object.keys(activeRevisions).sort().map((fn) => ({
         pattern: `/${fn}`,
         function: fn,
       }));
+
+    if (!state) {
+      const distributor = new SnapshotDistributor();
       const snapshot = distributor.createSnapshot(routes, activeRevisions);
       state = { distributor, snapshot, revisionFingerprint: fingerprint };
       snapshotStates.set(projectId, state);
     } else if (state.revisionFingerprint !== fingerprint) {
-      const routes = Object.keys(activeRevisions).sort().map((fn) => ({
-        pattern: `/${fn}`,
-        function: fn,
-      }));
       state.snapshot = state.distributor.createSnapshot(
         routes,
         activeRevisions,
@@ -596,8 +597,12 @@ export async function startControlServer(
         );
       }
 
+      // spec: contracts/platform.contract.md#PLAT-1, PLAT-8 — Data-plane snapshot, artifact, and project reads bypass auth
+      const isDataPlaneRead = (req.method === "GET" || req.method === "HEAD") &&
+        (pathname.endsWith("/snapshot") || pathname === "/v1/projects" || pathname.startsWith("/v1/artifacts/"));
+
       // Enforce authentication on all protected management endpoints (PLAT-6)
-      if (authMiddleware) {
+      if (authMiddleware && !isDataPlaneRead) {
         const authRes = await authMiddleware(req, requestId);
         if (!authRes.ok) {
           return authRes.response;
@@ -617,6 +622,70 @@ export async function startControlServer(
           "PERMISSION_DENIED: Control plane never executes customer code per PLAT-1.",
           requestId,
         );
+      }
+
+      // spec: contracts/platform.contract.md#PLAT-18 — Project discovery endpoint
+      if (pathname === "/v1/projects") {
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for /v1/projects (PLAT-12)`,
+            requestId,
+          );
+        }
+        const projects = options.deploymentService.listProjects?.() ?? [];
+        return new Response(
+          JSON.stringify({ ok: true, projects, request_id: requestId }),
+          {
+            status: HTTP_STATUS_OK,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          },
+        );
+      }
+
+      // spec: contracts/objects.contract.md#OBJ-4, PLAT-1 — Content-addressed artifact download for data plane
+      const artifactMatch = pathname.match(/^\/v1\/artifacts\/([^/]+)$/);
+      if (artifactMatch) {
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Method ${req.method} not allowed for artifact download (PLAT-12)`,
+            requestId,
+          );
+        }
+        const artifactId = decodeURIComponent(artifactMatch[1]);
+        const artifactBytes = await options.deploymentService.getArtifact?.(
+          artifactId,
+        );
+        if (!artifactBytes) {
+          throw new ResourceNotFoundError(
+            `RESOURCE_NOT_FOUND: Artifact '${artifactId}' not found (OBJ-4, PLAT-12)`,
+            requestId,
+          );
+        }
+        const currentEtag = `"${artifactId}"`;
+        const ifNoneMatch = req.headers.get("if-none-match");
+        if (ifNoneMatch && isEtagMatch(ifNoneMatch, currentEtag)) {
+          return new Response(null, {
+            status: HTTP_STATUS_NOT_MODIFIED,
+            headers: {
+              "etag": currentEtag,
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          });
+        }
+        return new Response(artifactBytes as unknown as BodyInit, {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/octet-stream",
+            "etag": currentEtag,
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
       }
 
       // Pattern: /v1/projects/:projectId/:action
@@ -736,6 +805,14 @@ export async function startControlServer(
 
         const deployResult: DeploymentResult = await options.deploymentService
           .deploy(projectId, body.functionName.trim(), artifact);
+
+        // spec: contracts/platform.contract.md#PLAT-3, PLAT-8 — Store project-declared routes if provided
+        if (Array.isArray(body.routes)) {
+          options.deploymentService.setProjectRoutes?.(
+            projectId,
+            body.routes as Array<{ pattern: string; function: string }>,
+          );
+        }
 
         // spec: contracts/platform.contract.md#PLAT-8 — Advance snapshot version
         invalidateProjectSnapshot(projectId);

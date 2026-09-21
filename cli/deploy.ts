@@ -45,6 +45,7 @@ export interface DeployOptions {
   project?: string;
   deploymentService?: DeploymentService;
   skipHealthCheck?: boolean;
+  runtimeUrl?: string;
 }
 
 export interface DeploySummary {
@@ -792,6 +793,7 @@ export async function runDeploy(
             project: projectName,
             functionName: item.name,
             artifact: item.artifact,
+            routes: parsed.routes,
           }),
         });
 
@@ -908,7 +910,11 @@ export async function runDeploy(
 
   // Final summary construction
   const elapsedMs = Math.max(1, Math.round(performance.now() - startTime));
-  const runtimeUrl = baseUrl;
+  const runtimeUrl = options?.runtimeUrl ??
+    safeEnvGet("RAILFOG_RUNTIME_URL") ??
+    (baseUrl.includes("railfog-control")
+      ? baseUrl.replace("railfog-control", "railfog-runtime")
+      : baseUrl);
 
   const routes = parsed.routes ?? [];
   const summaryFunctions: Array<{ name: string; route?: string }> = [];

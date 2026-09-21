@@ -107,6 +107,12 @@ export class DeploymentService {
   // spec: contracts/platform.contract.md#PLAT-18 — Project -> Function -> ActiveRevisionId
   private readonly activePointers = new Map<string, Map<string, string>>();
 
+  // spec: contracts/platform.contract.md#PLAT-3, PLAT-8 — Project -> Declared routes
+  private readonly projectRoutes = new Map<
+    string,
+    Array<{ pattern: string; function: string }>
+  >();
+
   private lastTimestamp = 0;
 
   constructor(storage: ObjectProvider) {
@@ -460,6 +466,81 @@ export class DeploymentService {
       // spec: docs/contracts/functions.contract.md#FN-3 — Instant pointer-flip activation
       this.setActivePointer(project, functionName, revision.id);
     }
+  }
+
+  /**
+   * Sets project-declared routes from railfog.toml.
+   * Spec-anchor: docs/contracts/platform.contract.md#PLAT-3, PLAT-8
+   */
+  setProjectRoutes(
+    project: string,
+    routes: Array<{ pattern: string; function: string }>,
+  ): void {
+    this.projectRoutes.set(project, routes.map((r) => ({ ...r })));
+  }
+
+  /**
+   * Gets project-declared routes if previously registered.
+   * Spec-anchor: docs/contracts/platform.contract.md#PLAT-8
+   */
+  getProjectRoutes(
+    project: string,
+  ): Array<{ pattern: string; function: string }> | null {
+    const routes = this.projectRoutes.get(project);
+    return routes ? routes.map((r) => ({ ...r })) : null;
+  }
+
+  /**
+   * Lists all known project identifiers that have revisions, active pointers, or routes.
+   * Spec-anchor: docs/contracts/platform.contract.md#PLAT-18
+   */
+  listProjects(): string[] {
+    const set = new Set<string>();
+    for (const p of this.revisions.keys()) set.add(p);
+    for (const p of this.activePointers.keys()) set.add(p);
+    for (const p of this.projectRoutes.keys()) set.add(p);
+    return Array.from(set).sort();
+  }
+
+  /**
+   * Retrieves artifact bundle bytes from content-addressed object storage.
+   * Spec-anchor: docs/contracts/objects.contract.md#OBJ-4
+   */
+  async getArtifact(artifactId: string): Promise<Uint8Array | null> {
+    const key = `${ARTIFACT_STORAGE_PREFIX}${artifactId}`;
+    const result = await this.storage.get(key);
+    if (!result) {
+      return null;
+    }
+    if (result instanceof Uint8Array) {
+      return result;
+    }
+    if (result instanceof ArrayBuffer) {
+      return new Uint8Array(result);
+    }
+    if (
+      typeof (result as ReadableStream<Uint8Array>).getReader === "function"
+    ) {
+      const reader = (result as ReadableStream<Uint8Array>).getReader();
+      const chunks: Uint8Array[] = [];
+      let totalLength = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          totalLength += value.byteLength;
+        }
+      }
+      const combined = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return combined;
+    }
+    return null;
   }
 }
 
