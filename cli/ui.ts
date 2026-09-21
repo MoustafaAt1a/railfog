@@ -599,40 +599,106 @@ export function renderModernTable(
   return out.join("\n");
 }
 
+export type ProgressBarStyle = "track" | "sleepers" | "fleet" | "ascii";
+
+export interface ProgressBarOptions {
+  width?: number;
+  label?: string;
+  unit?: string;
+  frame?: number;
+  speed?: string;
+  style?: ProgressBarStyle;
+  color?: (s: string) => string;
+  showArrival?: boolean;
+}
+
 /**
- * Renders an ASCII visual progress bar.
- * Example: [==========----------] 50%  (2.4 MB / 4.8 MB)
- * Shimmer: [=====>====----------] 50%  (2.4 MB / 4.8 MB)  1.8 MB/s
+ * Renders a visual railway-themed progress bar.
+ *
+ * Styles:
+ * - "track" (default): Moving locomotive on rails with terminal bumpers:
+ *     ╟════════════►────────────╢  50%  (2.5/5.0 MB)  1.8 MB/s
+ *     ╟════════════════════════■╢ 100%  [ARRIVED]
+ * - "sleepers": Cross-tie railroad sleepers gauge:
+ *     ╞══╤══╤══╤══●──┬──┬──┬──╡  50%  (2.5/5.0 MB)
+ * - "fleet": JetBrains high-density solid gauge:
+ *     ╟▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱╢  50%
+ * - "ascii": Classic pure ASCII:
+ *     [==========----------]  50%
  */
 export function renderProgressBar(
   current: number,
   total: number,
-  options?: {
-    width?: number;
-    label?: string;
-    unit?: string;
-    frame?: number;
-    speed?: string;
-  },
+  options?: ProgressBarOptions,
 ): string {
-  const width = options?.width ?? 24;
+  const width = Math.max(6, options?.width ?? 24);
   const pct = total > 0 ? Math.min(1, Math.max(0, current / total)) : 0;
-  const filledCount = Math.round(pct * width);
-  const emptyCount = width - filledCount;
+  const style = options?.style ?? "track";
+  const colorFn = options?.color ?? colors.emerald;
+  const percentText = `${Math.round(pct * 100)}%`.padStart(4);
 
   let bar: string;
-  if (options?.frame !== undefined && filledCount >= 3) {
-    const sweepPos = options.frame % filledCount;
+
+  if (style === "track") {
+    // Locomotive on Rails with Terminal Bumpers: ╟════════►────────╢
+    const filledCount = Math.round(pct * width);
+    const emptyCount = Math.max(0, width - filledCount);
+
+    if (filledCount === 0) {
+      bar = colors.border("╟") + colors.border("─".repeat(width)) + colors.border("╢");
+    } else if (filledCount >= width) {
+      // Arrived at destination station bumper
+      const rails = "═".repeat(Math.max(0, width - 1));
+      bar = colors.border("╟") + colorFn(rails) + colors.bold(colorFn("■")) + colors.border("╢");
+    } else {
+      const traversedLen = filledCount - 1;
+      let railStr = "";
+      if (options?.frame !== undefined && traversedLen >= 2) {
+        const pulsePos = options.frame % traversedLen;
+        for (let i = 0; i < traversedLen; i++) {
+          railStr += i === pulsePos ? "o" : "═";
+        }
+      } else {
+        railStr = "═".repeat(traversedLen);
+      }
+      const engine = colors.bold(colors.white("►"));
+      const ahead = colors.border("─".repeat(emptyCount));
+      bar = colors.border("╟") + colorFn(railStr) + engine + ahead + colors.border("╢");
+    }
+  } else if (style === "sleepers") {
+    // Cross-Tie Railroad Sleepers: ╞══╤══╤══●──┬──┬──╡
+    const filledCount = Math.round(pct * width);
+    const emptyCount = Math.max(0, width - filledCount);
     let filledStr = "";
     for (let i = 0; i < filledCount; i++) {
-      filledStr += i === sweepPos ? ">" : "=";
+      filledStr += (i % 3 === 2) ? "╤" : "═";
     }
-    bar = colors.accent(filledStr) + colors.border("-".repeat(emptyCount));
+    let emptyStr = "";
+    for (let i = 0; i < emptyCount; i++) {
+      emptyStr += (i % 3 === 2) ? "┬" : "─";
+    }
+    const engine = (filledCount > 0 && filledCount < width) ? colors.bold(colors.white("●")) : "";
+    bar = colors.border("╞") + colorFn(filledStr) + engine + colors.border(emptyStr) + colors.border("╡");
+  } else if (style === "fleet") {
+    // JetBrains High-Density Block Gauge: ╟▰▰▰▰▱▱▱▱╢
+    const filledCount = Math.round(pct * width);
+    const emptyCount = Math.max(0, width - filledCount);
+    bar = colors.border("╟") + colorFn("▰".repeat(filledCount)) + colors.border("▱".repeat(emptyCount)) + colors.border("╢");
   } else {
-    bar = colors.accent("=".repeat(filledCount)) + colors.border("-".repeat(emptyCount));
+    // Classic pure ASCII: [==========----------]
+    const filledCount = Math.round(pct * width);
+    const emptyCount = Math.max(0, width - filledCount);
+    let filledStr = "";
+    if (options?.frame !== undefined && filledCount >= 3) {
+      const sweepPos = options.frame % filledCount;
+      for (let i = 0; i < filledCount; i++) {
+        filledStr += i === sweepPos ? ">" : "=";
+      }
+    } else {
+      filledStr = "=".repeat(filledCount);
+    }
+    bar = "[" + colors.accent(filledStr) + colors.border("-".repeat(emptyCount)) + "]";
   }
-
-  const percentText = `${Math.round(pct * 100)}%`.padStart(4);
 
   let extra = "";
   if (options?.label) {
@@ -643,8 +709,11 @@ export function renderProgressBar(
   if (options?.speed) {
     extra += ` ${colors.slate(options.speed)}`;
   }
+  if (pct >= 1 && style === "track" && options?.showArrival !== false) {
+    extra += ` ${colors.bold(colors.emerald("[ARRIVED]"))}`;
+  }
 
-  return `[${bar}] ${colors.bold(percentText)}${extra}`;
+  return `${bar} ${colors.bold(percentText)}${extra}`;
 }
 
 const HEADLIGHT_PULSE_COLORS = [

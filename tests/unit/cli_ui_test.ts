@@ -11,6 +11,8 @@ import {
   renderDepartureBoard,
   renderErrorCard,
   renderFreightExpressCard,
+  renderModernTable,
+  renderProgressBar,
   renderReleaseTrainCard,
   renderRouteSimulatorCard,
   renderSignalLantern,
@@ -304,4 +306,54 @@ Deno.test("UI (Unit): renderCompetitiveMatrix formats architecture comparison ta
   // Ensure no emojis
   assertEquals(/[\u{1F300}-\u{1F9FF}]/u.test(matrix), false, "Competitive matrix must have 0 emojis");
 });
+
+Deno.test("UI (Unit): renderProgressBar defaults to locomotive track style with bumpers and engine head", () => {
+  const bar = stripAnsi(renderProgressBar(50, 100, { width: 20 }));
+  assertStringIncludes(bar, "╟");
+  assertStringIncludes(bar, "╢");
+  assertStringIncludes(bar, "►");
+  assertStringIncludes(bar, "50%");
+});
+
+Deno.test("UI (Unit): renderProgressBar renders 100% arrival state with station buffer", () => {
+  const bar = stripAnsi(renderProgressBar(100, 100, { width: 20 }));
+  assertStringIncludes(bar, "╟");
+  assertStringIncludes(bar, "╢");
+  assertStringIncludes(bar, "■");
+  assertStringIncludes(bar, "100%");
+  assertStringIncludes(bar, "[ARRIVED]");
+});
+
+Deno.test("UI (Unit): renderProgressBar renders cross-tie sleepers style", () => {
+  const bar = stripAnsi(renderProgressBar(50, 100, { width: 24, style: "sleepers" }));
+  assertStringIncludes(bar, "╞");
+  assertStringIncludes(bar, "╡");
+  assertStringIncludes(bar, "●");
+  assertStringIncludes(bar, "50%");
+});
+
+Deno.test("UI (Unit): renderProgressBar renders JetBrains fleet block style", () => {
+  const bar = stripAnsi(renderProgressBar(50, 100, { width: 20, style: "fleet" }));
+  assertStringIncludes(bar, "╟");
+  assertStringIncludes(bar, "╢");
+  assertStringIncludes(bar, "▰");
+  assertStringIncludes(bar, "▱");
+  assertStringIncludes(bar, "50%");
+});
+
+Deno.test("UI (Unit): renderProgressBar renders classic ASCII fallback", () => {
+  const bar = stripAnsi(renderProgressBar(50, 100, { width: 20, style: "ascii" }));
+  assertStringIncludes(bar, "[");
+  assertStringIncludes(bar, "]");
+  assertStringIncludes(bar, "=");
+  assertStringIncludes(bar, "-");
+  assertStringIncludes(bar, "50%");
+});
+
+Deno.test("UI (Unit): renderProgressBar renders animated shimmer pulse on track", () => {
+  const bar = stripAnsi(renderProgressBar(50, 100, { width: 24, frame: 2 }));
+  assertStringIncludes(bar, "o");
+  assertStringIncludes(bar, "►");
+});
+
 

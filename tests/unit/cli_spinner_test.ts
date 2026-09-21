@@ -3,9 +3,13 @@
 
 import { assertEquals, assertFalse, assertStringIncludes } from "@std/assert";
 import {
+  createSignalSpinner,
   createSpinner,
+  createTrackSpinner,
+  createWheelSpinner,
   type Spinner,
   type SpinnerOptions,
+  SPINNER_STYLES,
 } from "../../cli/spinner.ts";
 
 // ============================================================================
@@ -654,3 +658,95 @@ Deno.test("PLAT-19: message containing format specifiers or special characters i
   assertStringIncludes(stream.text, trickyMessage);
   assertStringIncludes(stream.text, "Completed 100% (%s, %x)");
 });
+
+Deno.test("Railway DX: createWheelSpinner cycles through locomotive wheel rotation frames", async () => {
+  await withTerminalEnv({
+    isTerminal: true,
+    env: { CI: undefined, NO_COLOR: undefined },
+  }, async () => {
+    const stream = new MockTerminalStream(true);
+    const spinner = createWheelSpinner({ stream, intervalMs: 20 });
+    spinner.start("Coupling locomotive cars...");
+    try {
+      await delay(80);
+      const text = stream.text;
+      const wheelPattern = /[◜◠◝◞◡◟]/g;
+      const matches = text.match(wheelPattern);
+      assertEquals(
+        matches !== null && matches.length >= 2,
+        true,
+        "Wheel spinner must cycle through locomotive wheel frames",
+      );
+    } finally {
+      spinner.stop();
+    }
+  });
+});
+
+Deno.test("Railway DX: createSignalSpinner cycles through railway signal disc frames", async () => {
+  await withTerminalEnv({
+    isTerminal: true,
+    env: { CI: undefined, NO_COLOR: undefined },
+  }, async () => {
+    const stream = new MockTerminalStream(true);
+    const spinner = createSignalSpinner({ stream, intervalMs: 20 });
+    spinner.start("Checking track signals...");
+    try {
+      await delay(80);
+      const text = stream.text;
+      const signalPattern = /[◐◓◑◒]/g;
+      const matches = text.match(signalPattern);
+      assertEquals(
+        matches !== null && matches.length >= 2,
+        true,
+        "Signal spinner must cycle through signal disc aspects",
+      );
+    } finally {
+      spinner.stop();
+    }
+  });
+});
+
+Deno.test("Railway DX: createTrackSpinner cycles through track switch frames", async () => {
+  await withTerminalEnv({
+    isTerminal: true,
+    env: { CI: undefined, NO_COLOR: undefined },
+  }, async () => {
+    const stream = new MockTerminalStream(true);
+    const spinner = createTrackSpinner({ stream, intervalMs: 20 });
+    spinner.start("Switching track junctions...");
+    try {
+      await delay(80);
+      const text = stream.text;
+      const hasTrackChars = text.includes("━") || text.includes("╸");
+      assertEquals(
+        hasTrackChars,
+        true,
+        "Track spinner must cycle through track switch frames",
+      );
+    } finally {
+      spinner.stop();
+    }
+  });
+});
+
+Deno.test("Railway DX: createSpinner accepts custom frames array", async () => {
+  await withTerminalEnv({
+    isTerminal: true,
+    env: { CI: undefined, NO_COLOR: undefined },
+  }, async () => {
+    const stream = new MockTerminalStream(true);
+    const customFrames = ["▲", "►", "▼", "◄"];
+    const spinner = createSpinner({ stream, intervalMs: 20, frames: customFrames });
+    spinner.start("Custom gauge running...");
+    try {
+      await delay(80);
+      const text = stream.text;
+      const hasCustom = text.includes("▲") || text.includes("►") || text.includes("▼") || text.includes("◄");
+      assertEquals(hasCustom, true, "Spinner must use custom frames when provided");
+    } finally {
+      spinner.stop();
+    }
+  });
+});
+

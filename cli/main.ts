@@ -89,6 +89,7 @@ import {
   renderErrorCard,
   renderFreightExpressCard,
   renderModernTable,
+  renderProgressBar,
   renderReleaseTrainCard,
   renderRouteSimulatorCard,
   renderStationSignalBoard,
@@ -97,6 +98,13 @@ import {
   renderTree,
   wrapText,
 } from "./ui.ts";
+import {
+  createSignalSpinner,
+  createSpinner,
+  createTrackSpinner,
+  createWheelSpinner,
+  SPINNER_STYLES,
+} from "./spinner.ts";
 
 export {
   animateSignalLantern,
@@ -104,6 +112,10 @@ export {
   checkProject,
   CLI_VERSION,
   colors,
+  createSignalSpinner,
+  createSpinner,
+  createTrackSpinner,
+  createWheelSpinner,
   deployCommand,
   exportCommand,
   formatLogEntry,
@@ -125,12 +137,14 @@ export {
   renderErrorCard,
   renderFreightExpressCard,
   renderModernTable,
+  renderProgressBar,
   renderReleaseTrainCard,
   renderRouteSimulatorCard,
   renderStationSignalBoard,
   renderStatusBar,
   renderTrainLogo,
   renderTree,
+  SPINNER_STYLES,
   rollbackCommand,
   runAdd,
   runCheck,

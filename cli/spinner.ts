@@ -22,7 +22,7 @@ const SYMBOL_FAIL = "✖";
 
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0804-terminal-status-spinners.md#Acceptance criteria AC1
 // Cycling frames: Braille step indicator characters
-const SPINNER_FRAMES = [
+export const SPINNER_FRAMES = [
   "⠋",
   "⠙",
   "⠹",
@@ -34,6 +34,15 @@ const SPINNER_FRAMES = [
   "⠇",
   "⠏",
 ] as const;
+
+export type SpinnerStyle = "braille" | "wheel" | "signal" | "track";
+
+export const SPINNER_STYLES: Record<SpinnerStyle, readonly string[]> = {
+  braille: SPINNER_FRAMES,
+  wheel: ["◜", "◠", "◝", "◞", "◡", "◟"],
+  signal: ["◐", "◓", "◑", "◒"],
+  track: ["╸━  ", " ━╸ ", "  ━╾", "  ━╼", " ━╸ ", "╸━  "],
+};
 
 const DEFAULT_INTERVAL_MS = 80;
 
@@ -106,6 +115,8 @@ export function yellow(text: string): string {
 export interface SpinnerOptions {
   stream?: WriterSync;
   intervalMs?: number;
+  style?: SpinnerStyle;
+  frames?: readonly string[] | string[];
 }
 
 export interface Spinner {
@@ -130,10 +141,18 @@ export class TerminalSpinner implements Spinner {
   private timerId: ReturnType<typeof setInterval> | undefined = undefined;
   private running = false;
   private startTime = 0;
+  private frames: readonly string[];
 
   constructor(options?: SpinnerOptions) {
     this.stream = options?.stream ?? Deno.stdout;
     this.intervalMs = options?.intervalMs ?? DEFAULT_INTERVAL_MS;
+    if (options?.frames && options.frames.length > 0) {
+      this.frames = options.frames;
+    } else if (options?.style && SPINNER_STYLES[options.style]) {
+      this.frames = SPINNER_STYLES[options.style];
+    } else {
+      this.frames = SPINNER_STYLES.braille;
+    }
   }
 
   // spec: tasks/milestone-0.8-developer-experience-ux/T-0804-terminal-status-spinners.md#Acceptance criteria AC4
@@ -172,14 +191,14 @@ export class TerminalSpinner implements Spinner {
 
     // spec: docs/contracts/platform.contract.md#PLAT-19 — Animated interactive render vs static fallback
     if (this.isInteractive) {
-      const frame = SPINNER_FRAMES[this.frameIndex];
+      const frame = this.frames[this.frameIndex];
       this.write(
         `${CURSOR_HIDE}${CLEAR_LINE}${COLOR_CYAN}${frame}${COLOR_RESET} ${this.message}`,
       );
 
       this.timerId = setInterval(() => {
-        this.frameIndex = (this.frameIndex + 1) % SPINNER_FRAMES.length;
-        const currentFrame = SPINNER_FRAMES[this.frameIndex];
+        this.frameIndex = (this.frameIndex + 1) % this.frames.length;
+        const currentFrame = this.frames[this.frameIndex];
         const elapsed = Date.now() - this.startTime;
         const timeBadge = elapsed >= 1000
           ? ` ${dim(`(${(elapsed / 1000).toFixed(1)}s)`)}`
@@ -201,7 +220,7 @@ export class TerminalSpinner implements Spinner {
   setText(message: string): this {
     this.message = message;
     if (this.running && this.isInteractive) {
-      const currentFrame = SPINNER_FRAMES[this.frameIndex];
+      const currentFrame = this.frames[this.frameIndex];
       this.write(
         `${CLEAR_LINE}${COLOR_CYAN}${currentFrame}${COLOR_RESET} ${this.message}`,
       );
@@ -291,4 +310,25 @@ export class TerminalSpinner implements Spinner {
  */
 export function createSpinner(options?: SpinnerOptions): Spinner {
   return new TerminalSpinner(options);
+}
+
+/**
+ * Creates a locomotive wheel-rotation spinner (◜ ◠ ◝ ◞ ◡ ◟).
+ */
+export function createWheelSpinner(options?: Omit<SpinnerOptions, "style">): Spinner {
+  return new TerminalSpinner({ ...options, style: "wheel" });
+}
+
+/**
+ * Creates a railway station signal lantern aspect spinner (◐ ◓ ◑ ◒).
+ */
+export function createSignalSpinner(options?: Omit<SpinnerOptions, "style">): Spinner {
+  return new TerminalSpinner({ ...options, style: "signal" });
+}
+
+/**
+ * Creates a railway track switch / piston stroke spinner.
+ */
+export function createTrackSpinner(options?: Omit<SpinnerOptions, "style">): Spinner {
+  return new TerminalSpinner({ ...options, style: "track" });
 }
