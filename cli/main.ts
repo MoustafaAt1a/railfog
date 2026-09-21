@@ -82,6 +82,7 @@ import {
   renderErrorCard,
   renderModernTable,
   renderStatusBar,
+  renderTrainLogo,
   renderTree,
   wrapText,
 } from "./ui.ts";
@@ -107,6 +108,7 @@ export {
   renderCard,
   renderErrorCard,
   renderModernTable,
+  renderTrainLogo,
   rollbackCommand,
   runAdd,
   runCheck,

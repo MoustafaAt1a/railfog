@@ -509,20 +509,134 @@ export function renderProgressBar(
 }
 
 /**
- * Renders the official RailFog CLI Brand Header in pure ASCII.
+ * Renders the official RailFog pixel-art train locomotive logo.
+ * Clean 8-line geometry with responsive JetBrains/Darcula theme styling.
+ *
+ *       ┌──────┐
+ *         ████
+ *   ┌──────────────┐
+ *   │████  ██  ████│
+ *   │██████████████│
+ *   │██████████████│
+ *   │██  ██  ██  ██│
+ *   │██  ██  ██  ██│
  */
-export function renderBrandHeader(version: string, envName: string = "production"): string {
-  const logo = colors.brand(colors.bold("[RailFog]"));
-  const verBadge = colors.bgMuted(`v${version}`);
+export function renderTrainLogo(options?: {
+  colored?: boolean;
+  indent?: string;
+}): string[] {
+  const c = options?.colored !== false && colors.enabled;
+  const ind = options?.indent ?? "   ";
+
+  if (!c) {
+    return [
+      `${ind}    ┌──────┐`,
+      `${ind}      ████`,
+      `${ind}┌──────────────┐`,
+      `${ind}│████  ██  ████│`,
+      `${ind}│██████████████│`,
+      `${ind}│██████████████│`,
+      `${ind}│██  ██  ██  ██│`,
+      `${ind}│██  ██  ██  ██│`,
+    ];
+  }
+
+  const b = colors.border;
+  return [
+    `${ind}    ${b("┌──────┐")}`,
+    `${ind}      ${colors.amber(colors.bold("████"))}`,
+    `${ind}${b("┌──────────────┐")}`,
+    `${ind}${b("│")}${colors.accent("████")}  ${colors.amber("██")}  ${colors.accent("████")}${b("│")}`,
+    `${ind}${b("│")}${colors.brand("██████████████")}${b("│")}`,
+    `${ind}${b("│")}${colors.brand("██████████████")}${b("│")}`,
+    `${ind}${b("│")}${colors.slate("██  ██  ██  ██")}${b("│")}`,
+    `${ind}${b("│")}${colors.slate("██  ██  ██  ██")}${b("│")}`,
+  ];
+}
+
+export interface BrandHeaderOptions {
+  width?: number;
+  details?: Array<[string, string]>;
+  tagline?: string;
+  showTrain?: boolean;
+}
+
+/**
+ * Renders the official RailFog CLI Brand Header in Claude Code style.
+ * Responsively renders a side-by-side train mascot on wide terminals (>= 66 columns),
+ * a clean stacked layout on medium terminals (42-65 columns), and a compact badge
+ * on narrow terminals (< 42 columns).
+ */
+export function renderBrandHeader(
+  version: string,
+  envName: string = "production",
+  options?: BrandHeaderOptions,
+): string {
+  const termWidth = options?.width ?? getTerminalWidth();
+  const brandName = colors.bold(colors.brand("RailFog"));
+  const cleanVer = version.startsWith("v") ? version : `v${version}`;
+  const verBadge = colors.bgMuted(cleanVer);
   const envBadge = envName === "production"
     ? colors.bgSuccess("production")
     : colors.bgAccent(envName);
-  const tagline = colors.dim("Minimal Edge Infrastructure - Functions - KV - Objects - Queues");
 
-  return [
-    `  ${logo}  ${verBadge}  ${envBadge}`,
-    `  ${tagline}`,
-  ].join("\n");
+  if (options?.showTrain === false) {
+    return [
+      `  ${brandName}  ${verBadge}  ${envBadge}`,
+      `  ${colors.dim(options?.tagline ?? "Minimal Application Infrastructure")}`,
+    ].join("\n");
+  }
+
+  const trainLines = renderTrainLogo({ indent: "   " });
+  const logoWidth = 23; // 3 indent + 16 train + 4 gap
+
+  if (termWidth >= 66) {
+    // Two-column responsive layout (Claude Code style)
+    const rightLines: string[] = [
+      `${brandName}  ${verBadge}  ${envBadge}`,
+      colors.dim(options?.tagline ?? "Minimal Application Infrastructure"),
+      `${colors.dim("Trigger")} ${colors.accent("→")} ${colors.dim("Function")} ${colors.accent("→")} ${colors.dim("{KV, Objects, Queues}")}`,
+      "",
+    ];
+
+    if (options?.details && options.details.length > 0) {
+      for (const [k, v] of options.details) {
+        rightLines.push(`${colors.slate(k.padEnd(10))} ${v}`);
+      }
+    } else {
+      rightLines.push(
+        `${colors.slate("Engine:")}    ${colors.bold("Deno LTS")} ${colors.dim("•")} ${colors.slate("V8 Isolates")}`,
+        `${colors.slate("Storage:")}   ${colors.accent("KV")} ${colors.dim("•")} ${colors.emerald("Objects")} ${colors.dim("•")} ${colors.amber("Queues")}`,
+        `${colors.slate("Docs:")}      ${colors.dim("docs/contracts/")}`,
+        `${colors.dim("Tips:")}      ${colors.dim("Run")} ${colors.accent("rail --help")} ${colors.dim("for all commands")}`,
+      );
+    }
+
+    const out: string[] = [];
+    const maxRows = Math.max(trainLines.length, rightLines.length);
+    for (let i = 0; i < maxRows; i++) {
+      const left = trainLines[i] ?? " ".repeat(logoWidth);
+      const right = rightLines[i] ?? "";
+      const leftPad = logoWidth - visibleWidth(left);
+      out.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+    }
+    return out.join("\n");
+  } else if (termWidth >= 42) {
+    // Stacked responsive layout
+    return [
+      ...trainLines,
+      "",
+      `  ${brandName}  ${verBadge}  ${envBadge}`,
+      `  ${colors.dim(options?.tagline ?? "Minimal Application Infrastructure")}`,
+      `  ${colors.dim("Trigger")} ${colors.accent("→")} ${colors.dim("Function")} ${colors.accent("→")} ${colors.dim("{KV, Objects, Queues}")}`,
+    ].join("\n");
+  } else {
+    // Ultra-compact fallback
+    return [
+      `  ${brandName}  ${verBadge}  ${envBadge}`,
+      `  ${colors.dim(options?.tagline ?? "Minimal Application Infrastructure")}`,
+    ].join("\n");
+  }
 }
 
 /**

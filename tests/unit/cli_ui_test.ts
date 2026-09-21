@@ -2,8 +2,10 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
   colors,
   getTerminalWidth,
+  renderBrandHeader,
   renderCard,
   renderErrorCard,
+  renderTrainLogo,
   stripAnsi,
   visibleWidth,
   wrapText,
@@ -86,3 +88,40 @@ Deno.test("UI (Unit): getTerminalWidth returns a safe positive number", () => {
   const w = getTerminalWidth();
   assertEquals(w >= 40, true, `Terminal width should be at least 40: ${w}`);
 });
+
+Deno.test("UI (Unit): renderTrainLogo produces the 8-line pixel-art train locomotive", () => {
+  const train = renderTrainLogo({ indent: "   ", colored: false });
+  assertEquals(train.length, 8);
+  assertStringIncludes(train[0], "┌──────┐");
+  assertStringIncludes(train[1], "████");
+  assertStringIncludes(train[2], "┌──────────────┐");
+  assertStringIncludes(train[3], "│████  ██  ████│");
+  assertStringIncludes(train[4], "│██████████████│");
+  assertStringIncludes(train[5], "│██████████████│");
+  assertStringIncludes(train[6], "│██  ██  ██  ██│");
+  assertStringIncludes(train[7], "│██  ██  ██  ██│");
+});
+
+Deno.test("UI (Unit): renderBrandHeader renders side-by-side Claude Code style layout on wide screens", () => {
+  const banner = renderBrandHeader("0.8.0", "production", { width: 80 });
+  assertStringIncludes(banner, "RailFog");
+  assertStringIncludes(banner, "v0.8.0");
+  assertStringIncludes(banner, "production");
+  assertStringIncludes(banner, "┌──────┐");
+  assertStringIncludes(banner, "Engine:");
+  assertStringIncludes(banner, "Storage:");
+});
+
+Deno.test("UI (Unit): renderBrandHeader renders stacked layout on narrow screens", () => {
+  const banner = renderBrandHeader("0.8.0", "production", { width: 50 });
+  assertStringIncludes(banner, "RailFog");
+  assertStringIncludes(banner, "┌──────┐");
+  assertStringIncludes(banner, "Minimal Application Infrastructure");
+});
+
+Deno.test("UI (Unit): renderBrandHeader renders ultra-compact badge on tiny screens", () => {
+  const banner = renderBrandHeader("0.8.0", "production", { width: 35 });
+  assertStringIncludes(banner, "RailFog");
+  assertStringIncludes(banner, "v0.8.0");
+});
+
