@@ -1151,37 +1151,101 @@ if (import.meta.main) {
   const port = parseInt(Deno.env.get("PORT") || "8081", 10);
   const host = Deno.env.get("HOST") || "0.0.0.0";
   let storage: import("../../primitives/objects/object-provider.ts").ObjectProvider;
-  const s3Endpoint = Deno.env.get("OBJECTS_ENDPOINT") || Deno.env.get("R2_ENDPOINT");
-  const s3Bucket = Deno.env.get("OBJECTS_BUCKET") || Deno.env.get("R2_BUCKET_NAME");
-  const s3AccessKey = Deno.env.get("OBJECTS_ACCESS_KEY_ID") || Deno.env.get("R2_ACCESS_KEY_ID");
-  const s3SecretKey = Deno.env.get("OBJECTS_SECRET_ACCESS_KEY") || Deno.env.get("R2_SECRET_ACCESS_KEY");
+  const s3Endpoint = Deno.env.get("R2_ENDPOINT") || Deno.env.get("OBJECTS_ENDPOINT");
+  const s3Bucket = Deno.env.get("R2_BUCKET_NAME") || Deno.env.get("OBJECTS_BUCKET");
+  const s3AccessKey = Deno.env.get("R2_ACCESS_KEY_ID") || Deno.env.get("OBJECTS_ACCESS_KEY_ID");
+  const s3SecretKey = Deno.env.get("R2_SECRET_ACCESS_KEY") || Deno.env.get("OBJECTS_SECRET_ACCESS_KEY");
+
+  let storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR");
+  if (!storageDir) {
+    try {
+      await Deno.mkdir(".railfog/objects", { recursive: true });
+      storageDir = ".railfog/objects";
+    } catch {
+      // Fallback to /tmp/railfog/objects if current directory is not writable
+      storageDir = "/tmp/railfog/objects";
+      try {
+        await Deno.mkdir(storageDir, { recursive: true });
+      } catch {
+        // Best effort
+      }
+    }
+  }
+  const localFsStorage = new LocalFSProvider(storageDir);
 
   if (s3Endpoint && s3Bucket && s3AccessKey && s3SecretKey) {
     const { R2Provider } = await import("../../providers/objects/r2-provider.ts");
-    storage = new R2Provider({
+    const r2 = new R2Provider({
       endpoint: s3Endpoint,
       bucket: s3Bucket,
       accessKeyId: s3AccessKey,
       secretAccessKey: s3SecretKey,
     });
-    console.log("[railfog-control] using S3/R2 remote object storage provider for artifacts");
-  } else {
-    let storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR");
-    if (!storageDir) {
-      try {
-        await Deno.mkdir(".railfog/objects", { recursive: true });
-        storageDir = ".railfog/objects";
-      } catch {
-        // Fallback to /tmp/railfog/objects if current directory is not writable (e.g. unprivileged Docker container)
-        storageDir = "/tmp/railfog/objects";
+    // Resilient hybrid storage: tries R2 first, falls back cleanly to local FS
+    storage = {
+      put: async (k: string, d: ArrayBuffer | ReadableStream) => {
         try {
-          await Deno.mkdir(storageDir, { recursive: true });
+          return await r2.put(k, d);
         } catch {
-          // Best effort
+          return await localFsStorage.put(k, d);
         }
-      }
-    }
-    storage = new LocalFSProvider(storageDir);
+      },
+      get: async (k: string) => {
+        try {
+          const res = await r2.get(k);
+          if (res) return res;
+        } catch {
+          // fallback
+        }
+        return await localFsStorage.get(k);
+      },
+      delete: async (k: string) => {
+        try {
+          await r2.delete(k);
+        } catch {
+          // fallback
+        }
+        return await localFsStorage.delete(k);
+      },
+      head: async (k: string) => {
+        try {
+          const res = await r2.head(k);
+          if (res) return res;
+        } catch {
+          // fallback
+        }
+        return await localFsStorage.head(k);
+      },
+      list: async (p: string, opts?: { limit?: number; cursor?: string }) => {
+        try {
+          const res = await r2.list(p, opts);
+          if (res && res.keys.length > 0) return res;
+        } catch {
+          // fallback
+        }
+        return await localFsStorage.list(p, opts);
+      },
+      presign: async (
+        k: string,
+        o: { method: "GET" | "PUT"; expiresIn?: number; maxExpiresIn?: number },
+      ) => {
+        try {
+          return await r2.presign(k, o);
+        } catch {
+          return await localFsStorage.presign(k, o);
+        }
+      },
+      createMultipartUpload: async (k: string) => {
+        try {
+          return await r2.createMultipartUpload(k);
+        } catch {
+          return await localFsStorage.createMultipartUpload(k);
+        }
+      },
+    };
+    console.log("[railfog-control] using resilient R2/S3 object storage provider with local fallback");
+  } else {
+    storage = localFsStorage;
   }
 
   const databaseUrl = Deno.env.get("DATABASE_URL");
