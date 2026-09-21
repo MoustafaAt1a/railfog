@@ -12,6 +12,7 @@ import { join, resolve } from "@std/path";
 import { parse } from "@std/toml";
 import { LocalEncryptedSecretStore } from "../packages/policy/secret-store.ts";
 import { SecretRedactor } from "../packages/logging/secret-redactor.ts";
+import { colors, renderModernTable, renderStatusBar } from "./ui.ts";
 
 // spec: tasks/milestone-0.5-developer-experience/T-0506-cli-secrets-management.md — Valid secret identifier regex
 export const VALID_SECRET_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -211,14 +212,29 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
           entries.push({ key: name, updatedAt });
         }
 
-        console.log("KEY                  UPDATED");
-        for (const entry of entries) {
+        const headers = ["KEY", "ENCRYPTION", "UPDATED"];
+        const rows = entries.map((entry) => {
           const dateStr = new Date(entry.updatedAt)
             .toISOString()
             .replace("T", " ")
             .replace(/\.\d{3}Z$/, " UTC");
-          console.log(`${entry.key.padEnd(20)} ${dateStr}`);
-        }
+          return [entry.key, "[AES-GCM]", dateStr];
+        });
+
+        console.log(
+          renderModernTable(headers, rows, {
+            alignments: ["left", "center", "left"],
+            style: "ascii",
+          }),
+        );
+        console.log();
+        console.log(
+          renderStatusBar([
+            { label: "Project", value: projectId },
+            { label: "Total Secrets", value: String(entries.length) },
+            { label: "Encryption", value: "AES-256-GCM" },
+          ]),
+        );
         return 0;
       }
 

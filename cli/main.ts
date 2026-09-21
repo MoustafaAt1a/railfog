@@ -323,7 +323,7 @@ function printGeneralHelp(): void {
 ${colors.bold("Usage:")}
   rail <command> [options]
 
-${colors.bold(colors.accent("== Development & Deployment =="))}
+${colors.bold(colors.accent("== [Project & Build] =="))}
   init      Initialize a new RailFog project in the current directory
   dev       Start the local development server with hot-reload
   deploy    Deploy functions and configuration to the Control Plane
@@ -332,21 +332,21 @@ ${colors.bold(colors.accent("== Development & Deployment =="))}
   check     Validate railfog.toml configuration and route patterns
   add       Add a dependency or primitive to deno.json
 
-${colors.bold(colors.accent("== Authentication & Identity =="))}
+${colors.bold(colors.accent("== [Security & Identity] =="))}
   login     Authenticate your session via browser or API token
   logout    Log out and remove local credentials
   whoami    Display currently authenticated organization and key
-
-${colors.bold(colors.accent("== Operations & Reliability =="))}
-  logs      Stream and filter structured runtime logs
   secrets   Manage encrypted project secrets (set, list, delete)
+
+${colors.bold(colors.accent("== [Services & Observability] =="))}
+  logs      Stream and filter structured runtime logs
   rollback  Rollback a function to a previous revision instantly
   usage     Display resource consumption and itemized cost breakdown
   cost      Alias for usage subcommand
   export    Export project state to a disaster recovery archive
   import    Import and restore project state from a disaster recovery archive
 
-${colors.bold(colors.accent("== Maintenance =="))}
+${colors.bold(colors.accent("== [System & Maintenance] =="))}
   upgrade   Upgrade the RailFog CLI to the latest version
   update    Alias for upgrade subcommand
   sync      Sync CLI with the latest git updates (alias for update)

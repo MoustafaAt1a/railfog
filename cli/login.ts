@@ -12,6 +12,7 @@ import {
   type CallbackServerSession,
   startCallbackServer,
 } from "./callback-server.ts";
+import { colors, glyphs, renderCard, renderStatusBar } from "./ui.ts";
 
 export interface LoginOptions {
   controlUrl?: string;
@@ -404,11 +405,26 @@ export async function runWhoami(options?: {
       ? `${config.token.slice(0, 4)}...${config.token.slice(-4)}`
       : "[REDACTED]";
 
-    console.log(`Authenticated with RailFog:`);
-    console.log(`  Organization: \x1b[32m${orgId}\x1b[0m`);
-    console.log(`  Key Name:     ${callerId}`);
-    console.log(`  Token:        ${tokenDisplay}`);
-    console.log(`  Control URL:  ${controlUrl}`);
+    const card = renderCard("RailFog Cloud Account", [
+      `${glyphs.success}  Connected to Control Plane (Status: Active)`,
+      "",
+      `   ${colors.dim("Organization:")}   ${colors.emerald(colors.bold(orgId))}`,
+      `   ${colors.dim("Key Name:")}       ${colors.slate(callerId)}`,
+      `   ${colors.dim("Access Token:")}   ${colors.amber(tokenDisplay)}`,
+      `   ${colors.dim("Control URL:")}    ${colors.accent(controlUrl)}`,
+    ], {
+      borderColor: colors.emerald,
+    });
+
+    console.log(card);
+    console.log();
+    console.log(
+      renderStatusBar([
+        { label: "Account", value: orgId },
+        { label: "Key", value: callerId },
+        { label: "Status", value: "Authenticated" },
+      ]),
+    );
 
     return { authenticated: true, orgId, callerId };
   } catch (err) {
