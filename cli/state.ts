@@ -28,6 +28,7 @@ import {
   ResourceNotFoundError,
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
+import { resolveAuthHeader } from "./auth-config.ts";
 
 export interface ExportCommandOptions {
   cwd?: string;
@@ -36,6 +37,7 @@ export interface ExportCommandOptions {
   org?: string;
   controlPlaneUrl?: string;
   stateBackupService?: StateBackupService;
+  token?: string;
 }
 
 export interface ImportCommandOptions {
@@ -46,6 +48,7 @@ export interface ImportCommandOptions {
   overwriteKv?: boolean;
   controlPlaneUrl?: string;
   stateBackupService?: StateBackupService;
+  token?: string;
 }
 
 export const PRODUCTION_CONTROL_PLANE_URL =
@@ -110,12 +113,15 @@ export async function exportCommand(
     const baseUrl = rawUrl.replace(/\/+$/, "");
 
     const url = new URL(`${baseUrl}/export`);
+    url.searchParams.set("projectId", projectName);
     url.searchParams.set("project", projectName);
+    url.searchParams.set("orgId", orgId);
     url.searchParams.set("org", orgId);
+    const authHeaders = await resolveAuthHeader(options);
 
     const res = await fetch(url.toString(), {
       method: "GET",
-      headers: { "accept": "application/json" },
+      headers: { "accept": "application/json", ...authHeaders },
     });
 
     if (!res.ok) {
@@ -235,10 +241,11 @@ export async function importCommand(
       Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
       DEFAULT_CONTROL_PLANE_URL;
     const baseUrl = rawUrl.replace(/\/+$/, "");
+    const authHeaders = await resolveAuthHeader(options);
 
     const res = await fetch(`${baseUrl}/import`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...authHeaders },
       body: JSON.stringify({
         targetOrgId,
         targetProjectId: targetProject,
