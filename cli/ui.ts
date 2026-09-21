@@ -508,54 +508,27 @@ export function renderProgressBar(
   return `[${bar}] ${colors.bold(percentText)}${extra}`;
 }
 
-/**
- * 8-frame cyclic steam plume particle animation with varying density and particle physics.
- * Density: ░ (sparse), ▒ (medium), ▓ (dense), █ (core)
- * Particles: ◌ (wisp), ◦ (fleck), ○ (bubble), ● (smoke puff), ◉ (ember/spark)
- */
-export const STEAM_PARTICLES_FRAMES = [
-  ["           ◌   ◦  ●   ", "         ░▒▓█○●       "],
-  ["             ◦   ◌  ○ ", "          ▒▓█●◉       "],
-  ["           ●   ◌   ◦  ", "         ░▓█◉●        "],
-  ["             ◌  ●   ◦ ", "          ░▒▓○●       "],
-  ["           ◦   ○  ●   ", "         ▒▓█●         "],
-  ["             ●  ◦   ◌ ", "          ▓█●◉        "],
-  ["           ◌   ◦   ●  ", "         ░▒▓█○        "],
-  ["             ◦  ●   ◌ ", "          ░▓█●◉       "],
-] as const;
-
-export function styleSteam(line: string, colored: boolean): string {
-  if (!colored) return line;
-  let out = "";
-  for (const ch of line) {
-    if (ch === "░") out += colors.dim(colors.slate("░"));
-    else if (ch === "▒") out += colors.dim(colors.white("▒"));
-    else if (ch === "▓") out += colors.slate("▓");
-    else if (ch === "█") out += colors.bold(colors.white("█"));
-    else if (ch === "◌") out += colors.dim(colors.cyan("◌"));
-    else if (ch === "◦") out += colors.dim(colors.amber("◦"));
-    else if (ch === "○") out += colors.cyan("○");
-    else if (ch === "●") out += colors.slate("●");
-    else if (ch === "◉") out += colors.amber("◉");
-    else out += ch;
-  }
-  return out;
-}
+const HEADLIGHT_PULSE_COLORS = [
+  (t: string) => colors.bold(colors.white(t)),
+  (t: string) => `\x1b[1;97m${t}\x1b[0m`,
+  (t: string) => colors.white(t),
+  (t: string) => colors.gray(t),
+  (t: string) => colors.white(t),
+  (t: string) => `\x1b[1;97m${t}\x1b[0m`,
+];
 
 export interface TrainLogoOptions {
   colored?: boolean;
   indent?: string;
-  steamFrame?: number;
-  includeSteam?: boolean;
+  pulseFrame?: number;
   includeTrack?: boolean;
+  colorScheme?: "white-gray" | "white" | "gray";
 }
 
 /**
  * Renders the official RailFog pixel-art train locomotive logo.
- * Clean geometry with responsive JetBrains/Darcula styling, animated steam plume, and track bed.
+ * Clean, minimalist monochrome geometry in crisp white and gray.
  *
- *            ◌   ◦  ●
- *          ░▒▓█○●
  *        ┌──────┐
  *          ████
  *    ┌──────────────┐
@@ -569,16 +542,13 @@ export interface TrainLogoOptions {
 export function renderTrainLogo(options?: TrainLogoOptions): string[] {
   const c = options?.colored !== false && colors.enabled;
   const ind = options?.indent ?? "";
-  const includeSteam = options?.includeSteam ?? true;
   const includeTrack = options?.includeTrack ?? true;
+  const scheme = options?.colorScheme ?? "white-gray";
   const lines: string[] = [];
 
-  if (includeSteam) {
-    const frameIdx = Math.abs(options?.steamFrame ?? 0) % STEAM_PARTICLES_FRAMES.length;
-    const [lineA, lineB] = STEAM_PARTICLES_FRAMES[frameIdx];
-    lines.push(ind + styleSteam(lineA, c));
-    lines.push(ind + styleSteam(lineB, c));
-  }
+  const headlightColor = options?.pulseFrame !== undefined && c
+    ? HEADLIGHT_PULSE_COLORS[Math.abs(options.pulseFrame) % HEADLIGHT_PULSE_COLORS.length]
+    : (t: string) => colors.bold(scheme === "gray" ? colors.gray(t) : colors.white(t));
 
   if (!c) {
     lines.push(
@@ -592,22 +562,27 @@ export function renderTrainLogo(options?: TrainLogoOptions): string[] {
       `${ind}   │██  ██  ██  ██│`,
     );
   } else {
-    const b = colors.border;
+    const g = scheme === "white" ? colors.white : colors.gray;
+    const w = (t: string) => colors.bold(scheme === "gray" ? colors.gray(t) : colors.white(t));
+    const b = scheme === "gray" ? colors.gray : colors.white;
+    const wheels = scheme === "white" ? colors.white : colors.gray;
+
     lines.push(
-      `${ind}       ${b("┌──────┐")}`,
-      `${ind}         ${colors.amber(colors.bold("████"))}`,
-      `${ind}   ${b("┌──────────────┐")}`,
-      `${ind}   ${b("│")}${colors.accent("████")}  ${colors.amber("██")}  ${colors.accent("████")}${b("│")}`,
-      `${ind}   ${b("│")}${colors.brand("██████████████")}${b("│")}`,
-      `${ind}   ${b("│")}${colors.brand("██████████████")}${b("│")}`,
-      `${ind}   ${b("│")}${colors.slate("██  ██  ██  ██")}${b("│")}`,
-      `${ind}   ${b("│")}${colors.slate("██  ██  ██  ██")}${b("│")}`,
+      `${ind}       ${g("┌──────┐")}`,
+      `${ind}         ${headlightColor("████")}`,
+      `${ind}   ${g("┌──────────────┐")}`,
+      `${ind}   ${g("│")}${b("████")}  ${w("██")}  ${b("████")}${g("│")}`,
+      `${ind}   ${g("│")}${b("██████████████")}${g("│")}`,
+      `${ind}   ${g("│")}${b("██████████████")}${g("│")}`,
+      `${ind}   ${g("│")}${wheels("██  ██  ██  ██")}${g("│")}`,
+      `${ind}   ${g("│")}${wheels("██  ██  ██  ██")}${g("│")}`,
     );
   }
 
   if (includeTrack) {
     const track = "  ══════════════════";
-    lines.push(ind + (c ? colors.border(track) : track));
+    const trackColor = scheme === "white" ? colors.white : colors.gray;
+    lines.push(ind + (c ? trackColor(track) : track));
   }
 
   return lines;
@@ -618,7 +593,8 @@ export interface BrandHeaderOptions {
   details?: Array<[string, string]>;
   tagline?: string;
   showTrain?: boolean;
-  steamFrame?: number;
+  pulseFrame?: number;
+  colorScheme?: "white-gray" | "white" | "gray";
 }
 
 /**
@@ -648,8 +624,8 @@ export function renderBrandHeader(
   }
 
   const trainLines = renderTrainLogo({
-    steamFrame: options?.steamFrame,
-    includeSteam: true,
+    pulseFrame: options?.pulseFrame,
+    colorScheme: options?.colorScheme,
     includeTrack: true,
   });
   const logoWidth = 24;
@@ -657,8 +633,6 @@ export function renderBrandHeader(
   if (termWidth >= 66) {
     // Two-column responsive layout (Claude Code style)
     const rightLines: string[] = [
-      "",
-      "",
       `${brandName}  ${verBadge}  ${envBadge}`,
       colors.dim(options?.tagline ?? "Minimal Application Infrastructure"),
       `${colors.dim("Trigger")} ${colors.accent("→")} ${colors.dim("Function")} ${colors.accent("→")} ${colors.dim("{KV, Objects, Queues}")}`,
@@ -717,7 +691,7 @@ export interface BoardingPassInfo {
  * Renders an official RailFog Cloud Boarding Pass ticket featuring the train locomotive.
  */
 export function renderBoardingPass(info: BoardingPassInfo): string {
-  const trainLines = renderTrainLogo({ includeSteam: true, includeTrack: true });
+  const trainLines = renderTrainLogo({ includeTrack: true });
   const logoWidth = 24;
 
   const cleanUrl = info.controlUrl.replace(/^https?:\/\//, "");
@@ -736,8 +710,6 @@ export function renderBoardingPass(info: BoardingPassInfo): string {
     `${colors.dim("CLASS:")}         ${colors.bold(info.tier ?? "Production Tier")}`,
     `${colors.dim("PRIMITIVES:")}    ${colors.accent("FN")} ${colors.dim("•")} ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${colors.amber("QUEUES")}`,
     `${colors.dim("VALIDATION:")}    ${colors.emerald("[+] ACTIVE & VERIFIED")}`,
-    "",
-    "",
   ];
 
   const contentLines: string[] = [];
@@ -756,8 +728,7 @@ export function renderBoardingPass(info: BoardingPassInfo): string {
 }
 
 /**
- * Executes a real-time live animation of the RailFog steam locomotive.
- * Billows steam particles (◌ ◦ ○ ● ◉) and density blocks (░ ▒ ▓ █) at ~8 FPS.
+ * Executes a live animation of the RailFog locomotive with a pulsing headlight.
  */
 export async function animateSteamTrain(options?: {
   durationMs?: number;
@@ -766,7 +737,7 @@ export async function animateSteamTrain(options?: {
   signal?: AbortSignal;
 }): Promise<void> {
   const isTerm = typeof Deno.stdout.isTerminal === "function" && Deno.stdout.isTerminal();
-  const fps = options?.fps ?? 8;
+  const fps = options?.fps ?? 6;
   const intervalMs = Math.round(1000 / fps);
   const encoder = new TextEncoder();
   const ver = options?.version ?? "0.8.0";
@@ -795,7 +766,7 @@ export async function animateSteamTrain(options?: {
 
   try {
     while (!options?.signal?.aborted) {
-      const banner = renderBrandHeader(ver, "production", { steamFrame: frame });
+      const banner = renderBrandHeader(ver, "production", { pulseFrame: frame });
       const renderedLines = banner.split("\n");
       const numLines = renderedLines.length;
 

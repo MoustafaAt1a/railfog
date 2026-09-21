@@ -8,9 +8,7 @@ import {
   renderCard,
   renderErrorCard,
   renderTrainLogo,
-  STEAM_PARTICLES_FRAMES,
   stripAnsi,
-  styleSteam,
   visibleWidth,
   wrapText,
 } from "../../cli/ui.ts";
@@ -93,40 +91,44 @@ Deno.test("UI (Unit): getTerminalWidth returns a safe positive number", () => {
   assertEquals(w >= 40, true, `Terminal width should be at least 40: ${w}`);
 });
 
-Deno.test("UI (Unit): renderTrainLogo produces the pixel-art train locomotive with steam and track", () => {
+Deno.test("UI (Unit): renderTrainLogo produces the clean 8-line pixel-art train locomotive with track", () => {
   const train = renderTrainLogo({ colored: false });
-  assertEquals(train.length, 11);
-  assertStringIncludes(train[0], "◌");
-  assertStringIncludes(train[1], "░▒▓█");
-  assertStringIncludes(train[2], "┌──────┐");
-  assertStringIncludes(train[3], "████");
-  assertStringIncludes(train[4], "┌──────────────┐");
-  assertStringIncludes(train[5], "│████  ██  ████│");
-  assertStringIncludes(train[6], "│██████████████│");
-  assertStringIncludes(train[7], "│██████████████│");
-  assertStringIncludes(train[8], "│██  ██  ██  ██│");
-  assertStringIncludes(train[9], "│██  ██  ██  ██│");
-  assertStringIncludes(train[10], "══════════════════");
+  assertEquals(train.length, 9);
+  assertEquals(train[0], "       ┌──────┐");
+  assertEquals(train[1], "         ████");
+  assertEquals(train[2], "   ┌──────────────┐");
+  assertEquals(train[3], "   │████  ██  ████│");
+  assertEquals(train[4], "   │██████████████│");
+  assertEquals(train[5], "   │██████████████│");
+  assertEquals(train[6], "   │██  ██  ██  ██│");
+  assertEquals(train[7], "   │██  ██  ██  ██│");
+  assertEquals(train[8], "  ══════════════════");
 });
 
-Deno.test("UI (Unit): renderTrainLogo supports compact mode without steam or track", () => {
-  const compact = renderTrainLogo({ includeSteam: false, includeTrack: false, colored: false });
+Deno.test("UI (Unit): renderTrainLogo supports compact mode without track", () => {
+  const compact = renderTrainLogo({ includeTrack: false, colored: false });
   assertEquals(compact.length, 8);
-  assertStringIncludes(compact[0], "┌──────┐");
+  assertEquals(compact[0], "       ┌──────┐");
 });
 
-Deno.test("UI (Unit): STEAM_PARTICLES_FRAMES has 8 density and particle frames", () => {
-  assertEquals(STEAM_PARTICLES_FRAMES.length, 8);
-  for (const [top, bottom] of STEAM_PARTICLES_FRAMES) {
-    assertEquals(typeof top, "string");
-    assertEquals(typeof bottom, "string");
-  }
+Deno.test("UI (Unit): renderTrainLogo with pulseFrame renders valid ANSI strings", () => {
+  const framed = renderTrainLogo({ pulseFrame: 2, colored: true });
+  assertEquals(framed.length, 9);
+  assertStringIncludes(stripAnsi(framed[0]), "┌──────┐");
 });
 
-Deno.test("UI (Unit): styleSteam formats particles and density blocks", () => {
-  const styled = styleSteam("░▒▓█◌◦○●◉", true);
-  assertEquals(typeof styled, "string");
-  assertEquals(stripAnsi(styled), "░▒▓█◌◦○●◉");
+Deno.test("UI (Unit): renderTrainLogo supports white, gray, and white-gray monochrome schemes", () => {
+  const whiteScheme = renderTrainLogo({ colorScheme: "white", colored: true });
+  assertEquals(whiteScheme.length, 9);
+  assertStringIncludes(whiteScheme[0], "┌──────┐");
+
+  const grayScheme = renderTrainLogo({ colorScheme: "gray", colored: true });
+  assertEquals(grayScheme.length, 9);
+  assertStringIncludes(grayScheme[0], "┌──────┐");
+
+  const hybridScheme = renderTrainLogo({ colorScheme: "white-gray", colored: true });
+  assertEquals(hybridScheme.length, 9);
+  assertStringIncludes(hybridScheme[0], "┌──────┐");
 });
 
 Deno.test("UI (Unit): renderBoardingPass outputs formatted boarding pass card", () => {

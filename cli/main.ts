@@ -86,8 +86,6 @@ import {
   renderStatusBar,
   renderTrainLogo,
   renderTree,
-  STEAM_PARTICLES_FRAMES,
-  styleSteam,
   wrapText,
 } from "./ui.ts";
 
@@ -129,8 +127,6 @@ export {
   runUpgrade,
   runUsage,
   runWhoami,
-  STEAM_PARTICLES_FRAMES,
-  styleSteam,
   wrapText,
 };
 export type {
@@ -1562,20 +1558,33 @@ export async function main(args: string[] = Deno.args): Promise<void> {
     case "banner": {
       let animated = false;
       let durationMs = 0;
+      let colorScheme: "white-gray" | "white" | "gray" | undefined;
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
-          console.log(`RailFog CLI - Locomotive Logo & Real-Time Steam Plume
+          console.log(`RailFog CLI - Locomotive Logo & Brand Banner
 
 Usage:
   rail logo [options]
 
 Options:
-  -a, --animate         Run the real-time live steam plume animation
+  -c, --color <scheme>  Monochrome color scheme: white-gray (default), white, gray
+  -a, --animate         Run the locomotive pulse animation
   -d, --duration <sec>  Duration to run animation in seconds (default: continuous)
   -h, --help            Show this help message
 `);
           return;
+        } else if ((arg === "-c" || arg === "--color") && args[i + 1]) {
+          const val = args[i + 1];
+          if (val === "white" || val === "gray" || val === "white-gray") {
+            colorScheme = val;
+          }
+          i++;
+        } else if (arg.startsWith("--color=")) {
+          const val = arg.slice("--color=".length);
+          if (val === "white" || val === "gray" || val === "white-gray") {
+            colorScheme = val;
+          }
         } else if (arg === "-a" || arg === "--animate" || arg === "--animated") {
           animated = true;
         } else if ((arg === "-d" || arg === "--duration") && args[i + 1]) {
@@ -1589,7 +1598,7 @@ Options:
       if (animated) {
         await animateSteamTrain({ durationMs, version: CLI_VERSION });
       } else {
-        console.log(renderBrandHeader(CLI_VERSION));
+        console.log(renderBrandHeader(CLI_VERSION, "production", { colorScheme }));
       }
       break;
     }
