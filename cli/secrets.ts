@@ -224,7 +224,7 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
         console.log(
           renderModernTable(headers, rows, {
             alignments: ["left", "center", "left"],
-            style: "ascii",
+            style: "unicode",
           }),
         );
         console.log();

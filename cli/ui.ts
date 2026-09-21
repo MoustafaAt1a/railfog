@@ -256,7 +256,7 @@ export function renderCard(
 ): string {
   const colorFn = options?.borderColor ?? colors.border;
   const termWidth = getTerminalWidth();
-  const isUnicode = options?.borderStyle === "unicode";
+  const isUnicode = options?.borderStyle !== "ascii";
 
   // Border characters
   const cTopLeft = isUnicode ? "┌──" : "+--";
@@ -266,25 +266,52 @@ export function renderCard(
   const cBottomLeft = isUnicode ? "└" : "+";
   const cBottomRight = isUnicode ? "┘" : "+";
 
+  // Calculate natural content width first to know how much width content actually needs
+  const titleVis = title ? visibleWidth(title) + 2 : 0;
+  let rawContentMax = Math.max(titleVis + 2, 20);
+  for (const l of lines) {
+    if (l) {
+      const w = visibleWidth(l);
+      if (w > rawContentMax) rawContentMax = w;
+    }
+  }
+
+  const isTerm = typeof Deno.stdout?.isTerminal === "function" ? Deno.stdout.isTerminal() : false;
+
   // Cap outer card to avoid exceeding terminal width
-  const maxOuterAllowed = Math.max(36, termWidth - 2);
-  const preferredMaxOuter = options?.maxWidth ?? 80;
-  const targetOuterMax = Math.min(preferredMaxOuter, maxOuterAllowed);
+  let targetOuterMax: number;
+  if (options?.maxWidth) {
+    targetOuterMax = options.maxWidth;
+  } else if (isTerm) {
+    targetOuterMax = Math.min(Math.max(80, rawContentMax + 4), Math.max(36, termWidth - 2));
+  } else {
+    // Non-interactive / tests / pipe: allow card to expand to content width cleanly
+    targetOuterMax = Math.max(80, rawContentMax + 4);
+  }
 
   // Available width for content inside "| " and " |" (4 characters total)
   let maxInnerWidth = Math.max(20, targetOuterMax - 4);
   if (options?.width) {
-    maxInnerWidth = Math.max(20, Math.min(options.width - 4, maxOuterAllowed - 4));
+    maxInnerWidth = Math.max(20, options.width - 4);
   }
 
-  // Pre-wrap all lines to guarantee they never overflow maxInnerWidth
+  // Pre-wrap lines, protecting dividers and ensuring they fit maxInnerWidth
   const wrappedLines: string[] = [];
-  const titleVis = title ? visibleWidth(title) + 2 : 1;
   let maxContentWidth = Math.max(titleVis + 2, 20);
 
   for (const l of lines) {
     if (!l) {
       wrappedLines.push("");
+      continue;
+    }
+    const stripped = stripAnsi(l);
+    // Protect horizontal divider lines (e.g. ────── or ------), sizing them to maxInnerWidth
+    if (/^\s*[─\-=━]{4,}\s*$/.test(stripped)) {
+      const indentMatch = stripped.match(/^(\s*)/);
+      const indent = indentMatch ? indentMatch[1] : "  ";
+      const ruleWidth = Math.max(4, maxInnerWidth - visibleWidth(indent));
+      wrappedLines.push(colorFn(indent + cHoriz.repeat(ruleWidth)));
+      maxContentWidth = Math.max(maxContentWidth, visibleWidth(indent) + ruleWidth);
       continue;
     }
     const chunks = wrapText(l, maxInnerWidth);
@@ -301,7 +328,7 @@ export function renderCard(
   const out: string[] = [];
 
   // Top border
-  const titlePart = title ? ` ${colors.bold(title)} ` : cHoriz;
+  const titlePart = title ? ` ${colors.bold(title)} ` : "";
   const topDashes = Math.max(0, cardWidth - titleVis - 4);
   out.push(colorFn(cTopLeft) + titlePart + colorFn(cHoriz.repeat(topDashes) + cTopRight));
 
@@ -387,22 +414,36 @@ export function renderErrorCard(err: {
   });
 }
 
+export interface ModernTableOptions {
+  alignments?: Array<"left" | "right" | "center">;
+  style?: "unicode" | "ascii" | "clean";
+  title?: string;
+  maxWidth?: number;
+  borderColor?: (t: string) => string;
+}
+
 /**
- * Renders a table with pure ASCII borders.
+ * Renders a responsive table with JetBrains Unicode single-line box drawing.
+ * Automatically wraps cells and shrinks columns to fit within terminal width.
  */
 export function renderModernTable(
   headers: string[],
   rows: string[][],
-  options?: {
-    alignments?: Array<"left" | "right" | "center">;
-    style?: "ascii" | "clean";
-  },
+  options?: ModernTableOptions,
 ): string {
   if (!headers || headers.length === 0) return "";
   const safeRows = rows || [];
   const colCount = Math.max(headers.length, ...safeRows.map((r) => r.length));
-  const colWidths: number[] = new Array(colCount).fill(0);
+  if (colCount === 0) return "";
 
+  const style = options?.style ?? "unicode";
+  const isUnicode = style === "unicode";
+  const isClean = style === "clean";
+  const colorFn = options?.borderColor ?? colors.border;
+  const alignments = options?.alignments ?? [];
+
+  // Measure natural column widths
+  const naturalWidths: number[] = new Array(colCount).fill(0);
   for (let c = 0; c < colCount; c++) {
     const h = headers[c] ?? "";
     let maxW = visibleWidth(h);
@@ -410,62 +451,150 @@ export function renderModernTable(
       const cell = r[c] ?? "";
       maxW = Math.max(maxW, visibleWidth(cell));
     }
-    colWidths[c] = Math.max(1, maxW);
+    naturalWidths[c] = Math.max(1, maxW);
   }
 
-  const alignments = options?.alignments ?? [];
-  const style = options?.style ?? "ascii";
-
-  if (style === "ascii") {
+  if (isClean) {
+    // Clean / minimal borderless style
     const out: string[] = [];
-    // +------+------+
-    const top = "+" + colWidths.map((w) => "-".repeat(w + 2)).join("+") + "+";
-    out.push(colors.border(top));
-
-    // | Header | Header |
+    if (options?.title) {
+      out.push(colors.bold(colors.accent(options.title)));
+      out.push("");
+    }
     const hCells = headers.map((h, i) =>
-      " " + colors.bold(colors.accent(padText(h, colWidths[i], alignments[i] ?? "left"))) + " "
+      colors.bold(colors.accent(padText(h, naturalWidths[i], alignments[i] ?? "left")))
     );
-    out.push(colors.border("|") + hCells.join(colors.border("|")) + colors.border("|"));
+    out.push("  " + hCells.join("   "));
 
-    // +------+------+
-    const mid = "+" + colWidths.map((w) => "-".repeat(w + 2)).join("+") + "+";
-    out.push(colors.border(mid));
+    const divCells = naturalWidths.map((w) => "─".repeat(w));
+    out.push(colorFn("  " + divCells.join("   ")));
 
-    // | Data | Data |
     for (const row of safeRows) {
       const cells = [];
       for (let i = 0; i < colCount; i++) {
         const val = row[i] ?? "";
-        cells.push(" " + padText(val, colWidths[i], alignments[i] ?? "left") + " ");
+        cells.push(padText(val, naturalWidths[i], alignments[i] ?? "left"));
       }
-      out.push(colors.border("|") + cells.join(colors.border("|")) + colors.border("|"));
+      out.push("  " + cells.join("   "));
     }
-
-    // +------+------+
-    const bot = "+" + colWidths.map((w) => "-".repeat(w + 2)).join("+") + "+";
-    out.push(colors.border(bot));
     return out.join("\n");
   }
 
-  // Clean / minimal style
-  const out: string[] = [];
-  const hCells = headers.map((h, i) =>
-    colors.bold(colors.accent(padText(h, colWidths[i], alignments[i] ?? "left")))
-  );
-  out.push("  " + hCells.join("   "));
+  // Box border characters (JetBrains Unicode vs ASCII)
+  const cTopLeft = isUnicode ? "┌" : "+";
+  const cTopMid = isUnicode ? "┬" : "+";
+  const cTopRight = isUnicode ? "┐" : "+";
+  const cMidLeft = isUnicode ? "├" : "+";
+  const cMidMid = isUnicode ? "┼" : "+";
+  const cMidRight = isUnicode ? "┤" : "+";
+  const cBottomLeft = isUnicode ? "└" : "+";
+  const cBottomMid = isUnicode ? "┴" : "+";
+  const cBottomRight = isUnicode ? "┘" : "+";
+  const cHoriz = isUnicode ? "─" : "-";
+  const cVert = isUnicode ? "│" : "|";
+  const cTitleTopLeft = isUnicode ? "┌──" : "+--";
 
-  const divCells = colWidths.map((w) => "-".repeat(w));
-  out.push(colors.border("  " + divCells.join("   ")));
+  // Calculate table width & responsive column shrinking
+  // Overhead: each col has " " + cell + " " plus dividers = (colCount * 3) + 1
+  const overhead = (colCount * 3) + 1;
+  const termWidth = getTerminalWidth();
+  const isTerm = typeof Deno.stdout?.isTerminal === "function" ? Deno.stdout.isTerminal() : false;
+  const sumNatural = naturalWidths.reduce((a, b) => a + b, 0);
+  const naturalTableWidth = sumNatural + overhead;
 
-  for (const row of safeRows) {
-    const cells = [];
-    for (let i = 0; i < colCount; i++) {
-      const val = row[i] ?? "";
-      cells.push(padText(val, colWidths[i], alignments[i] ?? "left"));
-    }
-    out.push("  " + cells.join("   "));
+  let targetMax: number;
+  if (options?.maxWidth) {
+    targetMax = options.maxWidth;
+  } else if (isTerm) {
+    targetMax = Math.max(40, termWidth - 2);
+  } else {
+    targetMax = Math.max(naturalTableWidth, 80);
   }
+
+  const titleVis = options?.title ? visibleWidth(options.title) + 2 : 0;
+  targetMax = Math.max(titleVis + 4, targetMax);
+  const availableContent = targetMax - overhead;
+
+  const colWidths = [...naturalWidths];
+
+  if (availableContent > 0 && sumNatural > availableContent) {
+    // Columns exceed available width — shrink columns responsively
+    const minColWidth = Math.max(4, Math.floor(availableContent / (colCount * 2)));
+    const remaining = availableContent - (colCount * minColWidth);
+    const excessSum = naturalWidths.reduce(
+      (acc, w) => acc + Math.max(0, w - minColWidth),
+      0,
+    );
+
+    for (let c = 0; c < colCount; c++) {
+      if (excessSum > 0) {
+        const excess = Math.max(0, naturalWidths[c] - minColWidth);
+        const share = Math.floor((excess / excessSum) * remaining);
+        colWidths[c] = Math.max(minColWidth, minColWidth + share);
+      } else {
+        colWidths[c] = minColWidth;
+      }
+    }
+  }
+
+  // If table with title is narrower than title, expand last column
+  const currentTotal = colWidths.reduce((a, b) => a + b, 0) + overhead;
+  if (options?.title && currentTotal < titleVis + 4) {
+    colWidths[colCount - 1] += (titleVis + 4) - currentTotal;
+  }
+
+  const out: string[] = [];
+  const finalTableWidth = colWidths.reduce((a, b) => a + b, 0) + overhead;
+
+  // 1. Top border (with or without title)
+  if (options?.title) {
+    const titlePart = ` ${colors.bold(options.title)} `;
+    const topDashes = Math.max(0, finalTableWidth - titleVis - 4);
+    out.push(colorFn(cTitleTopLeft) + titlePart + colorFn(cHoriz.repeat(topDashes) + cTopRight));
+  } else {
+    const top = cTopLeft + colWidths.map((w) => cHoriz.repeat(w + 2)).join(cTopMid) + cTopRight;
+    out.push(colorFn(top));
+  }
+
+  // 2. Header row (with multi-line cell wrapping)
+  const headerLinesByCol = headers.map((h, i) => wrapText(h, colWidths[i]));
+  const headerRowHeight = Math.max(1, ...headerLinesByCol.map((l) => l.length));
+
+  for (let lineIdx = 0; lineIdx < headerRowHeight; lineIdx++) {
+    const cells = [];
+    for (let c = 0; c < colCount; c++) {
+      const cellText = headerLinesByCol[c]?.[lineIdx] ?? "";
+      cells.push(" " + colors.bold(colors.accent(padText(cellText, colWidths[c], alignments[c] ?? "left"))) + " ");
+    }
+    out.push(colorFn(cVert) + cells.join(colorFn(cVert)) + colorFn(cVert));
+  }
+
+  // 3. Header separator
+  const mid = cMidLeft + colWidths.map((w) => cHoriz.repeat(w + 2)).join(cMidMid) + cMidRight;
+  out.push(colorFn(mid));
+
+  // 4. Data rows (with multi-line cell wrapping)
+  for (const row of safeRows) {
+    const rowLinesByCol: string[][] = [];
+    for (let c = 0; c < colCount; c++) {
+      const val = row[c] ?? "";
+      rowLinesByCol.push(wrapText(val, colWidths[c]));
+    }
+    const rowHeight = Math.max(1, ...rowLinesByCol.map((l) => l.length));
+
+    for (let lineIdx = 0; lineIdx < rowHeight; lineIdx++) {
+      const cells = [];
+      for (let c = 0; c < colCount; c++) {
+        const cellText = rowLinesByCol[c]?.[lineIdx] ?? "";
+        cells.push(" " + padText(cellText, colWidths[c], alignments[c] ?? "left") + " ");
+      }
+      out.push(colorFn(cVert) + cells.join(colorFn(cVert)) + colorFn(cVert));
+    }
+  }
+
+  // 5. Bottom border
+  const bot = cBottomLeft + colWidths.map((w) => cHoriz.repeat(w + 2)).join(cBottomMid) + cBottomRight;
+  out.push(colorFn(bot));
 
   return out.join("\n");
 }
@@ -722,13 +851,20 @@ export function renderBoardingPass(info: BoardingPassInfo): string {
     `${colors.dim("VALIDATION:")}    ${colors.emerald("[+] ACTIVE & VERIFIED")}`,
   ];
 
+  const termWidth = getTerminalWidth();
   const contentLines: string[] = [];
-  const maxRows = Math.max(trainLines.length, rightLines.length);
-  for (let i = 0; i < maxRows; i++) {
-    const left = trainLines[i] ?? " ".repeat(logoWidth);
-    const right = rightLines[i] ?? "";
-    const leftPad = logoWidth - visibleWidth(left);
-    contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  if (termWidth >= 70) {
+    const maxRows = Math.max(trainLines.length, rightLines.length);
+    for (let i = 0; i < maxRows; i++) {
+      const left = trainLines[i] ?? " ".repeat(logoWidth);
+      const right = rightLines[i] ?? "";
+      const leftPad = logoWidth - visibleWidth(left);
+      contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+    }
+  } else {
+    contentLines.push(...trainLines);
+    contentLines.push("");
+    contentLines.push(...rightLines);
   }
 
   return renderCard("RailFog Cloud Boarding Pass", contentLines, {
@@ -817,17 +953,17 @@ export interface TreeNode {
 }
 
 /**
- * Renders an IntelliJ Project / Services style tree view in pure ASCII.
+ * Renders an IntelliJ Project / Services style tree view with JetBrains Unicode single-line drawing.
  *
  * [Project] cloud-demo (C:\path\to\dir)
- *  |
- *  +-- [Functions]
- *  |    |-- api                         --> functions/api.ts
- *  |    \-- worker                      --> functions/worker.ts
- *  |
- *  \-- [Storage]
- *       |-- KV                          --> SQLite
- *       \-- Objects                     --> LocalFS
+ *  │
+ *  ├── [Functions]
+ *  │    ├── api                         --> functions/api.ts
+ *  │    └── worker                      --> functions/worker.ts
+ *  │
+ *  └── [Storage]
+ *       ├── KV                          --> SQLite
+ *       └── Objects                     --> LocalFS
  */
 export function renderTree(
   rootTitle: string,
@@ -835,24 +971,29 @@ export function renderTree(
   options?: {
     rootPrefix?: string;
     showRoot?: boolean;
+    style?: "unicode" | "ascii";
   },
 ): string {
   const lines: string[] = [];
   const rootPref = options?.rootPrefix ?? "[Project]";
+  const isUnicode = options?.style !== "ascii";
+
+  const vLine = isUnicode ? "│" : "|";
+  const branchMid = isUnicode ? "├── " : "|-- ";
+  const branchEnd = isUnicode ? "└── " : "\\-- ";
+  const contMid = isUnicode ? "│   " : "|   ";
+  const contEnd = "    ";
 
   if (options?.showRoot !== false) {
     lines.push(`${colors.bold(colors.brand(rootPref))} ${colors.bold(rootTitle)}`);
-    lines.push(` ${colors.border("|")}`);
+    lines.push(` ${colors.border(vLine)}`);
   }
 
-  function walk(items: TreeNode[], prefix: string, isRootLevel: boolean): void {
+  function walk(items: TreeNode[], prefix: string, _isRootLevel: boolean): void {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const isLast = i === items.length - 1;
-      const connector = isLast ? "\\-- " : "|-- ";
-      const branch = isRootLevel
-        ? (isLast ? "\\-- " : "+-- ")
-        : connector;
+      const branch = isLast ? branchEnd : branchMid;
 
       const badgeStr = item.badge ? ` ${colors.dim(`[${item.badge}]`)}` : "";
       const valStr = item.value ? `  ${colors.accent("-->")}  ${colors.slate(item.value)}` : "";
@@ -863,7 +1004,7 @@ export function renderTree(
       lines.push(`${prefix}${colors.border(branch)}${labelStr}${badgeStr}${valStr}`);
 
       if (item.children && item.children.length > 0) {
-        const nextPrefix = prefix + (isLast ? "    " : "|   ");
+        const nextPrefix = prefix + (isLast ? contEnd : contMid);
         walk(item.children, nextPrefix, false);
       }
     }
@@ -893,10 +1034,10 @@ export interface InspectionIssue {
  *
  * [!] WARN  [PLAT-11] RouteShadowed: Pattern '/api/users' shadows '/api/*'
  *     --> railfog.toml:14:5
- *      |
- *   14 | pattern = "/api/users"
- *      |           ^^^^^^^^^^^^ route pattern declaration
- *      |
+ *      │
+ *   14 │ pattern = "/api/users"
+ *      │           ^^^^^^^^^^^^ route pattern declaration
+ *      │
  *     [Fix] Place more specific routes before wildcards in railfog.toml
  */
 export function renderInspectionGutter(issue: InspectionIssue): string {
@@ -914,26 +1055,26 @@ export function renderInspectionGutter(issue: InspectionIssue): string {
     : "";
   if (fileLoc) {
     lines.push(fileLoc);
-    lines.push(`     ${colors.border("|")}`);
+    lines.push(`     ${colors.border("│")}`);
   }
 
   if (issue.snippet && issue.line) {
     const lineNum = String(issue.line).padStart(4, " ");
-    lines.push(`  ${colors.border(lineNum)} ${colors.border("|")} ${issue.snippet}`);
+    lines.push(`  ${colors.border(lineNum)} ${colors.border("│")} ${issue.snippet}`);
     if (issue.column !== undefined) {
       const padCol = " ".repeat(Math.max(0, issue.column - 1));
       const underline = "^".repeat(8);
-      lines.push(`       ${colors.border("|")} ${padCol}${colors.coral(underline)}`);
+      lines.push(`       ${colors.border("│")} ${padCol}${colors.coral(underline)}`);
     }
-    lines.push(`     ${colors.border("|")}`);
+    lines.push(`     ${colors.border("│")}`);
   }
 
   if (issue.hint) {
-    lines.push(`     ${colors.border("|")}  ${colors.amber(colors.bold("[Fix]"))} ${colors.slate(issue.hint)}`);
+    lines.push(`     ${colors.border("│")}  ${colors.amber(colors.bold("[Fix]"))} ${colors.slate(issue.hint)}`);
   }
 
   if (issue.ruleUrl) {
-    lines.push(`     ${colors.border("|")}  ${colors.dim("[Ref]")} ${colors.underline(colors.brand(issue.ruleUrl))}`);
+    lines.push(`     ${colors.border("│")}  ${colors.dim("[Ref]")} ${colors.underline(colors.brand(issue.ruleUrl))}`);
   }
 
   return lines.join("\n");
@@ -942,7 +1083,7 @@ export function renderInspectionGutter(issue: InspectionIssue): string {
 /**
  * Renders an IDE status bar telemetry strip.
  *
- * [ Project: cloud-demo | Functions: 3 | Routes: 6 | Status: Ready ]
+ * [ Project: cloud-demo │ Functions: 3 │ Routes: 6 │ Status: Ready ]
  */
 export function renderStatusBar(
   sections: Array<{ label: string; value: string }>,
@@ -950,7 +1091,7 @@ export function renderStatusBar(
   const formatted = sections.map((s) => {
     return `${colors.dim(s.label)}: ${colors.bold(colors.accent(s.value))}`;
   });
-  return `  [ ${formatted.join(colors.border(" | "))} ]`;
+  return `  [ ${formatted.join(colors.border(" │ "))} ]`;
 }
 
 /**
@@ -1014,13 +1155,20 @@ export function renderReleaseTrainCard(info: ReleaseTrainInfo): string {
     `${colors.dim("STATUS:")}      ${colors.emerald("[+] ALL CARS COUPLED & ACTIVE")}`,
   ];
 
+  const termWidth = getTerminalWidth();
   const contentLines: string[] = [];
-  const maxRows = Math.max(trainLines.length, rightLines.length);
-  for (let i = 0; i < maxRows; i++) {
-    const left = trainLines[i] ?? " ".repeat(logoWidth);
-    const right = rightLines[i] ?? "";
-    const leftPad = logoWidth - visibleWidth(left);
-    contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  if (termWidth >= 70) {
+    const maxRows = Math.max(trainLines.length, rightLines.length);
+    for (let i = 0; i < maxRows; i++) {
+      const left = trainLines[i] ?? " ".repeat(logoWidth);
+      const right = rightLines[i] ?? "";
+      const leftPad = logoWidth - visibleWidth(left);
+      contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+    }
+  } else {
+    contentLines.push(...trainLines);
+    contentLines.push("");
+    contentLines.push(...rightLines);
   }
 
   return renderCard("Release Train: Deployment Manifest", contentLines, {
@@ -1040,7 +1188,7 @@ export interface DepartureItem {
 
 /**
  * Renders the Station Departure Board table for 'rail status'.
- * Formats routes, functions, and platforms in a clean ASCII timetable.
+ * Formats routes, functions, and platforms in a clean JetBrains Unicode timetable.
  */
 export function renderDepartureBoard(
   projectName: string,
@@ -1073,17 +1221,12 @@ export function renderDepartureBoard(
     ];
   });
 
-  const table = renderModernTable(headers, rows, {
+  return renderModernTable(headers, rows, {
+    title: `RailFog Station Departure Board [${projectName}]`,
     alignments: ["center", "left", "left", "left", "left", "center"],
-    style: "ascii",
+    style: "unicode",
+    borderColor: colors.accent,
   });
-
-  return [
-    renderCard(`RailFog Station Departure Board [${projectName}]`, [table], {
-      borderColor: colors.accent,
-      padding: false,
-    }),
-  ].join("\n");
 }
 
 export interface FreightExpressInfo {
@@ -1118,13 +1261,20 @@ export function renderFreightExpressCard(info: FreightExpressInfo): string {
     `${colors.dim("STATUS:")}      ${colors.emerald(isExport ? "[+] EXPORT COMPLETE" : "[+] RESTORE COMPLETE")}`,
   ];
 
+  const termWidth = getTerminalWidth();
   const contentLines: string[] = [];
-  const maxRows = Math.max(trainLines.length, rightLines.length);
-  for (let i = 0; i < maxRows; i++) {
-    const left = trainLines[i] ?? " ".repeat(logoWidth);
-    const right = rightLines[i] ?? "";
-    const leftPad = logoWidth - visibleWidth(left);
-    contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  if (termWidth >= 70) {
+    const maxRows = Math.max(trainLines.length, rightLines.length);
+    for (let i = 0; i < maxRows; i++) {
+      const left = trainLines[i] ?? " ".repeat(logoWidth);
+      const right = rightLines[i] ?? "";
+      const leftPad = logoWidth - visibleWidth(left);
+      contentLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+    }
+  } else {
+    contentLines.push(...trainLines);
+    contentLines.push("");
+    contentLines.push(...rightLines);
   }
 
   return renderCard(title, contentLines, {
@@ -1221,13 +1371,20 @@ export function renderStationSignalBoard(report: StationSignalReport): string {
     "",
   ];
 
+  const termWidth = getTerminalWidth();
   const topBlock: string[] = [];
-  const maxRows = Math.max(trainLines.length, rightLines.length);
-  for (let i = 0; i < maxRows; i++) {
-    const left = trainLines[i] ?? " ".repeat(logoWidth);
-    const right = rightLines[i] ?? "";
-    const leftPad = logoWidth - visibleWidth(left);
-    topBlock.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  if (termWidth >= 70) {
+    const maxRows = Math.max(trainLines.length, rightLines.length);
+    for (let i = 0; i < maxRows; i++) {
+      const left = trainLines[i] ?? " ".repeat(logoWidth);
+      const right = rightLines[i] ?? "";
+      const leftPad = logoWidth - visibleWidth(left);
+      topBlock.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+    }
+  } else {
+    topBlock.push(...trainLines);
+    topBlock.push("");
+    topBlock.push(...rightLines);
   }
 
   const signalLines: string[] = [
@@ -1372,15 +1529,11 @@ export function renderCompetitiveMatrix(): string {
     ],
   ];
 
-  const table = renderModernTable(headers, rows, {
+  return renderModernTable(headers, rows, {
+    title: "RailFog vs AWS Lambda vs Cloudflare Workers",
     alignments: ["left", "left", "left", "left"],
-    style: "ascii",
-  });
-
-  return renderCard("RailFog vs AWS Lambda vs Cloudflare Workers", [table], {
+    style: "unicode",
     borderColor: colors.brand,
-    borderStyle: "unicode",
-    padding: false,
   });
 }
 

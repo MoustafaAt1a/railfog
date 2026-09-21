@@ -13,7 +13,13 @@
 
 import { basename, join, relative, resolve } from "@std/path";
 import { type Choice, selectPrompt, type WriterSync } from "./prompt.ts";
-import { colors, renderTrainLogo, visibleWidth } from "./ui.ts";
+import {
+  colors,
+  getTerminalWidth,
+  renderCard,
+  renderTrainLogo,
+  visibleWidth,
+} from "./ui.ts";
 
 export interface InitOptions {
   directory: string;
@@ -387,16 +393,22 @@ export function renderSummaryBox(
     `${colors.slate("Platform:")}    ${colors.dim("Deno LTS • V8 Isolates")}`,
     `${colors.slate("Primitives:")}  ${colors.accent("FN")} ${colors.dim("•")} ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${colors.amber("QUEUES")}`,
     "",
-    "",
   ];
 
+  const termWidth = getTerminalWidth();
   const headerLines: string[] = [];
-  const maxHeaderRows = Math.max(trainLines.length, rightLines.length);
-  for (let i = 0; i < maxHeaderRows; i++) {
-    const left = trainLines[i] ?? " ".repeat(logoWidth);
-    const right = rightLines[i] ?? "";
-    const leftPad = logoWidth - visibleWidth(left);
-    headerLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+  if (termWidth >= 70) {
+    const maxHeaderRows = Math.max(trainLines.length, rightLines.length);
+    for (let i = 0; i < maxHeaderRows; i++) {
+      const left = trainLines[i] ?? " ".repeat(logoWidth);
+      const right = rightLines[i] ?? "";
+      const leftPad = logoWidth - visibleWidth(left);
+      headerLines.push(left + " ".repeat(Math.max(0, leftPad)) + right);
+    }
+  } else {
+    headerLines.push(...trainLines);
+    headerLines.push("");
+    headerLines.push(...rightLines.filter(Boolean));
   }
 
   const detailLines: string[] = [
@@ -413,42 +425,13 @@ export function renderSummaryBox(
 
   const allContent = [...headerLines, ...detailLines];
 
-  let maxContentWidth = 64;
-  for (const line of allContent) {
-    const w = visibleWidth(line);
-    if (w > maxContentWidth) {
-      maxContentWidth = w;
-    }
-  }
+  const card = renderCard("RailFog Station Ticket: Project Scaffolded", allContent, {
+    borderColor: colors.emerald,
+    borderStyle: "unicode",
+    padding: true,
+  });
 
-  const titleText = " RailFog Station Ticket: Project Scaffolded ";
-  const titleVis = visibleWidth(titleText);
-  const totalWidth = Math.max(maxContentWidth + 6, titleVis + 8);
-  const topDashes = totalWidth - 4 - titleVis;
-
-  const borderColor = colors.emerald;
-  const top = borderColor("┌──" + titleText + "─".repeat(Math.max(0, topDashes)) + "┐");
-  const bottom = borderColor("└" + "─".repeat(Math.max(0, totalWidth - 2)) + "┘");
-  const padLine = borderColor("│") + " ".repeat(Math.max(0, totalWidth - 2)) + borderColor("│");
-
-  const output: string[] = [
-    "",
-    top,
-    padLine,
-  ];
-
-  for (const line of allContent) {
-    const vLen = visibleWidth(line);
-    const padRight = " ".repeat(Math.max(0, totalWidth - 4 - vLen));
-    output.push(borderColor("│") + "  " + line + padRight + borderColor("│"));
-  }
-
-  output.push(padLine);
-  output.push(bottom);
-  output.push("");
-
-  const boxText = output.join("\n") + "\n";
-  writer.writeSync(new TextEncoder().encode(boxText));
+  writer.writeSync(new TextEncoder().encode("\n" + card + "\n\n"));
 }
 
 /**
