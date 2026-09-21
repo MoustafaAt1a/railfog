@@ -772,7 +772,7 @@ export class LocalIsolationProvider implements IsolationProvider {
 
     const instance: WarmInstance = {
       cacheKey,
-      handler: mod.default,
+      handler: mod.default as (req: Request, ctx: RailFogContext) => Promise<Response>,
       lastUsed: Date.now(),
       invocationCount: 1,
       filePath,

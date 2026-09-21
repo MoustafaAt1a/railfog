@@ -123,6 +123,55 @@ function createErrorResponse(
 }
 
 /**
+ * Renders the PLAT-7 Origin Isolation Gate HTML page when naked runtime host is accessed directly.
+ */
+function renderNakedOriginBlockedHtml(requestId: string, projects: string[]): string {
+  const projectList = projects.length > 0
+    ? projects.map((p) => `<li><a href="/${p}/">/${p}/ (Open Isolated Project)</a></li>`).join("")
+    : "<li>No active projects deployed.</li>";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RailFog Multi-Tenant Ingress — Origin Isolation</title>
+  <style>
+    body { background: #0b0f19; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 1.5rem; }
+    .card { max-width: 600px; background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 2rem; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+    h1 { font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; color: #38bdf8; }
+    p { font-size: 0.95rem; color: #94a3b8; line-height: 1.6; margin-bottom: 1rem; }
+    .badge { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .section { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 1rem; margin-top: 1rem; font-size: 0.875rem; }
+    ul { margin: 0.5rem 0 0 1.25rem; }
+    li { margin-bottom: 0.35rem; }
+    a { color: #818cf8; text-decoration: none; font-weight: 600; }
+    a:hover { text-decoration: underline; }
+    .footer { font-size: 0.75rem; color: #64748b; margin-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🛡️ Origin Isolation Enforced <span class="badge">PLAT-7</span></h1>
+    <p>
+      Direct access to the naked runtime host (<code>railfog-runtime</code>) is protected.
+      To prevent browser origin contamination (Same-Origin Policy leaks across multiple tenants), each application must be accessed through its isolated namespace:
+    </p>
+    <div class="section">
+      <b>Available Project Namespaces:</b>
+      <ul>${projectList}</ul>
+    </div>
+    <div class="section">
+      <b>Production Best Practice:</b>
+      <p style="margin-top:0.4rem; margin-bottom:0;">
+        Bind a dedicated custom domain (e.g. <code>app.yourdomain.com</code>) or project subdomain to achieve complete browser sandbox isolation.
+      </p>
+    </div>
+    <div class="footer">Request ID: ${requestId} · RailFog Edge Ingress Gate</div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
  * Persists routing snapshot to disk cache for cold start resilience.
  *
  * spec: contracts/platform.contract.md#PLAT-8 — Cold start cache persistence
@@ -738,8 +787,8 @@ export async function startRuntimeServer(
 
       // 1. Host resolution (custom domains or subdomains)
       const hostHeader = req.headers.get("host") || url.host;
+      const hostname = (hostHeader || "").split(":")[0].toLowerCase();
       if (!requestedProject && hostHeader) {
-        const hostname = hostHeader.split(":")[0].toLowerCase();
         // Check declared custom domains across snapshots
         for (const [pId, snap] of projectSnapshots.entries()) {
           if (
@@ -808,6 +857,46 @@ export async function startRuntimeServer(
           winningRoute = match;
           resolvedProjectId = requestedProject;
         }
+      }
+
+      // spec: contracts/platform.contract.md#PLAT-7 — Enforce tenant origin isolation on public shared naked runtime host
+      const isPublicSharedNakedHost =
+        hostname === "railfog-runtime-production.up.railway.app" ||
+        (hostname.endsWith(".up.railway.app") && hostname.includes("runtime")) ||
+        Deno.env.get("ENFORCE_TENANT_ORIGIN_ISOLATION") === "true";
+
+      if (!requestedProject && isPublicSharedNakedHost) {
+        const isHtml = (req.headers.get("accept") || "").includes("text/html");
+        if (isHtml) {
+          return new Response(
+            renderNakedOriginBlockedHtml(requestId, Array.from(projectSnapshots.keys())),
+            {
+              status: 404,
+              headers: {
+                "content-type": "text/html; charset=utf-8",
+                "x-request-id": requestId,
+              },
+            },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "PROJECT_ORIGIN_REQUIRED",
+              message:
+                "RailFog Multi-Tenant Edge Ingress: Origin isolation enforced (PLAT-7). Direct access via naked runtime host is blocked to prevent cross-tenant origin contamination. Access your project via a custom domain, subdomain, or scoped path prefix (e.g. /<project-name>/).",
+              request_id: requestId,
+              available_projects: Array.from(projectSnapshots.keys()),
+            },
+          }),
+          {
+            status: 404,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": requestId,
+            },
+          },
+        );
       }
 
       if (
