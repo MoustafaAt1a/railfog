@@ -37,6 +37,12 @@ export interface FunctionSnapshot {
     burst?: number;
   };
   auth?: "bearer" | "none";
+  triggers?: {
+    http?: string;
+    queue?: string;
+    schedule?: string;
+    webhook?: string;
+  };
 }
 
 export interface RoutingSnapshot {
@@ -291,13 +297,20 @@ export class SnapshotDistributor {
         permissions.queues = [...manifestPerms.queues];
       }
 
-      const manifestLimits = rev.manifest?.limits;
+      const manifestRec = rev.manifest as unknown as
+        | Record<string, unknown>
+        | undefined;
+      const manifestLimits = rev.manifest?.limits as unknown as
+        | Record<string, unknown>
+        | undefined;
       const limits: FunctionSnapshot["limits"] = {
-        cpu_ms: manifestLimits?.cpu_ms ?? DEFAULT_LIMIT_CPU_MS,
-        timeout_ms: manifestLimits?.timeout_ms ?? DEFAULT_LIMIT_TIMEOUT_MS,
-        memory_mb: manifestLimits?.memory_mb ?? DEFAULT_LIMIT_MEMORY_MB,
-        rate: (manifestLimits as any)?.rate,
-        burst: (manifestLimits as any)?.burst,
+        cpu_ms: (manifestLimits?.cpu_ms as number) ?? DEFAULT_LIMIT_CPU_MS,
+        timeout_ms: (manifestLimits?.timeout_ms as number) ??
+          DEFAULT_LIMIT_TIMEOUT_MS,
+        memory_mb: (manifestLimits?.memory_mb as number) ??
+          DEFAULT_LIMIT_MEMORY_MB,
+        rate: manifestLimits?.rate as number | undefined,
+        burst: manifestLimits?.burst as number | undefined,
       };
 
       functions[key] = {
@@ -306,7 +319,8 @@ export class SnapshotDistributor {
         artifactId: rev.artifactId,
         permissions,
         limits,
-        auth: (rev.manifest as any)?.auth,
+        auth: manifestRec?.auth as FunctionSnapshot["auth"],
+        triggers: manifestRec?.triggers as FunctionSnapshot["triggers"],
       };
     }
 

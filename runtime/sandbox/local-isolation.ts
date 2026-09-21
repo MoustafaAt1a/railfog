@@ -42,7 +42,12 @@ import {
 } from "../limits/operation-counter.ts";
 import { createKillEnforcer } from "../limits/kill-enforcer.ts";
 import type { EnvBinding, RailFogContext } from "../loader/context-builder.ts";
-import type { KVAtomicBuilder } from "../../primitives/kv/kv-provider.ts";
+import type {
+  KVAtomicBuilder,
+  KVProvider,
+} from "../../primitives/kv/kv-provider.ts";
+import { RedisKVProvider } from "../../providers/kv/redis-provider.ts";
+import { LocalFSProvider } from "../../providers/objects/local-fs-provider.ts";
 import type {
   KVBinding,
   ObjectBinding,
@@ -57,6 +62,13 @@ export interface LocalIsolationOptions {
   maxWarmInstances?: number;
   secretStore?: SecretStore;
   orgId?: string;
+  kvProvider?: KVProvider;
+  redisUrl?: string;
+  queueDispatcher?: (
+    queueName: string,
+    message: unknown,
+    projectId: string,
+  ) => Promise<void> | void;
 }
 
 /**
@@ -153,6 +165,9 @@ function getHeader(
 function createMockKvBinding(
   tracker: InvocationTracker,
   store: Map<string, unknown> = new Map<string, unknown>(),
+  tenantOrgId?: string,
+  tenantProjectId?: string,
+  redisProvider?: KVProvider | null,
 ): KVBinding {
   const normalizeKey = (key: unknown): string => {
     if (Array.isArray(key)) return JSON.stringify(key);
@@ -160,19 +175,38 @@ function createMockKvBinding(
     return JSON.stringify(key);
   };
 
+  const toRedisKey = (key: unknown): string[] => {
+    const rawSegs = Array.isArray(key)
+      ? key.map(String)
+      : typeof key === "string"
+      ? [key]
+      : [JSON.stringify(key)];
+    return [
+      tenantOrgId ?? "default-org",
+      tenantProjectId ?? "default-proj",
+      ...rawSegs,
+    ];
+  };
+
   const builder: KVAtomicBuilder = {
     check(_key: string[], _version: number) {
       tracker.recordKvOp();
       return this;
     },
-    set(key: string[], value: unknown) {
+    set(key: string[], value: unknown, opts?: { ttl?: number }) {
       tracker.recordKvOp();
       store.set(normalizeKey(key), value);
+      if (redisProvider) {
+        redisProvider.set(toRedisKey(key), value, opts).catch(() => {});
+      }
       return this;
     },
     delete(key: string[]) {
       tracker.recordKvOp();
       store.delete(normalizeKey(key));
+      if (redisProvider) {
+        redisProvider.delete(toRedisKey(key)).catch(() => {});
+      }
       return this;
     },
     commit() {
@@ -181,42 +215,85 @@ function createMockKvBinding(
   };
 
   return {
-    get(key: string[] | string) {
+    async get(key: string[] | string) {
       tracker.recordKvOp();
+      if (redisProvider) {
+        try {
+          const val = await redisProvider.get(toRedisKey(key));
+          if (val !== null && val !== undefined) {
+            return val;
+          }
+        } catch {
+          // fallback to memoryStore
+        }
+      }
       const normKey = normalizeKey(key);
       if (store.has(normKey)) {
-        return Promise.resolve(store.get(normKey) ?? null);
+        return store.get(normKey) ?? null;
       }
       if (typeof key === "string" && store.has(key)) {
-        return Promise.resolve(store.get(key) ?? null);
+        return store.get(key) ?? null;
       }
-      return Promise.resolve(null);
+      return null;
     },
-    set(key: string[] | string, value: unknown, _opts?: { ttl?: number }) {
+    async set(key: string[] | string, value: unknown, opts?: { ttl?: number }) {
       tracker.recordKvOp();
       store.set(normalizeKey(key), value);
-      return Promise.resolve();
+      if (redisProvider) {
+        try {
+          await redisProvider.set(toRedisKey(key), value, opts);
+        } catch {
+          // Non-fatal
+        }
+      }
     },
-    delete(key: string[] | string) {
+    async delete(key: string[] | string) {
       tracker.recordKvOp();
       store.delete(normalizeKey(key));
-      return Promise.resolve();
+      if (redisProvider) {
+        try {
+          await redisProvider.delete(toRedisKey(key));
+        } catch {
+          // Non-fatal
+        }
+      }
     },
-    list(prefix: string[] | string) {
+    async list(prefix: string[] | string) {
       tracker.recordKvOp();
+      if (redisProvider) {
+        try {
+          const res = await redisProvider.list(toRedisKey(prefix));
+          const resEntries = (res as Record<string, unknown> | null)?.entries;
+          if (res && Array.isArray(resEntries) && resEntries.length > 0) {
+            const stripped = resEntries.map((
+              e: { key: string[]; value: unknown; version?: number },
+            ) => ({
+              key: Array.isArray(e.key) ? e.key.slice(2) : e.key,
+              value: e.value,
+              version: e.version,
+            }));
+            return { entries: stripped, keys: stripped };
+          }
+        } catch {
+          // fallback
+        }
+      }
       const keys: { key: string[]; value: unknown }[] = [];
       const prefixArr = Array.isArray(prefix) ? prefix : [prefix];
       for (const [kStr, val] of store.entries()) {
         try {
           const parsed = JSON.parse(kStr) as string[];
-          if (Array.isArray(parsed) && prefixArr.every((seg, idx) => parsed[idx] === seg)) {
+          if (
+            Array.isArray(parsed) &&
+            prefixArr.every((seg, idx) => parsed[idx] === seg)
+          ) {
             keys.push({ key: parsed, value: val });
           }
         } catch {
           // ignore non-json keys
         }
       }
-      return Promise.resolve({ keys });
+      return { keys, entries: keys };
     },
     atomic() {
       return builder;
@@ -225,64 +302,200 @@ function createMockKvBinding(
 }
 
 /**
- * Creates an empty/mock Object binding wired to the invocation operation counter.
- * Spec-anchor: docs/contracts/functions.contract.md#FN-5.
+ * Creates an Object binding wired to the invocation operation counter and backed by local filesystem or mock.
+ * Spec-anchor: docs/contracts/functions.contract.md#FN-5, docs/contracts/objects.contract.md#OBJ-2.
  */
-function createMockObjectBinding(tracker: InvocationTracker): ObjectBinding {
+function createMockObjectBinding(
+  tracker: InvocationTracker,
+  tenantObjectsDir?: string,
+): ObjectBinding {
+  let fsProvider: LocalFSProvider | null = null;
+  if (tenantObjectsDir) {
+    try {
+      fsProvider = new LocalFSProvider(tenantObjectsDir);
+    } catch {
+      fsProvider = null;
+    }
+  }
+
   return {
-    put(_key: string, _data: unknown) {
+    async put(key: string, data: unknown) {
       tracker.recordObjectOp();
-      return Promise.resolve({ etag: "mock-etag" });
+      if (fsProvider) {
+        try {
+          let buf: ArrayBuffer | ReadableStream;
+          if (data instanceof Uint8Array) {
+            const copy = new Uint8Array(data.byteLength);
+            copy.set(data);
+            buf = copy.buffer as ArrayBuffer;
+          } else if (data instanceof ArrayBuffer) {
+            buf = data;
+          } else if (typeof data === "string") {
+            const enc = new TextEncoder().encode(data);
+            buf = enc.buffer as ArrayBuffer;
+          } else if (
+            data && typeof (data as ReadableStream).getReader === "function"
+          ) {
+            buf = data as ReadableStream;
+          } else {
+            const enc = new TextEncoder().encode(JSON.stringify(data));
+            buf = enc.buffer as ArrayBuffer;
+          }
+          return await fsProvider.put(key, buf);
+        } catch {
+          // fallback to mock etag
+        }
+      }
+      return { etag: `etag-${generateUlid()}` };
     },
-    get(_key: string) {
+    async get(key: string) {
       tracker.recordObjectOp();
-      return Promise.resolve(null);
+      if (fsProvider) {
+        try {
+          return await fsProvider.get(key);
+        } catch {
+          return null;
+        }
+      }
+      return null;
     },
-    delete(_key: string) {
+    async delete(key: string) {
       tracker.recordObjectOp();
-      return Promise.resolve();
+      if (fsProvider) {
+        try {
+          await fsProvider.delete(key);
+        } catch {
+          // ignore
+        }
+      }
     },
-    head(_key: string) {
+    async head(key: string) {
       tracker.recordObjectOp();
-      return Promise.resolve(null);
+      if (fsProvider) {
+        try {
+          return await fsProvider.head(key);
+        } catch {
+          return null;
+        }
+      }
+      return null;
     },
-    list(_prefix: string) {
+    async list(prefix: string) {
       tracker.recordObjectOp();
-      return Promise.resolve({ keys: [] });
+      if (fsProvider) {
+        try {
+          const res = await fsProvider.list(prefix);
+          return {
+            keys: res.keys.map((k) => ({ key: k, sizeBytes: 0, sha256: "" })),
+          };
+        } catch {
+          return { keys: [] };
+        }
+      }
+      return { keys: [] };
     },
-    presign(key: string) {
+    async presign(
+      key: string,
+      opts?: { method?: "GET" | "PUT"; expiresIn?: number },
+    ) {
       tracker.recordObjectOp();
-      return Promise.resolve({
+      if (fsProvider) {
+        try {
+          const res = await fsProvider.presign(key, {
+            method: opts?.method ?? "GET",
+            expiresIn: opts?.expiresIn ?? 3600,
+          });
+          return {
+            url: res.url,
+            expiresAt: res.expiresAt,
+            headers: {},
+          };
+        } catch {
+          // fallback
+        }
+      }
+      return {
         url: `https://mock.storage/${key}`,
         expiresAt: Date.now() + 3600000,
-      });
+        headers: {},
+      };
     },
     createMultipartUpload(_key: string) {
       tracker.recordObjectOp();
-      return Promise.resolve({ uploadId: "mock-mp-id" });
+      return Promise.resolve({ uploadId: `mp-${generateUlid()}` });
     },
   } as unknown as ObjectBinding;
 }
 
 /**
- * Creates an empty/mock Queue binding wired to the invocation operation counter.
- * Spec-anchor: docs/contracts/functions.contract.md#FN-5.
+ * Creates a Queue binding wired to the invocation operation counter and queue dispatcher.
+ * Spec-anchor: docs/contracts/functions.contract.md#FN-5, docs/contracts/queues.contract.md#Q-2.
  */
-function createMockQueueBinding(tracker: InvocationTracker): QueueBinding {
+function createMockQueueBinding(
+  tracker: InvocationTracker,
+  projectId?: string,
+  queueDispatcher?: (
+    queueName: string,
+    body: unknown,
+    projectId: string,
+  ) => Promise<void> | void,
+  defaultQueueName = "default",
+): QueueBinding {
   return {
-    send(_body: unknown, _opts?: { delay?: number }) {
+    send(arg1: unknown, arg2?: unknown) {
       tracker.recordQueueOp();
-      return Promise.resolve({
-        id: `msg-${Math.random().toString(36).slice(2)}`,
-      });
+      const id = `msg-${generateUlid()}`;
+      let queue = defaultQueueName;
+      let body = arg1;
+      let delay = 0;
+
+      if (typeof arg1 === "string" && arg2 !== undefined) {
+        queue = arg1;
+        body = arg2;
+      } else if (
+        arg2 &&
+        typeof arg2 === "object" &&
+        "delay" in (arg2 as Record<string, unknown>)
+      ) {
+        delay = (arg2 as { delay?: number }).delay ?? 0;
+      }
+
+      if (queueDispatcher && projectId) {
+        queueMicrotask(async () => {
+          try {
+            if (delay > 0) {
+              await new Promise((r) =>
+                setTimeout(r, Math.min(delay * 1000, 900000))
+              );
+            }
+            await queueDispatcher(queue, body, projectId);
+          } catch (e) {
+            console.error(`[Queue Dispatcher] Error delivering ${id}:`, e);
+          }
+        });
+      }
+      return Promise.resolve({ id });
     },
     sendBatch(bodies: unknown[]) {
       tracker.recordQueueOp();
-      return Promise.resolve(
-        bodies.map(() => ({
-          id: `msg-${Math.random().toString(36).slice(2)}`,
-        })),
-      );
+      const results = bodies.map(() => ({ id: `msg-${generateUlid()}` }));
+      if (queueDispatcher && projectId) {
+        for (let i = 0; i < bodies.length; i++) {
+          const body = bodies[i];
+          const id = results[i].id;
+          queueMicrotask(async () => {
+            try {
+              await queueDispatcher(defaultQueueName, body, projectId);
+            } catch (e) {
+              console.error(
+                `[Queue Dispatcher] Error delivering batch ${id}:`,
+                e,
+              );
+            }
+          });
+        }
+      }
+      return Promise.resolve(results);
     },
   } as unknown as QueueBinding;
 }
@@ -303,12 +516,36 @@ export class LocalIsolationProvider implements IsolationProvider {
   private readonly trackedOrgs = new Set<string>(KNOWN_ORG_CANDIDATES);
   // Persistent tenant-isolated key-value stores per PLAT-7
   private readonly projectKvStores = new Map<string, Map<string, unknown>>();
+  private redisProvider: KVProvider | null = null;
+  private queueDispatcher?: (
+    queueName: string,
+    body: unknown,
+    projectId: string,
+  ) => Promise<void> | void;
 
   constructor(options?: LocalIsolationOptions) {
     this.maxWarmInstances = options?.maxWarmInstances;
     this.secretStore = options?.secretStore;
     this.configuredOrgId = options?.orgId;
     this.tempDir = Deno.makeTempDirSync({ prefix: "railfog_local_iso_" });
+    this.queueDispatcher = options?.queueDispatcher;
+
+    if (options?.kvProvider) {
+      this.redisProvider = options.kvProvider;
+    } else {
+      const redisUrl = options?.redisUrl ??
+        (typeof Deno !== "undefined" ? Deno.env.get("REDIS_URL") : undefined);
+      if (redisUrl && redisUrl.trim().length > 0) {
+        try {
+          this.redisProvider = new RedisKVProvider({
+            url: redisUrl,
+            keyPrefix: "rfk:",
+          });
+        } catch {
+          this.redisProvider = null;
+        }
+      }
+    }
 
     // Track any dynamic secret store operations to capture custom org identifiers
     if (
@@ -327,6 +564,20 @@ export class LocalIsolationProvider implements IsolationProvider {
         return await origSet(orgId, projectId, name, value);
       };
     }
+  }
+
+  /**
+   * Sets the background queue dispatcher callback.
+   * Spec-anchor: docs/contracts/queues.contract.md#Q-2
+   */
+  setQueueDispatcher(
+    dispatcher: (
+      queueName: string,
+      body: unknown,
+      projectId: string,
+    ) => Promise<void> | void,
+  ): void {
+    this.queueDispatcher = dispatcher;
   }
 
   /**
@@ -655,12 +906,19 @@ export class LocalIsolationProvider implements IsolationProvider {
       | Record<string, unknown>
       | undefined;
 
-    const tenantKey = `${meta.orgId ?? "default-org"}/${meta.project}`;
+    const tenantOrg = meta.orgId ?? this.configuredOrgId ?? "default-org";
+    const tenantKey = `${tenantOrg}/${meta.project}`;
     let kvStore = this.projectKvStores.get(tenantKey);
     if (!kvStore) {
       kvStore = new Map<string, unknown>();
       this.projectKvStores.set(tenantKey, kvStore);
     }
+    const tenantObjectsDir = join(
+      this.tempDir,
+      "objects",
+      tenantOrg,
+      meta.project,
+    );
 
     const ctx: RailFogContext = {
       requestId: invocation?.requestId ?? generateUlid(),
@@ -671,11 +929,22 @@ export class LocalIsolationProvider implements IsolationProvider {
       timeRemaining(): number {
         return Math.max(0, deadline - Date.now());
       },
-      kv: (customContext?.kv as KVBinding) ?? createMockKvBinding(tracker, kvStore),
+      kv: (customContext?.kv as KVBinding) ??
+        createMockKvBinding(
+          tracker,
+          kvStore,
+          tenantOrg,
+          meta.project,
+          this.redisProvider,
+        ),
       objects: (customContext?.objects as ObjectBinding) ??
-        createMockObjectBinding(tracker),
+        createMockObjectBinding(tracker, tenantObjectsDir),
       queues: (customContext?.queues as QueueBinding) ??
-        createMockQueueBinding(tracker),
+        createMockQueueBinding(
+          tracker,
+          meta.project,
+          this.queueDispatcher,
+        ),
       env: envBinding,
     };
 
@@ -706,7 +975,50 @@ export class LocalIsolationProvider implements IsolationProvider {
 
     try {
       // Race handler with abort signal for strict deadline enforcement (FN-5)
-      const handlerPromise = warmInstance.handler(request, ctx);
+      const isQueueTrigger =
+        requestHeaders.get("x-railfog-trigger") === "queue";
+      let handlerPromise: Promise<unknown>;
+
+      if (isQueueTrigger) {
+        let parsedPayload: unknown = undefined;
+        if (invocation?.body && invocation.body.byteLength > 0) {
+          try {
+            const text = new TextDecoder().decode(invocation.body);
+            parsedPayload = JSON.parse(text);
+          } catch {
+            parsedPayload = invocation.body;
+          }
+        }
+        const queueMsgObj: Record<string, unknown> = {
+          id: invocation?.requestId ?? ctx.requestId,
+          body: parsedPayload,
+          attempts: 1,
+          timestamp: Date.now(),
+          json: () => Promise.resolve(parsedPayload),
+          text: () =>
+            Promise.resolve(
+              typeof parsedPayload === "string"
+                ? parsedPayload
+                : JSON.stringify(parsedPayload),
+            ),
+          headers: requestHeaders,
+          url: requestUrl,
+          method: requestMethod,
+        };
+
+        handlerPromise = Promise.resolve(
+          (warmInstance.handler as unknown as (
+            arg1: unknown,
+            arg2: unknown,
+          ) => unknown)(
+            queueMsgObj,
+            ctx,
+          ),
+        );
+      } else {
+        handlerPromise = Promise.resolve(warmInstance.handler(request, ctx));
+      }
+
       const abortPromise = new Promise<never>((_, reject) => {
         if (signal.aborted) {
           reject(new TimeoutError("Invocation deadline exceeded"));
@@ -717,7 +1029,16 @@ export class LocalIsolationProvider implements IsolationProvider {
         }, { once: true });
       });
 
-      const response = await Promise.race([handlerPromise, abortPromise]);
+      const rawResponse = await Promise.race([handlerPromise, abortPromise]);
+
+      let response: Response;
+      if (rawResponse instanceof Response) {
+        response = rawResponse;
+      } else if (rawResponse === undefined || rawResponse === null) {
+        response = Response.json({ ok: true });
+      } else {
+        response = Response.json(rawResponse);
+      }
 
       const wallClockMs = Math.max(
         0,

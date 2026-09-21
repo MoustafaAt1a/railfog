@@ -1005,6 +1005,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let follow = false;
       let format: "pretty" | "json" | undefined;
       let projectDir: string | undefined;
+      let project: string | undefined;
+      let controlPlaneUrl: string | undefined;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1043,6 +1045,16 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--project-dir=")) {
           projectDir = arg.slice("--project-dir=".length);
+        } else if ((arg === "--project" || arg === "-p") && args[i + 1]) {
+          project = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--project=")) {
+          project = arg.slice("--project=".length);
+        } else if (arg === "--control-url" && args[i + 1]) {
+          controlPlaneUrl = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--control-url=")) {
+          controlPlaneUrl = arg.slice("--control-url=".length);
         }
       }
 
@@ -1053,6 +1065,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         follow,
         format,
         projectDir,
+        project,
+        controlPlaneUrl,
       });
       if (exitCode !== 0) {
         Deno.exit(exitCode);

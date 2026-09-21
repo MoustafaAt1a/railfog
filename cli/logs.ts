@@ -37,6 +37,8 @@ export interface LogsCliOptions {
   format?: "pretty" | "json";
   logSource?: string | AsyncIterable<string>;
   projectDir?: string;
+  project?: string;
+  controlPlaneUrl?: string;
   secrets?: string[];
   secretValues?: string[];
 }
@@ -385,6 +387,77 @@ async function* getLineStream(
       }
     } finally {
       watcher.close();
+    }
+    return;
+  }
+
+  // Fallback: If no local file exists or if controlPlaneUrl is specified, fetch remote logs
+  if (!defaultFileExists || options.controlPlaneUrl) {
+    let detectedProject = options.project;
+    if (!detectedProject) {
+      try {
+        const tomlText = await Deno.readTextFile(
+          join(projectDir, "railfog.toml"),
+        );
+        const match = tomlText.match(/name\s*=\s*["']([^"']+)["']/);
+        if (match) detectedProject = match[1];
+      } catch {
+        // ignore
+      }
+    }
+    const targetProject = detectedProject || "default";
+    const remoteUrl = options.controlPlaneUrl ||
+      Deno.env.get("RAILFOG_CONTROL_URL") ||
+      "https://railfog-control-production.up.railway.app";
+    const query = new URLSearchParams();
+    if (options.limit) query.set("limit", String(options.limit));
+    if (options.level) query.set("level", options.level);
+    if (options.functionName) query.set("function", options.functionName);
+
+    const logsUrl = `${remoteUrl.replace(/\/+$/, "")}/v1/projects/${
+      encodeURIComponent(targetProject)
+    }/logs?${query.toString()}`;
+    const seenRequestIds = new Set<string>();
+
+    try {
+      const res = await fetch(logsUrl);
+      if (res.status === 200) {
+        const entries = (await res.json()) as Array<Record<string, unknown>>;
+        if (Array.isArray(entries)) {
+          for (const entry of entries) {
+            const reqId = String(entry.request_id ?? "");
+            if (reqId) seenRequestIds.add(reqId);
+            yield JSON.stringify(entry);
+          }
+        }
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    if (options.follow) {
+      while (true) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const res = await fetch(logsUrl);
+          if (res.status === 200) {
+            const entries = (await res.json()) as Array<
+              Record<string, unknown>
+            >;
+            if (Array.isArray(entries)) {
+              for (const entry of entries) {
+                const reqId = String(entry.request_id ?? "");
+                if (reqId && !seenRequestIds.has(reqId)) {
+                  seenRequestIds.add(reqId);
+                  yield JSON.stringify(entry);
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 }

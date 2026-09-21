@@ -156,6 +156,264 @@ export async function startRuntimeServer(
   let isClosed = false;
   let timerId: ReturnType<typeof setInterval> | undefined = undefined;
 
+  // In-memory PLAT-13 structured log ring buffer
+  const MAX_LOG_ENTRIES = 1000;
+  const logEntries: Array<{
+    timestamp: string;
+    level: "debug" | "info" | "warn" | "error";
+    project: string;
+    function: string;
+    revision: string;
+    request_id: string;
+    duration_ms?: number;
+    message?: string;
+    [key: string]: unknown;
+  }> = [];
+
+  const recordLogEntry = (entry: (typeof logEntries)[0]) => {
+    logEntries.push(entry);
+    if (logEntries.length > MAX_LOG_ENTRIES) {
+      logEntries.shift();
+    }
+  };
+
+  // Cron schedule tickers
+  const cronTimers = new Map<string, ReturnType<typeof setInterval>>();
+
+  const syncCronSchedules = (snapshot: RoutingSnapshot, pId: string) => {
+    for (const [key, timer] of cronTimers.entries()) {
+      if (key.startsWith(`${pId}:`)) {
+        clearInterval(timer);
+        cronTimers.delete(key);
+      }
+    }
+
+    for (const [fnName, fnSnap] of Object.entries(snapshot.functions)) {
+      const fnAny = fnSnap as unknown as Record<string, unknown>;
+      const triggers = fnAny.triggers as Record<string, unknown> | undefined;
+      const schedule = triggers?.schedule ?? fnAny.schedule;
+      if (schedule || fnAny.type === "cron") {
+        const intervalMs = 60000;
+        const timerKey = `${pId}:${fnName}`;
+        const timer = setInterval(async () => {
+          if (isClosed) return;
+          try {
+            let artifactCode = artifactCache.get(fnSnap.artifactId);
+            if (
+              (!artifactCode || artifactCode.byteLength === 0) &&
+              options.controlPlaneUrl
+            ) {
+              try {
+                const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
+                const artUrl = `${baseUrl}/v1/artifacts/${
+                  encodeURIComponent(fnSnap.artifactId)
+                }`;
+                const artRes = await fetch(artUrl);
+                if (artRes.status === 200) {
+                  artifactCode = new Uint8Array(await artRes.arrayBuffer());
+                  artifactCache.set(fnSnap.artifactId, artifactCode);
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            const cronArtifact: Artifact = {
+              id: fnSnap.artifactId,
+              integrity: fnSnap.artifactId,
+              entrypoint: "index.ts",
+              code: artifactCode ?? new Uint8Array(),
+            };
+
+            const cronLimits: Limits = {
+              cpuMs: fnSnap.limits.cpu_ms,
+              timeoutMs: fnSnap.limits.timeout_ms,
+              memoryMb: fnSnap.limits.memory_mb,
+            };
+
+            const reqId = generateUlid();
+            const invocation: InvocationRequest = {
+              requestId: reqId,
+              method: "POST",
+              url: `https://internal.railfog/cron/${fnName}`,
+              headers: {
+                "x-railfog-trigger": "schedule",
+                "x-railfog-project": pId,
+                "x-railfog-function": fnName,
+                "x-railfog-revision": fnSnap.revisionId,
+                "x-railfog-org": options.orgId ?? "default-org",
+                "x-request-id": reqId,
+                "request-id": reqId,
+                "content-type": "application/json",
+              },
+              body: new TextEncoder().encode(
+                JSON.stringify({ scheduledTime: Date.now() }),
+              ),
+            };
+
+            const res = await options.isolationProvider.run(
+              cronArtifact,
+              cronLimits,
+              invocation,
+            );
+            recordLogEntry({
+              timestamp: new Date().toISOString(),
+              level: res.statusCode >= 400 ? "error" : "info",
+              project: pId,
+              function: fnName,
+              revision: fnSnap.revisionId,
+              request_id: reqId,
+              duration_ms: res.wallClockMs,
+              message:
+                `Cron job [${fnName}] executed -> ${res.statusCode} (${res.wallClockMs}ms)`,
+            });
+          } catch (e) {
+            console.error(`[Cron Failure] ${fnName}:`, e);
+          }
+        }, intervalMs);
+
+        cronTimers.set(timerKey, timer);
+      }
+    }
+  };
+
+  // Wire Queue Dispatcher if isolationProvider supports it
+  if (
+    options.isolationProvider &&
+    typeof (options.isolationProvider as unknown as Record<string, unknown>)
+        .setQueueDispatcher === "function"
+  ) {
+    (
+      options.isolationProvider as unknown as {
+        setQueueDispatcher: (
+          dispatcher: (
+            queueName: string,
+            message: unknown,
+            projectId: string,
+          ) => Promise<void> | void,
+        ) => void;
+      }
+    ).setQueueDispatcher(
+      async (queueName: string, message: unknown, projectId: string) => {
+        try {
+          const snap = projectSnapshots.get(projectId) ?? currentSnapshot;
+          if (!snap) return;
+
+          let targetFnName: string | null = null;
+          let targetFnSnap: typeof snap.functions[string] | null = null;
+
+          for (const [name, fn] of Object.entries(snap.functions)) {
+            const trg = (fn as unknown as Record<string, unknown>).triggers as
+              | Record<string, unknown>
+              | undefined;
+            if (trg?.queue === queueName || trg?.queue === "default") {
+              targetFnName = name;
+              targetFnSnap = fn;
+              break;
+            }
+          }
+
+          if (!targetFnName) {
+            for (const [name, fn] of Object.entries(snap.functions)) {
+              if (
+                name.toLowerCase() === "worker" ||
+                name.toLowerCase() === "queue" ||
+                name.toLowerCase().includes("worker") ||
+                name.toLowerCase() === queueName.toLowerCase()
+              ) {
+                targetFnName = name;
+                targetFnSnap = fn;
+                break;
+              }
+            }
+          }
+
+          if (!targetFnName || !targetFnSnap) {
+            return;
+          }
+
+          let artifactCode = artifactCache.get(targetFnSnap.artifactId);
+          if (
+            (!artifactCode || artifactCode.byteLength === 0) &&
+            options.controlPlaneUrl
+          ) {
+            try {
+              const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
+              const artUrl = `${baseUrl}/v1/artifacts/${
+                encodeURIComponent(targetFnSnap.artifactId)
+              }`;
+              const artRes = await fetch(artUrl);
+              if (artRes.status === 200) {
+                artifactCode = new Uint8Array(await artRes.arrayBuffer());
+                artifactCache.set(targetFnSnap.artifactId, artifactCode);
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          const workerArtifact: Artifact = {
+            id: targetFnSnap.artifactId,
+            integrity: targetFnSnap.artifactId,
+            entrypoint: "index.ts",
+            code: artifactCode ?? new Uint8Array(),
+          };
+
+          const workerLimits: Limits = {
+            cpuMs: targetFnSnap.limits.cpu_ms,
+            timeoutMs: targetFnSnap.limits.timeout_ms,
+            memoryMb: targetFnSnap.limits.memory_mb,
+          };
+
+          const workerReqId = generateUlid();
+          const rawPayload = typeof message === "string"
+            ? message
+            : JSON.stringify(message);
+
+          const invocation: InvocationRequest = {
+            requestId: workerReqId,
+            method: "POST",
+            url: `https://internal.railfog/queues/${queueName}`,
+            headers: {
+              "x-railfog-trigger": "queue",
+              "x-railfog-project": projectId,
+              "x-railfog-function": targetFnName,
+              "x-railfog-revision": targetFnSnap.revisionId,
+              "x-railfog-org": options.orgId ?? "default-org",
+              "x-request-id": workerReqId,
+              "request-id": workerReqId,
+              "content-type": "application/json",
+            },
+            body: new TextEncoder().encode(rawPayload),
+          };
+
+          const execStart = performance.now();
+          const res = await options.isolationProvider.run(
+            workerArtifact,
+            workerLimits,
+            invocation,
+          );
+          const duration = Math.round(performance.now() - execStart);
+
+          recordLogEntry({
+            timestamp: new Date().toISOString(),
+            level: res.statusCode >= 400 ? "error" : "info",
+            project: projectId,
+            function: targetFnName,
+            revision: targetFnSnap.revisionId,
+            request_id: workerReqId,
+            duration_ms: duration,
+            message:
+              `Queue worker [${targetFnName}] processed message for queue [${queueName}] -> ${res.statusCode} (${duration}ms)`,
+          });
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(`[Queue Worker Failure]`, errMsg);
+        }
+      },
+    );
+  }
+
   // spec: contracts/platform.contract.md#PLAT-8 — Step 1: Load snapshot from disk cache if present (cold-start resilience)
   if (options.snapshotDiskCachePath) {
     try {
@@ -163,6 +421,7 @@ export async function startRuntimeServer(
       currentSnapshot = validateRoutingSnapshot(JSON.parse(cachedText));
       if (currentSnapshot) {
         projectSnapshots.set(options.projectId, currentSnapshot);
+        syncCronSchedules(currentSnapshot, options.projectId);
       }
     } catch {
       // Non-fatal: disk cache absent or corrupt, proceed with initial fetch
@@ -183,7 +442,9 @@ export async function startRuntimeServer(
         headers["if-none-match"] = `"${existing.version}"`;
       }
       const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
-      const snapshotUrl = `${baseUrl}/v1/projects/${encodeURIComponent(pId)}/snapshot`;
+      const snapshotUrl = `${baseUrl}/v1/projects/${
+        encodeURIComponent(pId)
+      }/snapshot`;
       const res = await fetch(snapshotUrl, { headers });
       if (isClosed) return null;
 
@@ -192,6 +453,7 @@ export async function startRuntimeServer(
         const validated = validateRoutingSnapshot(payload);
         if (!existing || validated.version > existing.version) {
           projectSnapshots.set(pId, validated);
+          syncCronSchedules(validated, pId);
           if (pId === options.projectId) {
             currentSnapshot = validated;
             if (options.snapshotDiskCachePath) {
@@ -281,6 +543,77 @@ export async function startRuntimeServer(
         });
 
         return new Response(healthBody, {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
+
+      // Direct object download / presigned retrieval
+      if (url.pathname.startsWith("/local-fs/")) {
+        const objPath = url.pathname.slice("/local-fs/".length);
+        const iso = options.isolationProvider as unknown as {
+          tempDir?: string;
+        };
+        const tempDir = iso?.tempDir;
+        if (tempDir) {
+          const filePath = `${tempDir}/objects/${
+            options.orgId ?? "default-org"
+          }/${options.projectId}/${objPath}`;
+          try {
+            const data = await Deno.readFile(filePath);
+            return new Response(data, {
+              status: 200,
+              headers: {
+                "content-type": "application/octet-stream",
+                "x-request-id": requestId,
+                "request-id": requestId,
+              },
+            });
+          } catch {
+            // fallback
+          }
+        }
+        return createErrorResponse(
+          404,
+          "RESOURCE_NOT_FOUND",
+          `Object not found: ${objPath}`,
+          requestId,
+        );
+      }
+
+      // Live structured logs endpoint
+      const logsMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/logs$/);
+      if (
+        logsMatch || url.pathname === "/logs" || url.pathname === "/v1/logs"
+      ) {
+        const targetProject = logsMatch
+          ? decodeURIComponent(logsMatch[1])
+          : (url.searchParams.get("project") ?? options.projectId);
+        const limit = Math.min(
+          1000,
+          Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10)),
+        );
+        const filterLevel = url.searchParams.get("level")?.toLowerCase();
+        const filterFn = url.searchParams.get("function");
+
+        let filtered = logEntries.filter(
+          (l) =>
+            !targetProject ||
+            l.project === targetProject ||
+            targetProject === "all",
+        );
+        if (filterFn) {
+          filtered = filtered.filter((l) => l.function === filterFn);
+        }
+        if (filterLevel) {
+          filtered = filtered.filter((l) => l.level === filterLevel);
+        }
+        const resultLogs = filtered.slice(-limit);
+        return new Response(JSON.stringify(resultLogs), {
           status: 200,
           headers: {
             "content-type": "application/json",
@@ -573,7 +906,9 @@ export async function startRuntimeServer(
       ) {
         try {
           const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
-          const artUrl = `${baseUrl}/v1/artifacts/${encodeURIComponent(fnSnapshot.artifactId)}`;
+          const artUrl = `${baseUrl}/v1/artifacts/${
+            encodeURIComponent(fnSnapshot.artifactId)
+          }`;
           const artRes = await fetch(artUrl);
           if (artRes.status === 200) {
             artifactCode = new Uint8Array(await artRes.arrayBuffer());
@@ -669,6 +1004,22 @@ export async function startRuntimeServer(
       responseHeaders.set("x-request-id", requestId);
       responseHeaders.set("request-id", requestId);
 
+      recordLogEntry({
+        timestamp: new Date().toISOString(),
+        level: result.statusCode >= 500
+          ? "error"
+          : result.statusCode >= 400
+          ? "warn"
+          : "info",
+        project: resolvedProjectId,
+        function: winningRoute.function,
+        revision: fnSnapshot.revisionId,
+        request_id: requestId,
+        duration_ms: result.wallClockMs,
+        message:
+          `${req.method} ${lookupPath} -> ${result.statusCode} (${result.wallClockMs}ms)`,
+      });
+
       const isNullBodyStatus = result.statusCode === 204 ||
         result.statusCode === 205 ||
         result.statusCode === 304;
@@ -683,6 +1034,15 @@ export async function startRuntimeServer(
     } catch (err) {
       // spec: contracts/platform.contract.md#PLAT-12 — Unhandled crash returns canonical INTERNAL error
       const message = err instanceof Error ? err.message : String(err);
+      recordLogEntry({
+        timestamp: new Date().toISOString(),
+        level: "error",
+        project: options.projectId,
+        function: "runtime",
+        revision: "system",
+        request_id: requestId,
+        message: `INTERNAL: ${message}`,
+      });
       return createErrorResponse(
         500,
         "INTERNAL",
@@ -710,6 +1070,10 @@ export async function startRuntimeServer(
       if (timerId !== undefined) {
         clearInterval(timerId);
       }
+      for (const timer of cronTimers.values()) {
+        clearInterval(timer);
+      }
+      cronTimers.clear();
     });
   }
 
@@ -723,6 +1087,10 @@ export async function startRuntimeServer(
       if (timerId !== undefined) {
         clearInterval(timerId);
       }
+      for (const timer of cronTimers.values()) {
+        clearInterval(timer);
+      }
+      cronTimers.clear();
       try {
         await server.shutdown();
       } catch {

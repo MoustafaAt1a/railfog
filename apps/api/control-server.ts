@@ -398,7 +398,9 @@ export async function startControlServer(
       .join(";");
 
     let state = snapshotStates.get(projectId);
-    const declaredRoutes = options.deploymentService.getProjectRoutes?.(projectId);
+    const declaredRoutes = options.deploymentService.getProjectRoutes?.(
+      projectId,
+    );
     const routes = (declaredRoutes && declaredRoutes.length > 0)
       ? declaredRoutes
       : Object.keys(activeRevisions).sort().map((fn) => ({
@@ -604,9 +606,10 @@ export async function startControlServer(
         );
       }
 
-      // spec: contracts/platform.contract.md#PLAT-1, PLAT-8 — Data-plane snapshot, artifact, and project reads bypass auth
+      // spec: contracts/platform.contract.md#PLAT-1, PLAT-8 — Data-plane snapshot, artifact, project, and logs reads bypass auth
       const isDataPlaneRead = (req.method === "GET" || req.method === "HEAD") &&
-        (pathname.endsWith("/snapshot") || pathname === "/v1/projects" || pathname.startsWith("/v1/artifacts/"));
+        (pathname.endsWith("/snapshot") || pathname === "/v1/projects" ||
+          pathname.startsWith("/v1/artifacts/") || pathname.endsWith("/logs"));
 
       // Enforce authentication on all protected management endpoints (PLAT-6)
       if (authMiddleware && !isDataPlaneRead) {
@@ -697,8 +700,45 @@ export async function startControlServer(
 
       // Pattern: /v1/projects/:projectId/:action
       const projectMatch = pathname.match(
-        /^\/v1\/projects\/([^/]+)\/(snapshot|deploy|rollback|export|import)$/,
+        /^\/v1\/projects\/([^/]+)\/(snapshot|deploy|rollback|export|import|logs)$/,
       );
+
+      // Logs Route: Proxy to runtime data plane or return empty array
+      if (projectMatch && projectMatch[2] === "logs") {
+        const projectId = decodeURIComponent(projectMatch[1]);
+        const runtimeUrl = Deno.env.get("RAILFOG_RUNTIME_URL") ||
+          "https://railfog-runtime-production.up.railway.app";
+        if (runtimeUrl) {
+          const targetUrl = new URL(
+            `${runtimeUrl.replace(/\/+$/, "")}/v1/projects/${
+              encodeURIComponent(projectId)
+            }/logs${url.search}`,
+          );
+          try {
+            const res = await fetch(targetUrl.toString(), {
+              headers: { "x-request-id": requestId, "request-id": requestId },
+            });
+            return new Response(await res.text(), {
+              status: res.status,
+              headers: {
+                "content-type": "application/json",
+                "x-request-id": requestId,
+                "request-id": requestId,
+              },
+            });
+          } catch {
+            // fallback
+          }
+        }
+        return new Response(JSON.stringify([]), {
+          status: HTTP_STATUS_OK,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+      }
 
       // AC2: Snapshot Distribution & ETag Caching (PLAT-8)
       if (projectMatch && projectMatch[2] === "snapshot") {
@@ -807,6 +847,7 @@ export async function startControlServer(
           ...((rawArtifact.manifest ?? {}) as Manifest),
           ...(body.auth ? { auth: body.auth } : {}),
           ...(body.limits ? { limits: body.limits } : {}),
+          ...(body.triggers ? { triggers: body.triggers } : {}),
         };
 
         const artifact: PackagedArtifact = {

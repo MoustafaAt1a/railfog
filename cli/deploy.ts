@@ -798,6 +798,7 @@ export async function runDeploy(
           | undefined;
         const fnAuth = fnCfg?.auth;
         const fnLimits = fnCfg?.limits;
+        const fnTriggers = fnCfg?.triggers;
 
         const res = await fetch(`${baseUrl}/deploy`, {
           method: "POST",
@@ -809,10 +810,13 @@ export async function runDeploy(
             routes: parsed.routes,
             auth: fnAuth,
             limits: fnLimits,
+            triggers: fnTriggers,
             environment: options?.env ?? options?.environment ??
-              (parsed as any).environment ?? "production",
-            domains: (parsed as any).domains ??
-              ((parsed as any).domain ? [(parsed as any).domain] : undefined),
+              (parsed as Record<string, unknown>).environment ?? "production",
+            domains: (parsed as Record<string, unknown>).domains ??
+              ((parsed as Record<string, unknown>).domain
+                ? [(parsed as Record<string, unknown>).domain as string]
+                : undefined),
           }),
         });
 
