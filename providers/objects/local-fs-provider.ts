@@ -190,7 +190,15 @@ export class LocalFSProvider implements ObjectProvider {
     );
     const sig = encodeHex(sigBytes);
 
-    const url = `http://localhost/local-fs/${key}?token=${token}&sig=${sig}`;
+    const publicOrigin = (typeof Deno !== "undefined" && (
+      Deno.env.get("RAILFOG_PUBLIC_URL") ||
+      Deno.env.get("RAILFOG_RUNTIME_URL") ||
+      (Deno.env.get("RAILWAY_PUBLIC_DOMAIN")
+        ? `https://${Deno.env.get("RAILWAY_PUBLIC_DOMAIN")}`
+        : undefined)
+    )) || "http://localhost";
+    const baseUrl = publicOrigin.replace(/\/+$/, "");
+    const url = `${baseUrl}/local-fs/${key}?token=${token}&sig=${sig}`;
     return { url, expiresAt };
   }
 

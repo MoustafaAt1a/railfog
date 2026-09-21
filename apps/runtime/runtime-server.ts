@@ -567,21 +567,28 @@ export async function startRuntimeServer(
         };
         const tempDir = iso?.tempDir;
         if (tempDir) {
-          const filePath = `${tempDir}/objects/${
-            options.orgId ?? "default-org"
-          }/${options.projectId}/${objPath}`;
-          try {
-            const data = await Deno.readFile(filePath);
-            return new Response(data, {
-              status: 200,
-              headers: {
-                "content-type": "application/octet-stream",
-                "x-request-id": requestId,
-                "request-id": requestId,
-              },
-            });
-          } catch {
-            // fallback
+          const candidateProjects = [
+            req.headers.get("x-railfog-project")?.trim(),
+            options.projectId,
+            ...Array.from(projectSnapshots.keys()),
+          ].filter((p): p is string => Boolean(p));
+
+          const org = options.orgId ?? "default-org";
+          for (const candProject of candidateProjects) {
+            const filePath = `${tempDir}/objects/${org}/${candProject}/${objPath}`;
+            try {
+              const data = await Deno.readFile(filePath);
+              return new Response(data, {
+                status: 200,
+                headers: {
+                  "content-type": "application/octet-stream",
+                  "x-request-id": requestId,
+                  "request-id": requestId,
+                },
+              });
+            } catch {
+              // try next candidate
+            }
           }
         }
         return createErrorResponse(
