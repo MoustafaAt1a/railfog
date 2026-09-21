@@ -113,6 +113,12 @@ export class DeploymentService {
     Array<{ pattern: string; function: string }>
   >();
 
+  // Project -> metadata (environment, domains)
+  private readonly projectMetadata = new Map<
+    string,
+    { environment?: string; domains?: string[] }
+  >();
+
   private lastTimestamp = 0;
 
   constructor(storage: ObjectProvider) {
@@ -488,6 +494,34 @@ export class DeploymentService {
   ): Array<{ pattern: string; function: string }> | null {
     const routes = this.projectRoutes.get(project);
     return routes ? routes.map((r) => ({ ...r })) : null;
+  }
+
+  /**
+   * Sets project metadata (environment, custom domains).
+   */
+  setProjectMetadata(
+    project: string,
+    meta: { environment?: string; domains?: string[] },
+  ): void {
+    this.projectMetadata.set(project, {
+      environment: meta.environment,
+      domains: meta.domains ? [...meta.domains] : undefined,
+    });
+  }
+
+  /**
+   * Gets project metadata (environment, custom domains).
+   */
+  getProjectMetadata(
+    project: string,
+  ): { environment?: string; domains?: string[] } | null {
+    const meta = this.projectMetadata.get(project);
+    return meta
+      ? {
+        environment: meta.environment,
+        domains: meta.domains ? [...meta.domains] : undefined,
+      }
+      : null;
   }
 
   /**

@@ -324,6 +324,7 @@ Usage:
 Options:
   --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
   --project <name>       Override project name declared in railfog.toml
+  -e, --env <name>       Target deployment environment (default: production)
   -h, --help             Show help for deploy command`);
 }
 
@@ -719,6 +720,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let controlPlaneUrl: string | undefined;
       let project: string | undefined;
       let token: string | undefined;
+      let env: string | undefined;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -746,6 +748,11 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
+        } else if ((arg === "--env" || arg === "-e") && args[i + 1]) {
+          env = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--env=")) {
+          env = arg.slice("--env=".length);
         } else if (arg === "--token" && args[i + 1]) {
           token = args[i + 1];
           i++;
@@ -760,6 +767,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           controlPlaneUrl,
           project,
           token,
+          env,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

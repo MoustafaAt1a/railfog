@@ -34,6 +34,7 @@ import {
 import { generateUlid } from "../../packages/core/id/ulid.ts";
 import { matchRoute } from "../../runtime/router/route-matcher.ts";
 import { LocalIsolationProvider } from "../../runtime/sandbox/local-isolation.ts";
+import { MultiTenantRateLimiter } from "../gateway/rate-limiter.ts";
 
 /**
  * Service identifier returned in health check responses.
@@ -151,6 +152,7 @@ export async function startRuntimeServer(
   let currentSnapshot: RoutingSnapshot | null = null;
   const projectSnapshots = new Map<string, RoutingSnapshot>();
   const artifactCache = new Map<string, Uint8Array>();
+  const rateLimiter = new MultiTenantRateLimiter();
   let isClosed = false;
   let timerId: ReturnType<typeof setInterval> | undefined = undefined;
 
@@ -325,34 +327,121 @@ export async function startRuntimeServer(
         );
       }
 
+      // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (IP Scope)
+      const clientIp = req.headers.get("cf-connecting-ip") ||
+        req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+        "127.0.0.1";
+      const ipDecision = rateLimiter.check("ip", clientIp);
+      if (!ipDecision.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "RATE_LIMITED",
+              message: "Rate limit exceeded. Please retry later.",
+              request_id: requestId,
+              retry_after: ipDecision.retryAfterSeconds ?? 1,
+            },
+          }),
+          {
+            status: 429,
+            headers: {
+              "content-type": "application/json",
+              "retry-after": String(ipDecision.retryAfterSeconds ?? 1),
+              "x-ratelimit-limit": String(ipDecision.limit),
+              "x-ratelimit-remaining": String(ipDecision.remaining),
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          },
+        );
+      }
+
+      // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (Identity Scope)
+      const authHeader = req.headers.get("authorization");
+      if (authHeader) {
+        const idDecision = rateLimiter.check("identity", authHeader);
+        if (!idDecision.allowed) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "RATE_LIMITED",
+                message: "Rate limit exceeded for token. Please retry later.",
+                request_id: requestId,
+                retry_after: idDecision.retryAfterSeconds ?? 1,
+              },
+            }),
+            {
+              status: 429,
+              headers: {
+                "content-type": "application/json",
+                "retry-after": String(idDecision.retryAfterSeconds ?? 1),
+                "x-ratelimit-limit": String(idDecision.limit),
+                "x-ratelimit-remaining": String(idDecision.remaining),
+                "x-request-id": requestId,
+                "request-id": requestId,
+              },
+            },
+          );
+        }
+      }
+
       // spec: contracts/platform.contract.md#PLAT-7, PLAT-8, PLAT-11, PLAT-15 — Multi-tenant project resolution
       let requestedProject = req.headers.get("x-railfog-project")?.trim();
       let lookupPath = url.pathname;
 
-      // 1. Subdomain resolution: e.g. "cloud-demo.railfog-runtime-production.up.railway.app" -> "cloud-demo"
+      // 1. Host resolution (custom domains or subdomains)
       const hostHeader = req.headers.get("host") || url.host;
       if (!requestedProject && hostHeader) {
-        const hostname = hostHeader.split(":")[0];
-        const parts = hostname.split(".");
-        if (parts.length >= 3) {
-          const subdomain = parts[0].toLowerCase();
+        const hostname = hostHeader.split(":")[0].toLowerCase();
+        // Check declared custom domains across snapshots
+        for (const [pId, snap] of projectSnapshots.entries()) {
           if (
-            projectSnapshots.has(subdomain) ||
-            (currentSnapshot && options.projectId.toLowerCase() === subdomain)
+            snap.domains &&
+            snap.domains.some((d) => d.toLowerCase() === hostname)
           ) {
-            requestedProject = subdomain;
+            requestedProject = pId;
+            break;
+          }
+        }
+        if (!requestedProject) {
+          const parts = hostname.split(".");
+          if (parts.length >= 3) {
+            const subdomain = parts[0].toLowerCase();
+            if (
+              projectSnapshots.has(subdomain) ||
+              (currentSnapshot && options.projectId.toLowerCase() === subdomain)
+            ) {
+              requestedProject = subdomain;
+            }
           }
         }
       }
 
-      // 2. Path-prefix resolution: e.g. "/cloud-demo/api/hello" -> project "cloud-demo", route "/api/hello"
+      // 2. Path-prefix resolution with environment support: e.g. "/cloud-demo/api/hello" or "/cloud-demo/staging/api/hello"
       if (!requestedProject) {
         const candidateProjects = new Set<string>();
         if (options.projectId) candidateProjects.add(options.projectId);
         for (const p of projectSnapshots.keys()) candidateProjects.add(p);
 
         for (const pId of candidateProjects) {
-          if (url.pathname === `/${pId}` || url.pathname.startsWith(`/${pId}/`)) {
+          const prefixWithEnv = `/${pId}/`;
+          if (url.pathname.startsWith(prefixWithEnv)) {
+            const rest = url.pathname.slice(prefixWithEnv.length);
+            const nextSlash = rest.indexOf("/");
+            const firstSeg = nextSlash !== -1 ? rest.slice(0, nextSlash) : rest;
+            if (
+              firstSeg === "staging" || firstSeg === "production" ||
+              firstSeg === "dev"
+            ) {
+              requestedProject = pId;
+              lookupPath = nextSlash !== -1 ? rest.slice(nextSlash) : "/";
+              break;
+            }
+          }
+
+          if (
+            url.pathname === `/${pId}` || url.pathname.startsWith(`/${pId}/`)
+          ) {
             requestedProject = pId;
             lookupPath = url.pathname.slice(pId.length + 1) || "/";
             break;
@@ -374,7 +463,9 @@ export async function startRuntimeServer(
         }
       }
 
-      if (!winningRoute && currentSnapshot && currentSnapshot.routes.length > 0) {
+      if (
+        !winningRoute && currentSnapshot && currentSnapshot.routes.length > 0
+      ) {
         const match = matchRoute(currentSnapshot.routes, lookupPath);
         if (match) {
           activeSnapshot = currentSnapshot;
@@ -405,6 +496,32 @@ export async function startRuntimeServer(
         );
       }
 
+      // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (Project Scope)
+      const projectDecision = rateLimiter.check("project", resolvedProjectId);
+      if (!projectDecision.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "RATE_LIMITED",
+              message: "Rate limit exceeded for project. Please retry later.",
+              request_id: requestId,
+              retry_after: projectDecision.retryAfterSeconds ?? 1,
+            },
+          }),
+          {
+            status: 429,
+            headers: {
+              "content-type": "application/json",
+              "retry-after": String(projectDecision.retryAfterSeconds ?? 1),
+              "x-ratelimit-limit": String(projectDecision.limit),
+              "x-ratelimit-remaining": String(projectDecision.remaining),
+              "x-request-id": requestId,
+              "request-id": requestId,
+            },
+          },
+        );
+      }
+
       // spec: contracts/platform.contract.md#PLAT-8, PLAT-12 — Safe function metadata lookup (prototype pollution defense)
       const fnSnapshot = Object.hasOwn(
           activeSnapshot.functions,
@@ -420,6 +537,32 @@ export async function startRuntimeServer(
           `Function not found: ${winningRoute.function}`,
           requestId,
         );
+      }
+
+      // Declarative Authentication Gate: auth = "bearer"
+      if (fnSnapshot.auth === "bearer") {
+        const authHdr = req.headers.get("authorization");
+        if (!authHdr || !authHdr.toLowerCase().startsWith("bearer ")) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "UNAUTHORIZED",
+                message:
+                  "Unauthorized: Missing or invalid Bearer authentication token",
+                request_id: requestId,
+              },
+            }),
+            {
+              status: 401,
+              headers: {
+                "content-type": "application/json",
+                "www-authenticate": 'Bearer realm="RailFog"',
+                "x-request-id": requestId,
+                "request-id": requestId,
+              },
+            },
+          );
+        }
       }
 
       // spec: contracts/objects.contract.md#OBJ-4, PLAT-4 — Load real artifact code bytes

@@ -33,7 +33,10 @@ export interface FunctionSnapshot {
     cpu_ms: number;
     timeout_ms: number;
     memory_mb: number;
+    rate?: number;
+    burst?: number;
   };
+  auth?: "bearer" | "none";
 }
 
 export interface RoutingSnapshot {
@@ -42,6 +45,8 @@ export interface RoutingSnapshot {
   routes: Array<{ pattern: string; function: string }>;
   functions: Record<string, FunctionSnapshot>;
   generatedAt: number;
+  environment?: string;
+  domains?: string[];
 }
 
 /**
@@ -259,6 +264,7 @@ export class SnapshotDistributor {
   createSnapshot(
     routes: Array<{ pattern: string; function: string }>,
     activeRevisions: Record<string, RevisionRecord>,
+    metadata?: { environment?: string; domains?: string[] },
   ): RoutingSnapshot {
     this.currentVersion += 1;
     const snapshotId = `${SNAPSHOT_ID_PREFIX}${generateUlid()}`;
@@ -290,6 +296,8 @@ export class SnapshotDistributor {
         cpu_ms: manifestLimits?.cpu_ms ?? DEFAULT_LIMIT_CPU_MS,
         timeout_ms: manifestLimits?.timeout_ms ?? DEFAULT_LIMIT_TIMEOUT_MS,
         memory_mb: manifestLimits?.memory_mb ?? DEFAULT_LIMIT_MEMORY_MB,
+        rate: (manifestLimits as any)?.rate,
+        burst: (manifestLimits as any)?.burst,
       };
 
       functions[key] = {
@@ -298,6 +306,7 @@ export class SnapshotDistributor {
         artifactId: rev.artifactId,
         permissions,
         limits,
+        auth: (rev.manifest as any)?.auth,
       };
     }
 
@@ -307,6 +316,8 @@ export class SnapshotDistributor {
       routes: clonedRoutes,
       functions,
       generatedAt,
+      environment: metadata?.environment,
+      domains: metadata?.domains ? [...metadata.domains] : undefined,
     };
 
     // spec: contracts/platform.contract.md#PLAT-8 — Guarantee immutability against data-plane tampering

@@ -409,6 +409,17 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
           });
         }
       }
+
+      if (fn.auth !== undefined) {
+        if (fn.auth !== "bearer" && fn.auth !== "none" && fn.auth !== "apiKey") {
+          errors.push({
+            severity: "error",
+            code: "VALIDATION_FAILED",
+            path: `functions.${fnName}.auth`,
+            message: `Function 'auth' must be "bearer" or "none" (PLAT-6)`,
+          });
+        }
+      }
     }
   }
 

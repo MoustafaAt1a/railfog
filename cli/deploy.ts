@@ -46,6 +46,8 @@ export interface DeployOptions {
   deploymentService?: DeploymentService;
   skipHealthCheck?: boolean;
   runtimeUrl?: string;
+  env?: string;
+  environment?: string;
 }
 
 export interface DeploySummary {
@@ -64,6 +66,8 @@ export interface DeployCommandOptions {
   deploymentService?: DeploymentService;
   token?: string;
   json?: boolean;
+  env?: string;
+  environment?: string;
 }
 
 export interface DeployCommandResult {
@@ -73,6 +77,7 @@ export interface DeployCommandResult {
 
 interface FunctionConfig {
   entry?: string;
+  auth?: "bearer" | "none";
   permissions?: {
     kv?: string[];
     objects?: string[];
@@ -84,6 +89,8 @@ interface FunctionConfig {
     cpu_ms?: number;
     timeout_ms?: number;
     memory_mb?: number;
+    rate?: number;
+    burst?: number;
   };
   triggers?: {
     queue?: string;
@@ -786,6 +793,12 @@ export async function runDeploy(
       }
     } else {
       for (const item of packagedFunctions) {
+        const fnCfg = parsed.functions[item.name] as
+          | Record<string, unknown>
+          | undefined;
+        const fnAuth = fnCfg?.auth;
+        const fnLimits = fnCfg?.limits;
+
         const res = await fetch(`${baseUrl}/deploy`, {
           method: "POST",
           headers: { "content-type": "application/json", ...authHeaders },
@@ -794,6 +807,12 @@ export async function runDeploy(
             functionName: item.name,
             artifact: item.artifact,
             routes: parsed.routes,
+            auth: fnAuth,
+            limits: fnLimits,
+            environment: options?.env ?? options?.environment ??
+              (parsed as any).environment ?? "production",
+            domains: (parsed as any).domains ??
+              ((parsed as any).domain ? [(parsed as any).domain] : undefined),
           }),
         });
 

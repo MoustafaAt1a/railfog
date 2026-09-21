@@ -406,15 +406,22 @@ export async function startControlServer(
         function: fn,
       }));
 
+    const meta = options.deploymentService.getProjectMetadata?.(projectId);
+
     if (!state) {
       const distributor = new SnapshotDistributor();
-      const snapshot = distributor.createSnapshot(routes, activeRevisions);
+      const snapshot = distributor.createSnapshot(
+        routes,
+        activeRevisions,
+        meta ?? undefined,
+      );
       state = { distributor, snapshot, revisionFingerprint: fingerprint };
       snapshotStates.set(projectId, state);
     } else if (state.revisionFingerprint !== fingerprint) {
       state.snapshot = state.distributor.createSnapshot(
         routes,
         activeRevisions,
+        meta ?? undefined,
       );
       state.revisionFingerprint = fingerprint;
     }
@@ -796,10 +803,16 @@ export async function startControlServer(
           );
         }
 
+        const manifest = {
+          ...((rawArtifact.manifest ?? {}) as Manifest),
+          ...(body.auth ? { auth: body.auth } : {}),
+          ...(body.limits ? { limits: body.limits } : {}),
+        };
+
         const artifact: PackagedArtifact = {
           id: String(rawArtifact.id ?? ""),
           integrity: String(rawArtifact.integrity ?? ""),
-          manifest: (rawArtifact.manifest ?? {}) as Manifest,
+          manifest: manifest as Manifest,
           bytes,
         };
 
@@ -812,6 +825,15 @@ export async function startControlServer(
             projectId,
             body.routes as Array<{ pattern: string; function: string }>,
           );
+        }
+
+        if (body.environment || body.domains) {
+          options.deploymentService.setProjectMetadata?.(projectId, {
+            environment: typeof body.environment === "string"
+              ? body.environment
+              : undefined,
+            domains: Array.isArray(body.domains) ? body.domains : undefined,
+          });
         }
 
         // spec: contracts/platform.contract.md#PLAT-8 — Advance snapshot version
