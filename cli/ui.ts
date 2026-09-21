@@ -58,15 +58,17 @@ export const colors = {
   white: (t: string) => colors.enabled ? `\x1b[37m${t}\x1b[39m` : t,
   gray: (t: string) => colors.enabled ? `\x1b[90m${t}\x1b[39m` : t,
 
-  // Modern TrueColor / High-res Palette (Cloudflare / Claude Code aesthetic)
-  accent: (t: string) => colors.enabled ? `\x1b[38;2;56;189;248m${t}\x1b[39m` : t, // Sky 400
-  brand: (t: string) => colors.enabled ? `\x1b[38;2;129;140;248m${t}\x1b[39m` : t,  // Indigo 400
-  purple: (t: string) => colors.enabled ? `\x1b[38;2;192;132;252m${t}\x1b[39m` : t, // Purple 400
-  emerald: (t: string) => colors.enabled ? `\x1b[38;2;52;211;153m${t}\x1b[39m` : t,// Emerald 400
-  amber: (t: string) => colors.enabled ? `\x1b[38;2;251;191;36m${t}\x1b[39m` : t,  // Amber 400
-  coral: (t: string) => colors.enabled ? `\x1b[38;2;248;113;113m${t}\x1b[39m` : t,  // Red 400
-  slate: (t: string) => colors.enabled ? `\x1b[38;2;148;163;184m${t}\x1b[39m` : t,  // Slate 400
-  border: (t: string) => colors.enabled ? `\x1b[38;2;71;85;105m${t}\x1b[39m` : t,   // Slate 600
+  // JetBrains Fleet & Darcula Palette (subtle, high-contrast, professional)
+  accent: (t: string) => colors.enabled ? `\x1b[38;2;89;168;216m${t}\x1b[39m` : t, // Fleet Electric Cyan #59A8D8
+  brand: (t: string) => colors.enabled ? `\x1b[38;2;152;118;170m${t}\x1b[39m` : t,  // Darcula Field Violet #9876AA
+  purple: (t: string) => colors.enabled ? `\x1b[38;2;152;118;170m${t}\x1b[39m` : t, // Darcula Lilac #9876AA
+  emerald: (t: string) => colors.enabled ? `\x1b[38;2;98;151;85m${t}\x1b[39m` : t,  // Darcula Doc Green #629755
+  amber: (t: string) => colors.enabled ? `\x1b[38;2;229;168;75m${t}\x1b[39m` : t,   // IntelliJ Warning Amber #E5A84B
+  coral: (t: string) => colors.enabled ? `\x1b[38;2;199;84;80m${t}\x1b[39m` : t,    // IntelliJ Inspection Red #C75450
+  orange: (t: string) => colors.enabled ? `\x1b[38;2;204;120;50m${t}\x1b[39m` : t,  // Darcula Keyword Orange #CC7832
+  slate: (t: string) => colors.enabled ? `\x1b[38;2;169;183;198m${t}\x1b[39m` : t,  // Darcula Text Slate #A9B7C6
+  border: (t: string) => colors.enabled ? `\x1b[38;2;85;85;85m${t}\x1b[39m` : t,    // Darcula Gutter/Border #555555
+  gutter: (t: string) => colors.enabled ? `\x1b[38;2;96;99;102m${t}\x1b[39m` : t,  // Darcula Gutter Line #606366
 
   // Background badges
   bgBrand: (t: string) => colors.enabled ? `\x1b[48;2;49;46;129;38;2;224;231;255m ${t} \x1b[0m` : `[${t}]`,
@@ -83,12 +85,12 @@ export const colors = {
  * on all terminal emulators, codepages, and shell environments.
  */
 export const glyphs = {
-  success: colors.emerald("[+]"),
-  fail: colors.coral("[-]"),
+  success: colors.green("[+]"),
+  fail: colors.red("[-]"),
   info: colors.accent("[i]"),
   warn: colors.amber("[!]"),
-  arrow: colors.accent("->"),
-  subArrow: colors.slate("|->"),
+  arrow: colors.accent("-->"),
+  subArrow: colors.slate("|-->"),
   bullet: colors.brand("*"),
   sparkle: colors.purple("*"),
   cloud: colors.accent("[cloud]"),
@@ -403,4 +405,182 @@ export function renderKvList(entries: Array<[string, string]>): string {
   return entries
     .map(([k, v]) => `  ${colors.dim(padText(k + ":", maxKeyLen + 2))} ${v}`)
     .join("\n");
+}
+
+/**
+ * Node in a JetBrains-style hierarchical tree structure.
+ */
+export interface TreeNode {
+  label: string;
+  value?: string;
+  badge?: string;
+  children?: TreeNode[];
+}
+
+/**
+ * Renders an IntelliJ Project / Services style tree view in pure ASCII.
+ *
+ * [Project] cloud-demo (C:\path\to\dir)
+ *  |
+ *  +-- [Functions]
+ *  |    |-- api                         --> functions/api.ts
+ *  |    \-- worker                      --> functions/worker.ts
+ *  |
+ *  \-- [Storage]
+ *       |-- KV                          --> SQLite
+ *       \-- Objects                     --> LocalFS
+ */
+export function renderTree(
+  rootTitle: string,
+  nodes: TreeNode[],
+  options?: {
+    rootPrefix?: string;
+    showRoot?: boolean;
+  },
+): string {
+  const lines: string[] = [];
+  const rootPref = options?.rootPrefix ?? "[Project]";
+
+  if (options?.showRoot !== false) {
+    lines.push(`${colors.bold(colors.brand(rootPref))} ${colors.bold(rootTitle)}`);
+    lines.push(` ${colors.border("|")}`);
+  }
+
+  function walk(items: TreeNode[], prefix: string, isRootLevel: boolean): void {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const isLast = i === items.length - 1;
+      const connector = isLast ? "\\-- " : "|-- ";
+      const branch = isRootLevel
+        ? (isLast ? "\\-- " : "+-- ")
+        : connector;
+
+      const badgeStr = item.badge ? ` ${colors.dim(`[${item.badge}]`)}` : "";
+      const valStr = item.value ? `  ${colors.accent("-->")}  ${colors.slate(item.value)}` : "";
+      const labelStr = item.children && item.children.length > 0
+        ? colors.bold(colors.accent(item.label))
+        : colors.slate(item.label);
+
+      lines.push(`${prefix}${colors.border(branch)}${labelStr}${badgeStr}${valStr}`);
+
+      if (item.children && item.children.length > 0) {
+        const nextPrefix = prefix + (isLast ? "    " : "|   ");
+        walk(item.children, nextPrefix, false);
+      }
+    }
+  }
+
+  walk(nodes, " ", true);
+  return lines.join("\n");
+}
+
+/**
+ * Diagnostic issue representation for JetBrains Qodana style inspection.
+ */
+export interface InspectionIssue {
+  severity: "error" | "warning" | "info";
+  code: string;
+  message: string;
+  file?: string;
+  line?: number;
+  column?: number;
+  snippet?: string;
+  hint?: string;
+  ruleUrl?: string;
+}
+
+/**
+ * Renders a Qodana-inspired code inspection gutter with line numbers and caret underlines.
+ *
+ * [!] WARN  [PLAT-11] RouteShadowed: Pattern '/api/users' shadows '/api/*'
+ *     --> railfog.toml:14:5
+ *      |
+ *   14 | pattern = "/api/users"
+ *      |           ^^^^^^^^^^^^ route pattern declaration
+ *      |
+ *     [Fix] Place more specific routes before wildcards in railfog.toml
+ */
+export function renderInspectionGutter(issue: InspectionIssue): string {
+  const lines: string[] = [];
+  const tag = issue.severity === "error"
+    ? `${colors.red(colors.bold("[-] ERROR"))} [${colors.bold(issue.code)}]`
+    : issue.severity === "warning"
+    ? `${colors.amber(colors.bold("[!] WARN "))} [${colors.bold(issue.code)}]`
+    : `${colors.accent(colors.bold("[i] INFO "))} [${colors.bold(issue.code)}]`;
+
+  lines.push(`${tag} ${colors.bold(issue.message)}`);
+
+  const fileLoc = issue.file
+    ? `    ${colors.accent("-->")} ${colors.slate(issue.file)}${issue.line ? `:${issue.line}` : ""}${issue.column ? `:${issue.column}` : ""}`
+    : "";
+  if (fileLoc) {
+    lines.push(fileLoc);
+    lines.push(`     ${colors.border("|")}`);
+  }
+
+  if (issue.snippet && issue.line) {
+    const lineNum = String(issue.line).padStart(4, " ");
+    lines.push(`  ${colors.border(lineNum)} ${colors.border("|")} ${issue.snippet}`);
+    if (issue.column !== undefined) {
+      const padCol = " ".repeat(Math.max(0, issue.column - 1));
+      const underline = "^".repeat(8);
+      lines.push(`       ${colors.border("|")} ${padCol}${colors.coral(underline)}`);
+    }
+    lines.push(`     ${colors.border("|")}`);
+  }
+
+  if (issue.hint) {
+    lines.push(`     ${colors.border("|")}  ${colors.amber(colors.bold("[Fix]"))} ${colors.slate(issue.hint)}`);
+  }
+
+  if (issue.ruleUrl) {
+    lines.push(`     ${colors.border("|")}  ${colors.dim("[Ref]")} ${colors.underline(colors.brand(issue.ruleUrl))}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Renders an IDE status bar telemetry strip.
+ *
+ * [ Project: cloud-demo | Functions: 3 | Routes: 6 | Status: Ready ]
+ */
+export function renderStatusBar(
+  sections: Array<{ label: string; value: string }>,
+): string {
+  const formatted = sections.map((s) => {
+    return `${colors.dim(s.label)}: ${colors.bold(colors.accent(s.value))}`;
+  });
+  return `  [ ${formatted.join(colors.border(" | "))} ]`;
+}
+
+/**
+ * Renders a discrete build & deployment step in JetBrains Build Timeline style.
+ *
+ * [1/4] Inspecting configuration & capabilities ...   [DONE] (12ms)
+ */
+export function renderBuildStep(
+  step: number,
+  total: number,
+  title: string,
+  status: "RUNNING" | "DONE" | "FAIL",
+  durationMs?: number,
+): string {
+  const stepPrefix = `[${step}/${total}]`;
+  const durStr = durationMs !== undefined ? ` ${colors.dim(`(${durationMs}ms)`)}` : "";
+  let badge = "";
+
+  switch (status) {
+    case "DONE":
+      badge = colors.green("[DONE]");
+      break;
+    case "FAIL":
+      badge = colors.red("[FAIL]");
+      break;
+    case "RUNNING":
+      badge = colors.amber("[BUSY]");
+      break;
+  }
+
+  return `  ${colors.bold(colors.accent(stepPrefix))} ${title.padEnd(46)} ${badge}${durStr}`;
 }

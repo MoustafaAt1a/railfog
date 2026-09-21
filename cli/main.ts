@@ -3,6 +3,7 @@ import { parse } from "@std/toml";
 import {
   formatStartupBanner,
   type LocalServer,
+  normalizeRoutes,
   type RailfogConfig,
   startLocalServer,
 } from "../runtime/dev-server/local-server.ts";
@@ -70,6 +71,8 @@ import {
   renderCard,
   renderErrorCard,
   renderModernTable,
+  renderStatusBar,
+  renderTree,
 } from "./ui.ts";
 
 export {
@@ -212,33 +215,58 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
   const parsed = parse(content) as Record<string, unknown>;
   const appName = typeof parsed.name === "string" ? parsed.name : "(unnamed)";
   const functions = normalizeFunctions(parsed.functions);
-  const routes = (parsed.routes ?? []) as Array<
-    { pattern?: string; function?: string }
-  >;
+  const routes = normalizeRoutes(parsed as unknown as RailfogConfig);
 
-  console.log(`Application: ${colors.bold(colors.accent(appName))}\n`);
-
-  console.log(colors.bold("Functions:"));
-  console.log("  NAME       ENTRY");
-  for (const [name, fnConfig] of Object.entries(functions)) {
+  const fnEntries = Object.entries(functions);
+  const fnNodes = fnEntries.map(([name, fnConfig]) => {
     const entry = (fnConfig?.entry as string) ??
       (fnConfig?.entrypoint as string) ?? "(no entry)";
-    console.log(`  ${colors.brand(name.padEnd(10))} ${colors.slate(entry)}`);
-  }
-  console.log();
+    return {
+      label: name,
+      value: entry,
+    };
+  });
 
-  console.log(colors.bold("Routes:"));
-  console.log("  PATTERN         FUNCTION");
-  for (const route of routes) {
-    const pattern = route.pattern ?? "";
-    const target = route.function ?? "";
-    console.log(`  ${colors.accent(pattern.padEnd(15))} ${colors.emerald(target)}`);
-  }
-  console.log();
+  const routeNodes = routes.map((r) => ({
+    label: r.pattern ?? "",
+    value: r.function ?? "",
+  }));
 
-  console.log(colors.bold("Backing Services:"));
-  console.log(`  KV & Queues: SQLite`);
-  console.log(`  Objects:     LocalFS`);
+  const tree = renderTree(
+    `${appName} (${cwd})`,
+    [
+      {
+        label: "Functions:",
+        children: fnNodes.length > 0
+          ? fnNodes
+          : [{ label: "(no functions declared)" }],
+      },
+      {
+        label: "Routes:",
+        children: routeNodes.length > 0
+          ? routeNodes
+          : [{ label: "(no routes configured)" }],
+      },
+      {
+        label: "Backing Services:",
+        children: [
+          { label: "KV & Queues: SQLite" },
+          { label: "Objects:     LocalFS" },
+        ],
+      },
+    ],
+  );
+
+  console.log(tree);
+  console.log();
+  console.log(
+    renderStatusBar([
+      { label: "Project", value: appName },
+      { label: "Functions", value: String(fnEntries.length) },
+      { label: "Routes", value: String(routes.length) },
+      { label: "Status", value: "Ready" },
+    ]),
+  );
 }
 
 function printDevHelp(): void {
@@ -327,7 +355,7 @@ ${colors.bold("Options:")}
   -v, --version  Show CLI version
   -h, --help     Show help information
 
-${colors.dim("Tip: Run 'rail <command> --help' for detailed documentation on any command.")}`);
+${colors.amber(colors.bold("[Tip]"))} Run 'rail <command> --help' for detailed documentation on any command.`);
 }
 
 function printLoginHelp(): void {

@@ -12,6 +12,7 @@
 
 import { dirname, isAbsolute, join, normalize, relative } from "@std/path";
 import { parse } from "@std/toml";
+import { colors, renderInspectionGutter, renderModernTable } from "./ui.ts";
 
 // spec: contracts/functions.contract.md#FN-5 — Resource limits ceilings
 export const DEFAULT_MEMORY_MB = 128;
@@ -1147,22 +1148,45 @@ export async function runCheck(
     if (result.warnings.length > 0) {
       console.log("\nWarnings:");
       for (const w of result.warnings) {
-        console.warn(`  [WARN] [${w.code}] ${w.path}: ${w.message}`);
+        console.warn(
+          renderInspectionGutter({
+            severity: "warning",
+            code: w.code,
+            message: w.message,
+            file: w.path,
+            hint: "Review route or permission declarations in railfog.toml",
+          }),
+        );
       }
     }
 
-    console.log("\nConfiguration valid. Zero errors found.");
+    console.log(`\n${colors.green("[+]")} Configuration valid. Zero errors found.`);
     return 0;
   } else {
-    console.error("\nConfiguration validation failed:");
+    console.error(`\n${colors.red("[-] Configuration validation failed:")}`);
     for (const e of result.errors) {
-      console.error(`  [ERROR] [${e.code}] ${e.path}: ${e.message}`);
+      console.error(
+        renderInspectionGutter({
+          severity: "error",
+          code: e.code,
+          message: e.message,
+          file: e.path,
+          hint: "Ensure configuration satisfies docs/contracts/ specifications.",
+        }),
+      );
     }
 
     if (result.warnings.length > 0) {
       console.log("\nWarnings:");
       for (const w of result.warnings) {
-        console.warn(`  [WARN] [${w.code}] ${w.path}: ${w.message}`);
+        console.warn(
+          renderInspectionGutter({
+            severity: "warning",
+            code: w.code,
+            message: w.message,
+            file: w.path,
+          }),
+        );
       }
     }
 

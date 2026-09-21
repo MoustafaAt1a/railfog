@@ -238,12 +238,14 @@ export function formatStartupBanner(
 ): string {
   const host = options?.host ?? "localhost";
   const lines: string[] = [
-    `RailFog dev server running on http://${host}:${port}`,
-    `Dashboard on http://${host}:${port}/__railfog`,
+    "================================================================================",
+    ` [RailFog Dev Server]  http://${host}:${port}`,
+    ` Dashboard on http://${host}:${port}/__railfog`,
+    "================================================================================",
     "",
     "Local providers (PLAT-17 parity):",
-    "  KV & Queues: SQLite",
-    "  Objects:     LocalFS",
+    "  |-- KV & Queues: SQLite",
+    "  \\-- Objects:     LocalFS",
     "",
     "Routes:",
   ];
@@ -252,10 +254,13 @@ export function formatStartupBanner(
   if (routes.length === 0) {
     lines.push("  (no routes configured)");
   } else {
-    for (const route of routes) {
+    for (let i = 0; i < routes.length; i++) {
+      const route = routes[i];
+      const isLast = i === routes.length - 1;
+      const branch = isLast ? "\\-- " : "|-- ";
       const score = specificityScore(route.pattern);
       lines.push(
-        `  ${route.pattern.padEnd(20)} -> ${
+        `  ${branch}${route.pattern.padEnd(20)} -> ${
           route.function.padEnd(16)
         } (score: ${score})`,
       );
@@ -264,7 +269,13 @@ export function formatStartupBanner(
 
   lines.push("");
   lines.push(
+    "--------------------------------------------------------------------------------",
+  );
+  lines.push(
     "Ready for requests. [b] browser  [d] dashboard  [c] clear  [q] quit",
+  );
+  lines.push(
+    "================================================================================",
   );
 
   return lines.join("\n");
