@@ -29,6 +29,7 @@ import {
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
+import { colors, glyphs, renderCard, renderStatusBar } from "./ui.ts";
 
 export interface ExportCommandOptions {
   cwd?: string;
@@ -143,6 +144,24 @@ export async function exportCommand(
 
   console.log(
     `Exported project '${projectName}' (Backup ID: ${archive.backupId}) to ${outputFile}`,
+  );
+  console.log();
+  console.log(
+    renderCard("Disaster Recovery Archive Exported", [
+      `${glyphs.success}  Snapshot exported successfully`,
+      "",
+      `   ${colors.dim("Project:")}     ${colors.accent(projectName)}`,
+      `   ${colors.dim("Backup ID:")}   ${colors.slate(archive.backupId)}`,
+      `   ${colors.dim("Location:")}    ${colors.emerald(outputFile)}`,
+    ], { borderColor: colors.emerald }),
+  );
+  console.log();
+  console.log(
+    renderStatusBar([
+      { label: "Project", value: projectName },
+      { label: "Backup ID", value: archive.backupId },
+      { label: "Status", value: "Exported" },
+    ]),
   );
 
   return {
@@ -269,6 +288,26 @@ export async function importCommand(
 
   console.log(
     `Imported project '${targetProject}' (${result.restoredRevisions} revisions, ${result.restoredKvKeys} KV keys, ${result.restoredObjects} objects, ${result.restoredQueues} queues).`,
+  );
+  console.log();
+  console.log(
+    renderCard("Disaster Recovery Archive Restored", [
+      `${glyphs.success}  Application state imported successfully`,
+      "",
+      `   ${colors.dim("Project:")}     ${colors.accent(targetProject)}`,
+      `   ${colors.dim("Revisions:")}   ${colors.slate(String(result.restoredRevisions))}`,
+      `   ${colors.dim("KV Keys:")}     ${colors.slate(String(result.restoredKvKeys))}`,
+      `   ${colors.dim("Objects:")}     ${colors.slate(String(result.restoredObjects))}`,
+      `   ${colors.dim("Queues:")}      ${colors.slate(String(result.restoredQueues))}`,
+    ], { borderColor: colors.emerald }),
+  );
+  console.log();
+  console.log(
+    renderStatusBar([
+      { label: "Project", value: targetProject },
+      { label: "Revisions", value: String(result.restoredRevisions) },
+      { label: "Status", value: "Restored" },
+    ]),
   );
 
   return result;

@@ -16,6 +16,7 @@ import {
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
+import { colors, glyphs, renderCard, renderStatusBar } from "./ui.ts";
 
 export interface RollbackCommandOptions {
   cwd?: string;
@@ -134,6 +135,27 @@ export async function rollbackCommand(
 
   console.log(
     `Rolled back function '${options.functionName}' in project '${projectName}' to revision ${activeRevisionId}.`,
+  );
+
+  console.log();
+  console.log(
+    renderCard("Function Rollback Complete", [
+      `${glyphs.success}  Pointer flipped successfully (Instant cutover)`,
+      "",
+      `   ${colors.dim("Project:")}     ${colors.accent(projectName)}`,
+      `   ${colors.dim("Function:")}    ${colors.brand(options.functionName)}`,
+      `   ${colors.dim("Active Rev:")}  ${colors.emerald(colors.bold(activeRevisionId))}`,
+      `   ${colors.dim("Prior Rev:")}   ${colors.slate(previousRevisionId)}`,
+    ], { borderColor: colors.emerald }),
+  );
+  console.log();
+  console.log(
+    renderStatusBar([
+      { label: "Project", value: projectName },
+      { label: "Function", value: options.functionName },
+      { label: "Revision", value: activeRevisionId },
+      { label: "Status", value: "Active" },
+    ]),
   );
 
   return {
