@@ -70,8 +70,14 @@ export class R2Provider implements ObjectProvider {
   private getObjectUrl(key: string, queryParams?: Record<string, string>): URL {
     const cleanEndpoint = this.options.endpoint.replace(/\/$/, "");
     const cleanKey = key.replace(/^\//, "");
-    const path = cleanKey
-      ? `/${this.options.bucket}/${cleanKey}`
+    const encodedSegments = cleanKey
+      ? cleanKey
+        .split("/")
+        .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
+        .join("/")
+      : "";
+    const path = encodedSegments
+      ? `/${this.options.bucket}/${encodedSegments}`
       : `/${this.options.bucket}`;
     const url = new URL(`${cleanEndpoint}${path}`);
 
@@ -198,8 +204,9 @@ export class R2Provider implements ObjectProvider {
     );
 
     if (!res.ok) {
+      const errText = await res.text();
       throw new Error(
-        `R2 put failed with HTTP ${res.status}: ${res.statusText}`,
+        `R2 put failed with HTTP ${res.status}: ${res.statusText} - ${errText}`,
       );
     }
 
