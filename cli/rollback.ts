@@ -50,13 +50,14 @@ Usage:
   rail rollback <functionName> --to <revisionId> [options]
 
 Arguments:
-  <functionName>         Name of the function to rollback
+  <functionName>           Name of the function to rollback
 
 Options:
   --to <revisionId>        The target revision ID to rollback to (required)
-  -C, --dir <path>         Project directory (alias: --project-dir, --cwd, default: current directory)
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -p, --project <name>     Override project name declared in railfog.toml (alias: -n, --name)
   --control-url <url>      Control Plane API URL (alias: --control-plane-url)
-  -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
+  --token <key>            API key for authorization (alias: --api-key)
   -h, --help               Show help for rollback command`);
 }
 

@@ -20,6 +20,8 @@ export const VALID_SECRET_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // spec: tasks/milestone-0.5-developer-experience/T-0506-cli-secrets-management.md — SecretCliOptions interface
 export interface SecretCliOptions {
   projectDir?: string;
+  projectId?: string;
+  project?: string;
   subcommand: "set" | "list" | "delete";
   key?: string;
   value?: string;
@@ -168,7 +170,7 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
     const projectDir = resolve(options.projectDir ?? Deno.cwd());
     const masterKey = await resolveMasterKey(projectDir);
     const storagePath = join(projectDir, ".railfog", "secrets");
-    const projectId = await resolveProjectId(projectDir);
+    const projectId = options.projectId ?? options.project ?? await resolveProjectId(projectDir);
     const orgId = "default";
 
     // spec: docs/contracts/platform.contract.md#PLAT-15 — LocalEncryptedSecretStore initialization
@@ -181,6 +183,14 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
         await store.set(orgId, projectId, options.key!, secretValueToSet!);
         // spec: docs/contracts/platform.contract.md#PLAT-15 — Confirmation without leaking secret value
         console.log(`Secret ${options.key!} updated`);
+        console.log();
+        console.log(
+          renderStatusBar([
+            { label: "Secret", value: options.key! },
+            { label: "Project", value: projectId },
+            { label: "Status", value: "Saved" },
+          ]),
+        );
         return 0;
       }
 
@@ -190,6 +200,14 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
         const names = await store.listNames(orgId, projectId);
         if (names.length === 0) {
           console.log("No secrets found.");
+          console.log();
+          console.log(
+            renderStatusBar([
+              { label: "Project", value: projectId },
+              { label: "Secrets", value: "0" },
+              { label: "Status", value: "Empty" },
+            ]),
+          );
           return 0;
         }
 
@@ -254,6 +272,14 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
 
         await store.delete(orgId, projectId, options.key!);
         console.log(`Secret ${options.key!} deleted`);
+        console.log();
+        console.log(
+          renderStatusBar([
+            { label: "Secret", value: options.key! },
+            { label: "Project", value: projectId },
+            { label: "Status", value: "Deleted" },
+          ]),
+        );
         return 0;
       }
     }
@@ -287,7 +313,8 @@ Subcommands:
 
 Options:
   --file <path>                       Read secret value from file (for multiline secrets)
-  -C, --dir <path>                    Project root directory (alias: --project-dir, --cwd, default: current directory)
+  -C, --dir <path>                    Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -p, --project <name>                Project name override (alias: -n, --name)
   -h, --help                          Show help for secrets command`);
 }
 

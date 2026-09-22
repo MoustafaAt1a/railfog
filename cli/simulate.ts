@@ -6,11 +6,16 @@
 import { join, resolve } from "@std/path";
 import { parse } from "@std/toml";
 import { specificityScore } from "../runtime/router/route-matcher.ts";
-import { renderRouteSimulatorCard, type RouteSimulationResult } from "./ui.ts";
+import {
+  renderRouteSimulatorCard,
+  renderStatusBar,
+  type RouteSimulationResult,
+} from "./ui.ts";
 
 export interface SimulateOptions {
   cwd?: string;
   method?: string;
+  json?: boolean;
 }
 
 interface RouteEntry {
@@ -160,7 +165,20 @@ export async function runSimulate(
     shadowedBy: shadowedBy.length > 0 ? shadowedBy : undefined,
   };
 
-  console.log("\n" + renderRouteSimulatorCard(result) + "\n");
+  if (options?.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log("\n" + renderRouteSimulatorCard(result) + "\n");
+    console.log(
+      renderStatusBar([
+        { label: "Path", value: cleanPath },
+        { label: "Target", value: functionName },
+        { label: "Score", value: String(winner.score) },
+        { label: "Boot", value: `< ${isolateBootMs.toFixed(2)}ms` },
+        { label: "Status", value: "Matched" },
+      ]),
+    );
+  }
   return result;
 }
 
@@ -184,6 +202,8 @@ Arguments:
 Options:
   -m, --method <str>     HTTP method to simulate (default: GET)
   -C, --dir <path>       Target project directory (alias: --project-dir, --cwd, default: current directory)
+  --json                 Output simulation results as structured JSON
   -h, --help             Show help for simulate command`);
 }
+
 

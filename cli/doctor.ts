@@ -12,6 +12,7 @@ import { checkProject } from "./check.ts";
 import {
   renderCompetitiveMatrix,
   renderStationSignalBoard,
+  renderStatusBar,
   type StationSignalItem,
   type StationSignalReport,
 } from "./ui.ts";
@@ -19,6 +20,7 @@ import {
 export interface DoctorOptions {
   cwd?: string;
   compare?: boolean;
+  json?: boolean;
 }
 
 export interface DoctorResult {
@@ -156,10 +158,24 @@ export async function runDoctor(
     overallHealthy,
   };
 
-  console.log("\n" + renderStationSignalBoard(report) + "\n");
-
-  if (options?.compare) {
-    console.log(renderCompetitiveMatrix() + "\n");
+  if (options?.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log("\n" + renderStationSignalBoard(report) + "\n");
+    if (options?.compare) {
+      console.log(renderCompetitiveMatrix() + "\n");
+    }
+    console.log(
+      renderStatusBar([
+        { label: "Project", value: projectName },
+        { label: "Isolate Boot", value: `< ${isolateBootMs.toFixed(2)}ms` },
+        {
+          label: "Signals",
+          value: `${signals.filter((s) => s.status === "active").length}/${signals.length} Green`,
+        },
+        { label: "Health", value: overallHealthy ? "Nominal" : "Degraded" },
+      ]),
+    );
   }
 
   return {
@@ -184,6 +200,8 @@ Usage:
 Options:
   -C, --dir <path>       Target project directory (alias: --project-dir, --cwd, default: current directory)
   -c, --compare          Display architectural comparison vs AWS Lambda & Cloudflare Workers
+  --json                 Output station signal report as structured JSON
   -h, --help             Show help for doctor command`);
 }
+
 

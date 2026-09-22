@@ -39,6 +39,8 @@ export interface LogsCliOptions {
   projectDir?: string;
   project?: string;
   controlPlaneUrl?: string;
+  token?: string;
+  apiKey?: string;
   secrets?: string[];
   secretValues?: string[];
 }
@@ -604,8 +606,9 @@ Options:
   --json                   Output machine-readable JSON logs
   -f, --follow             Tail/follow logs in real-time
   -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
-  -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
-  --control-url <url>      Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  -p, --project <name>     Override project name declared in railfog.toml (alias: -n, --name)
+  --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  --token <key>            Authorization API key (alias: --api-key)
   -h, --help               Show help for logs command`);
 }
 

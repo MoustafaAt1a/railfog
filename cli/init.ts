@@ -610,13 +610,14 @@ Usage:
   rail init [directory] [options]
 
 Arguments:
-  [directory]             Target directory to initialize (default: current directory)
+  [directory]              Target directory to initialize (default: current directory)
 
 Options:
-  --template <name>       Template to use: minimal (default) or worked-example
-  -n, --name <name>       Project name (alias: --project, default: derived from directory name)
-  -f, --force             Overwrite files in non-empty directory
-  -h, --help              Show help for init command`);
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd)
+  -n, --name <name>        Project name (alias: -p, --project, default: derived from directory name)
+  --template <name>        Template to use: minimal (default) or worked-example
+  -f, --force              Overwrite files in non-empty directory
+  -h, --help               Show help for init command`);
 }
 
 // spec: docs/contracts/platform.contract.md#PLAT-19 — starter configuration scaffold

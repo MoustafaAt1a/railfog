@@ -11,7 +11,7 @@ import {
   startLocalServer,
 } from "../runtime/dev-server/local-server.ts";
 import { systemOpenBrowser } from "./login.ts";
-import { renderErrorCard } from "./ui.ts";
+import { glyphs, renderErrorCard, renderStatusBar } from "./ui.ts";
 
 export type { LocalServer, RailfogConfig };
 
@@ -31,7 +31,7 @@ Usage:
 Options:
   -p, --port <number>    HTTP port to listen on (default: 8000)
   --host <string>        Host interface to bind to (default: localhost)
-  --dir <path>           Target project directory (default: current directory)
+  -C, --dir <path>       Target project directory (alias: --project-dir, --cwd, default: current directory)
   --no-watch             Disable file watching and automatic hot reload
   -h, --help             Show help for dev command`);
 }
@@ -110,20 +110,28 @@ export async function runDev(options?: DevOptions): Promise<void> {
           }
           await server.close();
           console.log("\nDev server stopped.");
+          console.log();
+          console.log(
+            renderStatusBar([
+              { label: "Server", value: "Stopped" },
+              { label: "Port", value: String(server.port) },
+              { label: "Status", value: "Offline" },
+            ]),
+          );
           Deno.exit(0);
         }
 
         // 'b' / 'B': open in browser
         if (char === "b" || char === "B") {
           const url = `http://${host ?? "localhost"}:${server.port}`;
-          console.log(`\nOpening ${url} in browser...`);
+          console.log(`\n${glyphs.info} Opening ${url} in browser...`);
           await systemOpenBrowser(url);
         }
 
         // 'd' / 'D': open dashboard in browser
         if (char === "d" || char === "D") {
           const url = `http://${host ?? "localhost"}:${server.port}/__railfog`;
-          console.log(`\nOpening dashboard ${url} in browser...`);
+          console.log(`\n${glyphs.info} Opening dashboard ${url} in browser...`);
           await systemOpenBrowser(url);
         }
 

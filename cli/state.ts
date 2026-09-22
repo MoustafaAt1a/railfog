@@ -363,10 +363,11 @@ Usage:
 
 Options:
   --out <path>             Output backup archive JSON file path (default: <backup_id>.json)
-  -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
+  -p, --project <name>     Override project name declared in railfog.toml (alias: -n, --name)
   --org <id>               Organization ID (default: default)
   -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
-  --control-url <url>      Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  --token <key>            API key for authorization (alias: --api-key)
   -h, --help               Show help for export command`);
 }
 
@@ -378,11 +379,12 @@ Usage:
 
 Options:
   --in <path>              Input backup archive JSON file path (required)
-  -p, --project <name>     Target project name (defaults to railfog.toml or archive, alias: --name)
+  -p, --project <name>     Target project name (defaults to railfog.toml or archive, alias: -n, --name)
   --org <id>               Target organization ID
   --overwrite-kv           Overwrite existing KV keys in target project
   -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
-  --control-url <url>      Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  --token <key>            API key for authorization (alias: --api-key)
   -h, --help               Show help for import command`);
 }
 

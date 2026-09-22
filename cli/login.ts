@@ -16,7 +16,9 @@ import { renderBoardingPass, renderStatusBar } from "./ui.ts";
 
 export interface LoginOptions {
   controlUrl?: string;
+  controlPlaneUrl?: string;
   token?: string; // Non-interactive fallback
+  apiKey?: string; // Alias for token
   manual?: boolean; // Skip browser callback server and prompt on stdin
   configPath?: string;
   stdinReader?: () => Promise<string>;
@@ -181,12 +183,13 @@ async function verifyAndSaveToken(
 export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
   const controlUrl = (
     options?.controlUrl ||
+    options?.controlPlaneUrl ||
     Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ||
     Deno.env.get("RAILFOG_CONTROL_URL") ||
     DEFAULT_CONTROL_URL
   ).replace(/\/+$/, "");
 
-  let rawToken = options?.token?.trim();
+  let rawToken = (options?.token ?? options?.apiKey)?.trim();
   let session: CallbackServerSession | undefined;
   let waitingInterval: ReturnType<typeof setInterval> | undefined;
 
@@ -389,15 +392,23 @@ export async function runLogout(
   console.log(`\x1b[32m[+] Successfully logged out of RailFog.\x1b[0m`);
 }
 
+export interface WhoamiOptions {
+  controlUrl?: string;
+  controlPlaneUrl?: string;
+  token?: string;
+  apiKey?: string;
+  configPath?: string;
+}
+
 /**
  * Displays the current authenticated user and organization.
  */
-export async function runWhoami(options?: {
-  controlUrl?: string;
-  configPath?: string;
-}): Promise<{ authenticated: boolean; orgId?: string; callerId?: string }> {
+export async function runWhoami(
+  options?: WhoamiOptions,
+): Promise<{ authenticated: boolean; orgId?: string; callerId?: string }> {
   const config = await loadCliConfig(options?.configPath);
-  if (!config?.token) {
+  const token = options?.token || options?.apiKey || config?.token;
+  if (!token) {
     console.log(
       "Not logged in. Run '\x1b[36mrail login\x1b[0m' to authenticate.",
     );
@@ -405,8 +416,9 @@ export async function runWhoami(options?: {
   }
 
   const controlUrl = (
+    options?.controlPlaneUrl ||
     options?.controlUrl ||
-    config.controlUrl ||
+    config?.controlUrl ||
     Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ||
     Deno.env.get("RAILFOG_CONTROL_URL") ||
     DEFAULT_CONTROL_URL
@@ -415,7 +427,7 @@ export async function runWhoami(options?: {
   try {
     const res = await fetch(`${controlUrl}/v1/auth/verify`, {
       headers: {
-        authorization: `Bearer ${config.token}`,
+        authorization: `Bearer ${token}`,
         accept: "application/json",
       },
     });
@@ -428,12 +440,12 @@ export async function runWhoami(options?: {
     }
 
     const data = await res.json();
-    const orgId = data.identity?.orgId || config.orgId || "default-org";
-    const callerId = data.identity?.callerId || config.keyName || "cli-user";
+    const orgId = data.identity?.orgId || config?.orgId || "default-org";
+    const callerId = data.identity?.callerId || config?.keyName || "cli-user";
 
     // Redacted token display per PLAT-15
-    const tokenDisplay = config.token.length > 8
-      ? `${config.token.slice(0, 4)}...${config.token.slice(-4)}`
+    const tokenDisplay = token.length > 8
+      ? `${token.slice(0, 4)}...${token.slice(-4)}`
       : "[REDACTED]";
 
     const card = renderBoardingPass({
@@ -469,10 +481,9 @@ export async function logoutCommand(options?: { configPath?: string }): Promise<
   await runLogout(options);
 }
 
-export async function whoamiCommand(options?: {
-  controlUrl?: string;
-  configPath?: string;
-}): Promise<{ authenticated: boolean; orgId?: string; callerId?: string }> {
+export async function whoamiCommand(
+  options?: WhoamiOptions,
+): Promise<{ authenticated: boolean; orgId?: string; callerId?: string }> {
   return await runWhoami(options);
 }
 
@@ -483,10 +494,10 @@ Usage:
   rail login [options]
 
 Options:
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
-  --token <key>          Directly provide API key (non-interactive / CI)
-  --manual               Skip browser callback server and prompt on stdin
-  -h, --help             Show help for login command`);
+  --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  --token <key>            Directly provide API key (alias: --api-key, non-interactive / CI)
+  --manual                 Skip browser callback server and prompt on stdin
+  -h, --help               Show help for login command`);
 }
 
 export function printLogoutHelp(): void {
@@ -496,7 +507,7 @@ Usage:
   rail logout [options]
 
 Options:
-  -h, --help             Show help for logout command`);
+  -h, --help               Show help for logout command`);
 }
 
 export function printWhoamiHelp(): void {
@@ -506,7 +517,8 @@ Usage:
   rail whoami [options]
 
 Options:
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
-  -h, --help             Show help for whoami command`);
+  --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  --token <key>            Directly provide API key (alias: --api-key)
+  -h, --help               Show help for whoami command`);
 }
 

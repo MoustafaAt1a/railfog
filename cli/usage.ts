@@ -22,6 +22,7 @@ import {
   type ProjectCostItemized,
   type ProjectUsageSummary,
 } from "../packages/metrics/cost-calculator.ts";
+import { renderStatusBar } from "./ui.ts";
 
 /**
  * Options for the usage reporting CLI subcommand.
@@ -31,6 +32,7 @@ import {
 export interface UsageCliOptions {
   projectDir?: string;
   projectId?: string;
+  project?: string;
   format?: "pretty" | "json";
   rates?: Partial<PricingRates>;
   usageSource?: ProjectUsageSummary | string;
@@ -217,7 +219,8 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
       // railfog.toml is optional for usage reporting
     }
 
-    const fallbackProject = options.projectId ?? tomlName ?? "default-project";
+    const resolvedProjectId = options.projectId ?? options.project;
+    const fallbackProject = resolvedProjectId ?? tomlName ?? "default-project";
     const fallbackOrg = tomlOrg ?? "default-org";
 
     let usage: ProjectUsageSummary;
@@ -234,7 +237,7 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
         usage = {
           ...options.usageSource,
           orgId: options.usageSource.orgId || fallbackOrg,
-          projectId: options.projectId || options.usageSource.projectId ||
+          projectId: resolvedProjectId || options.usageSource.projectId ||
             fallbackProject,
         };
       } else if (typeof options.usageSource === "string") {
@@ -257,7 +260,7 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
           usage = {
             ...parsed,
             orgId: parsed.orgId || fallbackOrg,
-            projectId: options.projectId || parsed.projectId || fallbackProject,
+            projectId: resolvedProjectId || parsed.projectId || fallbackProject,
           };
         } else {
           // File path resolution
@@ -317,7 +320,7 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
           usage = {
             ...parsed,
             orgId: parsed.orgId || fallbackOrg,
-            projectId: options.projectId || parsed.projectId || fallbackProject,
+            projectId: resolvedProjectId || parsed.projectId || fallbackProject,
           };
         }
       } else {
@@ -366,7 +369,7 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
         usage = {
           ...parsed,
           orgId: parsed.orgId || fallbackOrg,
-          projectId: options.projectId || parsed.projectId || fallbackProject,
+          projectId: resolvedProjectId || parsed.projectId || fallbackProject,
         };
       } else {
         // spec: docs/contracts/platform.contract.md#PLAT-10 — Graceful zero-usage default
@@ -396,6 +399,18 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
 
     // spec: tasks/milestone-0.6-public-beta/T-0607-cli-usage-cost-reporting.md#AC1, AC2 — Output report
     console.log(formatUsageReport(cost, options.format ?? "pretty"));
+    if (options.format !== "json") {
+      console.log();
+      console.log(
+        renderStatusBar([
+          { label: "Project", value: cost.projectId ?? "default-project" },
+          { label: "Compute", value: formatUsd(cost.computeCostUsd) },
+          { label: "Operations", value: formatUsd(cost.operationsCostUsd) },
+          { label: "Storage", value: formatUsd(cost.storageCostUsd) },
+          { label: "Total Cost", value: formatUsd(cost.totalCostUsd) },
+        ]),
+      );
+    }
     return 0;
   } catch (err) {
     // spec: docs/contracts/platform.contract.md#PLAT-12 — Error containment
@@ -419,10 +434,10 @@ Usage:
   rail cost [options]
 
 Options:
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -p, --project <name>     Project ID or name override (alias: -n, --name)
   --format <pretty|json>   Output format: pretty (default) or json (alias: --json)
   --json                   Output machine-readable JSON (alias for --format=json)
-  -C, --dir <path>         Project root directory (alias: --project-dir, --cwd, default: current directory)
-  -p, --project <name>     Project ID or name override (alias: --name)
   --source <path|json>     Custom usage source JSON string or file path
   --rates <json>           Custom pricing rates JSON override
   -h, --help               Show help for usage command`);

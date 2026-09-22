@@ -22,6 +22,7 @@ export interface UndeployCommandOptions {
   project?: string;
   deploymentService?: DeploymentService;
   token?: string;
+  force?: boolean;
 }
 
 export interface UndeployCommandResult {
@@ -44,9 +45,11 @@ Usage:
   rail undeploy [options]
 
 Options:
-  -p, --project <name>     Target project name (defaults to railfog.toml, alias: --name)
+  -p, --project <name>     Target project name (defaults to railfog.toml, alias: -n, --name)
   -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
   --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  --token <key>            API key for authorization (alias: --api-key)
+  -f, --force              Force undeployment without interactive confirmation
   -h, --help               Show help for undeploy command`);
 }
 

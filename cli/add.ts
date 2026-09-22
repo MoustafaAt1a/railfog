@@ -2,6 +2,7 @@
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0811-project-dependency-add.md
 
 import { join, resolve } from "@std/path";
+import { colors, renderCard, renderStatusBar } from "./ui.ts";
 
 // spec: contracts/platform.contract.md#PLAT-19 — Canonical SDK module entrypoint
 export const CANONICAL_SDK_URL =
@@ -134,11 +135,11 @@ Usage:
   rail add <package> [options]
 
 Arguments:
-  <package>    Package or primitive to add (supported: sdk)
+  <package>          Package or primitive to add (supported: sdk)
 
 Options:
-  --dir <path> Target project directory (default: current directory)
-  -h, --help   Show help for add command`);
+  -C, --dir <path>   Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -h, --help         Show help for add command`);
 }
 
 /**
@@ -150,6 +151,23 @@ export async function addCommand(
 ): Promise<AddResult> {
   const result = await runAdd({ packageOrPrimitive, cwd });
   console.log(`[+] Added ${result.addedImport} to deno.json`);
+  console.log();
+  console.log(
+    renderCard("Dependency Configured", [
+      `Package:     ${colors.bold(colors.accent(result.addedImport))}`,
+      `Target File: ${colors.dim(result.targetFile)}`,
+      `Status:      ${colors.emerald("[+] Successfully coupled to deno.json")}`,
+    ], { borderColor: colors.emerald, padding: true }),
+  );
+  console.log();
+  console.log(
+    renderStatusBar([
+      { label: "Dependency", value: result.addedImport },
+      { label: "File", value: "deno.json" },
+      { label: "Status", value: "Active" },
+    ]),
+  );
   return result;
 }
+
 

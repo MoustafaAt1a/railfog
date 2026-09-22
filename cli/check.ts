@@ -12,7 +12,7 @@
 
 import { dirname, isAbsolute, join, normalize, relative } from "@std/path";
 import { parse } from "@std/toml";
-import { colors, renderInspectionGutter } from "./ui.ts";
+import { colors, renderInspectionGutter, renderStatusBar } from "./ui.ts";
 
 // spec: contracts/functions.contract.md#FN-5 — Resource limits ceilings
 export const DEFAULT_MEMORY_MB = 128;
@@ -1171,6 +1171,15 @@ export async function runCheck(
     console.log(
       `\n${colors.green("[+]")} Configuration valid. Zero errors found.`,
     );
+    console.log();
+    console.log(
+      renderStatusBar([
+        { label: "Configuration", value: "Valid" },
+        { label: "Errors", value: "0" },
+        { label: "Warnings", value: String(result.warnings.length) },
+        { label: "Status", value: "Passed" },
+      ]),
+    );
     return 0;
   } else {
     console.error(`\n${colors.red("[-] Configuration validation failed:")}`);
@@ -1212,12 +1221,12 @@ Usage:
   rail check [path] [options]
 
 Arguments:
-  [path]             Project directory or path to railfog.toml (default: current directory)
+  [path]                   Project directory or path to railfog.toml (default: current directory)
 
 Options:
-  -C, --dir <path>   Project directory (alias: --project-dir, --cwd, default: current directory)
-  --json             Output validation results as structured JSON
-  -h, --help         Show help for check command`);
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  --json                   Output validation results as structured JSON (alias: --format=json)
+  -h, --help               Show help for check command`);
 }
 
 export async function checkCommand(

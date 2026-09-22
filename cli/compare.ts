@@ -1,7 +1,7 @@
 // spec: contracts/platform.contract.md#PLAT-19 — Repository structure & CLI subcommands
 // cli/compare.ts — Architectural comparison matrix vs AWS Lambda & Cloudflare Workers
 
-import { renderCompetitiveMatrix } from "./ui.ts";
+import { renderCompetitiveMatrix, renderStatusBar } from "./ui.ts";
 
 export function printCompareHelp(): void {
   console.log(`RailFog CLI - Architectural Comparison
@@ -23,4 +23,12 @@ Options:
  */
 export function compareCommand(): void {
   console.log("\n" + renderCompetitiveMatrix() + "\n");
+  console.log(
+    renderStatusBar([
+      { label: "Primitives", value: "4 (Zero Sprawl)" },
+      { label: "Cold Start", value: "0ms (Isolates)" },
+      { label: "Routing", value: "Deterministic" },
+      { label: "Scale", value: "Edge" },
+    ]),
+  );
 }

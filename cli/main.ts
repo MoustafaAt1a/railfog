@@ -730,6 +730,23 @@ export async function main(args: string[] = Deno.args): Promise<void> {
             force,
           });
           console.log("Initialized RailFog project.");
+          console.log();
+          console.log(
+            renderCard("Project Scaffolding Complete", [
+              `Project:  ${colors.bold(colors.accent(projectName ?? directory!))}`,
+              `Location: ${colors.dim(directory!)}`,
+              `Template: ${colors.brand(template ?? "minimal")}`,
+              `Status:   ${colors.emerald("[+] Initialized successfully")}`,
+            ], { borderColor: colors.emerald, padding: true }),
+          );
+          console.log();
+          console.log(
+            renderStatusBar([
+              { label: "Project", value: projectName ?? directory! },
+              { label: "Template", value: template ?? "minimal" },
+              { label: "Status", value: "Ready" },
+            ]),
+          );
         } else {
           await runInteractiveInit({ projectName, template, force });
         }
@@ -1015,16 +1032,20 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           project = arg.slice("--project=".length);
         } else if (arg.startsWith("--name=")) {
           project = arg.slice("--name=".length);
-        } else if ((arg === "--env" || arg === "-e") && args[i + 1]) {
+        } else if ((arg === "--env" || arg === "-e" || arg === "--environment") && args[i + 1]) {
           env = args[i + 1];
           i++;
         } else if (arg.startsWith("--env=")) {
           env = arg.slice("--env=".length);
-        } else if (arg === "--token" && args[i + 1]) {
+        } else if (arg.startsWith("--environment=")) {
+          env = arg.slice("--environment=".length);
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
           token = args[i + 1];
           i++;
         } else if (arg.startsWith("--token=")) {
           token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
         } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           cwd = resolve(args[i + 1]);
           i++;
@@ -1063,6 +1084,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let targetRevisionId: string | undefined;
       let controlPlaneUrl: string | undefined;
       let project: string | undefined;
+      let token: string | undefined;
       let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
@@ -1091,6 +1113,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           project = arg.slice("--project=".length);
         } else if (arg.startsWith("--name=")) {
           project = arg.slice("--name=".length);
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
         } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           cwd = resolve(args[i + 1]);
           i++;
@@ -1121,6 +1150,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           project,
           functionName,
           targetRevisionId,
+          token,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1133,6 +1163,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
     case "undeploy": {
       let project: string | undefined;
       let controlPlaneUrl: string | undefined;
+      let token: string | undefined;
+      let force = false;
       let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
@@ -1155,6 +1187,15 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           controlPlaneUrl = arg.slice("--control-plane-url=".length);
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
+        } else if (arg === "-f" || arg === "--force") {
+          force = true;
         } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           cwd = resolve(args[i + 1]);
           i++;
@@ -1172,6 +1213,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           cwd,
           controlPlaneUrl,
           project,
+          token,
+          force,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1186,6 +1229,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let project: string | undefined;
       let org: string | undefined;
       let controlPlaneUrl: string | undefined;
+      let token: string | undefined;
       let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
@@ -1218,6 +1262,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           controlPlaneUrl = arg.slice("--control-url=".length);
         } else if (arg.startsWith("--control-plane-url=")) {
           controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
         } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           cwd = resolve(args[i + 1]);
           i++;
@@ -1237,6 +1288,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           project,
           org,
           controlPlaneUrl,
+          token,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1252,6 +1304,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let org: string | undefined;
       let overwriteKv = false;
       let controlPlaneUrl: string | undefined;
+      let token: string | undefined;
       let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
@@ -1286,6 +1339,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           controlPlaneUrl = arg.slice("--control-url=".length);
         } else if (arg.startsWith("--control-plane-url=")) {
           controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
         } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           cwd = resolve(args[i + 1]);
           i++;
@@ -1313,6 +1373,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           targetOrgId: org,
           overwriteKv,
           controlPlaneUrl,
+          token,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1333,6 +1394,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let value: string | undefined;
       let filePath: string | undefined;
       let projectDir: string | undefined;
+      let project: string | undefined;
 
       const subArgs = args.slice(2);
       for (let i = 0; i < subArgs.length; i++) {
@@ -1346,6 +1408,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--file=")) {
           filePath = arg.slice("--file=".length);
+        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && subArgs[i + 1]) {
+          project = subArgs[i + 1];
+          i++;
+        } else if (arg.startsWith("--project=")) {
+          project = arg.slice("--project=".length);
+        } else if (arg.startsWith("--name=")) {
+          project = arg.slice("--name=".length);
         } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && subArgs[i + 1]) {
           projectDir = subArgs[i + 1];
           i++;
@@ -1370,6 +1439,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         value,
         filePath,
         projectDir,
+        project,
       });
       if (exitCode !== 0) {
         Deno.exit(exitCode);
@@ -1386,6 +1456,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let projectDir: string | undefined;
       let project: string | undefined;
       let controlPlaneUrl: string | undefined;
+      let token: string | undefined;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1444,6 +1515,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           controlPlaneUrl = arg.slice("--control-url=".length);
         } else if (arg.startsWith("--control-plane-url=")) {
           controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
         }
       }
 
@@ -1456,6 +1534,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         projectDir,
         project,
         controlPlaneUrl,
+        token,
       });
       if (exitCode !== 0) {
         Deno.exit(exitCode);
@@ -1582,11 +1661,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           controlUrl = arg.slice("--control-url=".length);
         } else if (arg.startsWith("--control-plane-url=")) {
           controlUrl = arg.slice("--control-plane-url=".length);
-        } else if (arg === "--token" && args[i + 1]) {
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
           token = args[i + 1];
           i++;
         } else if (arg.startsWith("--token=")) {
           token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
         } else if (arg === "--manual") {
           manual = true;
         }
@@ -1613,6 +1694,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
 
     case "whoami": {
       let controlUrl: string | undefined;
+      let token: string | undefined;
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
@@ -1626,9 +1708,16 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           controlUrl = arg.slice("--control-url=".length);
         } else if (arg.startsWith("--control-plane-url=")) {
           controlUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "--token" || arg === "--api-key") && args[i + 1]) {
+          token = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--token=")) {
+          token = arg.slice("--token=".length);
+        } else if (arg.startsWith("--api-key=")) {
+          token = arg.slice("--api-key=".length);
         }
       }
-      const res = await whoamiCommand({ controlUrl });
+      const res = await whoamiCommand({ controlUrl, token });
       if (!res.authenticated) {
         Deno.exit(1);
       }
