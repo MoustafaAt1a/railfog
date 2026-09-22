@@ -136,16 +136,24 @@ export async function runDoctor(
   // Track Signal 5: Route Timetable (PLAT-11)
   const routeCount = checkRes.routeSummary?.length ?? 0;
   const hasShadowWarnings = checkRes.warnings.some((w) => w.code === "PLAT-11");
+  const isMissingToml = checkRes.errors.some((e) =>
+    e.message?.toLowerCase().includes("railfog.toml")
+  );
+  const signal5Warn = hasShadowWarnings || isMissingToml;
   signals.push({
     id: 5,
     name: "SIGNAL 5: Route Timetable",
-    status: hasShadowWarnings ? "warn" : "active",
-    statusText: hasShadowWarnings
-      ? "[YELLOW - SHADOW WARNING]"
-      : "[GREEN - DETERMINISTIC]",
-    detail: hasShadowWarnings
-      ? "Duplicate or shadowed route pattern detected; verify route order in railfog.toml"
-      : `${routeCount} routes scored and deterministically ordered via PLAT-11 algorithm`,
+    status: signal5Warn ? "warn" : "active",
+    statusText: isMissingToml
+      ? "[YELLOW - NO TOML DETECTED]"
+      : (hasShadowWarnings
+        ? "[YELLOW - SHADOW WARNING]"
+        : "[GREEN - DETERMINISTIC]"),
+    detail: isMissingToml
+      ? "No railfog.toml in current directory; run 'rail init' to scaffold a project"
+      : (hasShadowWarnings
+        ? "Duplicate or shadowed route pattern detected; verify route order in railfog.toml"
+        : `${routeCount} routes scored and deterministically ordered via PLAT-11 algorithm`),
   });
 
   const overallHealthy = checkRes.valid && !hasCapabilityErrors &&

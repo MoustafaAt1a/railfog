@@ -4,6 +4,7 @@
 
 // deno-lint-ignore no-import-prefix
 import { fromFileUrl, join, resolve } from "jsr:@std/path@0.224.0";
+import { CLI_VERSION } from "../cli/version.ts";
 
 /**
  * Options configuring CLI installer behavior.
@@ -387,7 +388,7 @@ export async function runInstaller(options: InstallerOptions): Promise<{
     // Record installation version and git commit metadata
     try {
       const meta = {
-        version: "0.8.0",
+        version: CLI_VERSION,
         ref: options.ref ?? "main",
         commit: options.commit,
         installedAt: new Date().toISOString(),
@@ -436,24 +437,17 @@ function createStyles() {
     cyan: (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`,
     yellow: (t: string) => noColor ? t : `\x1b[33m${t}\x1b[39m`,
     gray: (t: string) => noColor ? t : `\x1b[90m${t}\x1b[39m`,
-    amber: (t: string) =>
-      noColor ? t : `\x1b[38;2;229;168;75m${t}\x1b[39m`,
-    brand: (t: string) =>
-      noColor ? t : `\x1b[38;2;152;118;170m${t}\x1b[39m`,
-    emerald: (t: string) =>
-      noColor ? t : `\x1b[38;2;98;151;85m${t}\x1b[39m`,
-    bdr: (t: string) =>
-      noColor ? t : `\x1b[38;2;85;85;85m${t}\x1b[39m`,
-    ok: (msg: string) =>
-      noColor ? `[+] ${msg}` : `\x1b[32m[+]\x1b[39m ${msg}`,
+    amber: (t: string) => noColor ? t : `\x1b[38;2;229;168;75m${t}\x1b[39m`,
+    brand: (t: string) => noColor ? t : `\x1b[38;2;152;118;170m${t}\x1b[39m`,
+    emerald: (t: string) => noColor ? t : `\x1b[38;2;98;151;85m${t}\x1b[39m`,
+    bdr: (t: string) => noColor ? t : `\x1b[38;2;85;85;85m${t}\x1b[39m`,
+    ok: (msg: string) => noColor ? `[+] ${msg}` : `\x1b[32m[+]\x1b[39m ${msg}`,
     fail: (msg: string) =>
       noColor ? `[-] ${msg}` : `\x1b[31m[-]\x1b[39m ${msg}`,
     info: (msg: string) =>
       noColor ? `[i] ${msg}` : `\x1b[36m[i]\x1b[39m ${msg}`,
     warn: (msg: string) =>
-      noColor
-        ? `[!] ${msg}`
-        : `\x1b[38;2;229;168;75m[!]\x1b[39m ${msg}`,
+      noColor ? `[!] ${msg}` : `\x1b[38;2;229;168;75m[!]\x1b[39m ${msg}`,
   };
 }
 
@@ -513,7 +507,9 @@ function renderStepProgress(
     : status === "fail"
     ? s.red("fail")
     : s.gray("skip");
-  return `  ${s.cyan(idx)} ${s.dim("━━━━━━━━►")} ${label} ${s.dim(dots)} ${result}`;
+  return `  ${s.cyan(idx)} ${s.dim("━━━━━━━━►")} ${label} ${
+    s.dim(dots)
+  } ${result}`;
 }
 
 /**
@@ -559,27 +555,79 @@ function printHelp(): void {
   console.log("");
   for (const l of logo) console.log("  " + l);
   console.log("");
-  console.log(`  ${s.bold(s.brand("RailFog"))} ${s.bold(s.cyan("CLI Installer"))}`);
+  console.log(
+    `  ${s.bold(s.brand("RailFog"))} ${s.bold(s.cyan("CLI Installer"))}`,
+  );
   console.log(`  ${s.dim("Trigger -> Function -> {KV, Objects, Queues}")}`);
   console.log("");
   console.log(`  ${s.bold("Usage:")}`);
   console.log(`    deno run -A scripts/install.ts ${s.dim("[options]")}`);
-  console.log(`    deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts ${s.dim("[options]")}`);
+  console.log(
+    `    deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts ${
+      s.dim("[options]")
+    }`,
+  );
   console.log("");
   console.log(`  ${s.bold("Options:")}`);
-  console.log(`    ${s.bold("-r")}, ${s.bold("--root")} ${s.dim("<dir>")}      Installation root directory`);
-  console.log(`                          ${s.gray("(default: $DENO_INSTALL_ROOT, $RAILFOG_INSTALL_DIR, or ~/.deno)")}`);
-  console.log(`    ${s.bold("-c")}, ${s.bold("--compile")}         Compile standalone executable instead of Deno script shim`);
-  console.log(`    ${s.bold("-f")}, ${s.bold("--force")}           Force overwrite existing installation`);
-  console.log(`    ${s.bold("-l")}, ${s.bold("--local")}           Install from local repository instead of GitHub`);
-  console.log(`        ${s.bold("--dry-run")}         Preview installation plan without modifying disk`);
-  console.log(`        ${s.bold("--ref")} ${s.dim("<ref>")}       Git ref/tag/branch to install ${s.gray("(default: main)")}`);
-  console.log(`        ${s.bold("--commit")} ${s.dim("<sha>")}    Exact git commit SHA to install ${s.gray("(bypasses CDN caches)")}`);
-  console.log(`        ${s.bold("--repo")} ${s.dim("<repo>")}     GitHub repository ${s.gray("(default: MoustafaAt1a/railfog)")}`);
-  console.log(`    ${s.bold("-h")}, ${s.bold("--help")}            Show this help information`);
+  console.log(
+    `    ${s.bold("-r")}, ${s.bold("--root")} ${
+      s.dim("<dir>")
+    }      Installation root directory`,
+  );
+  console.log(
+    `                          ${
+      s.gray("(default: $DENO_INSTALL_ROOT, $RAILFOG_INSTALL_DIR, or ~/.deno)")
+    }`,
+  );
+  console.log(
+    `    ${s.bold("-c")}, ${
+      s.bold("--compile")
+    }         Compile standalone executable instead of Deno script shim`,
+  );
+  console.log(
+    `    ${s.bold("-f")}, ${
+      s.bold("--force")
+    }           Force overwrite existing installation`,
+  );
+  console.log(
+    `    ${s.bold("-l")}, ${
+      s.bold("--local")
+    }           Install from local repository instead of GitHub`,
+  );
+  console.log(
+    `        ${
+      s.bold("--dry-run")
+    }         Preview installation plan without modifying disk`,
+  );
+  console.log(
+    `        ${s.bold("--ref")} ${
+      s.dim("<ref>")
+    }       Git ref/tag/branch to install ${s.gray("(default: main)")}`,
+  );
+  console.log(
+    `        ${s.bold("--commit")} ${
+      s.dim("<sha>")
+    }    Exact git commit SHA to install ${s.gray("(bypasses CDN caches)")}`,
+  );
+  console.log(
+    `        ${s.bold("--repo")} ${s.dim("<repo>")}     GitHub repository ${
+      s.gray("(default: MoustafaAt1a/railfog)")
+    }`,
+  );
+  console.log(
+    `    ${s.bold("-h")}, ${
+      s.bold("--help")
+    }            Show this help information`,
+  );
   console.log("");
   console.log(`  ${s.bdr("─".repeat(60))}`);
-  console.log(`    ${s.info(`Run ${s.bold("rail --help")} after installation for CLI commands.`)}`);
+  console.log(
+    `    ${
+      s.info(
+        `Run ${s.bold("rail --help")} after installation for CLI commands.`,
+      )
+    }`,
+  );
   console.log(`  ${s.bdr("─".repeat(60))}`);
   console.log("");
 }
@@ -687,7 +735,9 @@ async function runPreflight(
   const shell = detectShell();
   checks.push(
     shell
-      ? `${s.info("")}${dotPad("Shell detected", 28)}${shell} ${s.dim("(run rail completions " + shell + ")")}`
+      ? `${s.info("")}${dotPad("Shell detected", 28)}${shell} ${
+        s.dim("(run rail completions " + shell + ")")
+      }`
       : `${s.dim("    ")}${dotPad("Shell detected", 28)}${s.dim("none")}`,
   );
 
@@ -701,10 +751,15 @@ async function runPreflight(
 /**
  * Measures round-trip latency to the closest CDN / Control Plane endpoint.
  */
-async function measureLatency(url = "https://raw.githubusercontent.com"): Promise<number | null> {
+async function measureLatency(
+  url = "https://raw.githubusercontent.com",
+): Promise<number | null> {
   try {
     const start = performance.now();
-    const res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(1200) });
+    const res = await fetch(url, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(1200),
+    });
     if (res.status > 0) {
       return Math.round(performance.now() - start);
     }
@@ -737,7 +792,9 @@ if (import.meta.main) {
   console.log("");
   for (const l of logo) console.log("    " + l);
   console.log("");
-  console.log(`    ${s.bold(s.brand("RailFog"))} ${s.bold(s.cyan("CLI Installer"))}`);
+  console.log(
+    `    ${s.bold(s.brand("RailFog"))} ${s.bold(s.cyan("CLI Installer"))}`,
+  );
   console.log(`    ${s.dim("Trigger -> Function -> {KV, Objects, Queues}")}`);
   console.log("");
 
@@ -756,9 +813,13 @@ if (import.meta.main) {
     console.log(`         ${s.info("Source:    Local repository")}`);
   } else {
     console.log(
-      `         ${s.info(`Source:    https://github.com/${
-        options.repo ?? "MoustafaAt1a/railfog"
-      } ${s.dim(`(ref: ${options.ref ?? "main"})`)}`)}`,
+      `         ${
+        s.info(
+          `Source:    https://github.com/${
+            options.repo ?? "MoustafaAt1a/railfog"
+          } ${s.dim(`(ref: ${options.ref ?? "main"})`)}`,
+        )
+      }`,
     );
   }
   console.log(
@@ -771,7 +832,11 @@ if (import.meta.main) {
   const latency = options.local ? null : await measureLatency();
   if (latency !== null) {
     console.log(
-      `         ${s.info(`Edge Ping: ${latency}ms to Edge CDN ${s.green("(Status: Green)")}`)}`,
+      `         ${
+        s.info(
+          `Edge Ping: ${latency}ms to Edge CDN ${s.green("(Status: Green)")}`,
+        )
+      }`,
     );
   }
   console.log("");
@@ -783,7 +848,15 @@ if (import.meta.main) {
     console.log(
       renderStepProgress(2, 3, "Installing binary (dry run)", "skip", s),
     );
-    console.log(`         ${s.info(s.amber("[DRY RUN] Skipping file writes and environment modifications"))}`);
+    console.log(
+      `         ${
+        s.info(
+          s.amber(
+            "[DRY RUN] Skipping file writes and environment modifications",
+          ),
+        )
+      }`,
+    );
     console.log("");
   } else {
     const result = await runInstaller(options);
@@ -807,9 +880,13 @@ if (import.meta.main) {
   // -------------------------------------------------------------------------
   const preflightResults = options.dryRun
     ? [
-      `${s.ok("")}rail --version               ${s.bold("0.8.0 (preview)")}`,
+      `${s.ok("")}rail --version               ${
+        s.bold(`${CLI_VERSION} (beta)`)
+      }`,
       `${s.ok("")}PATH                         ${s.green("simulated")}`,
-      `${s.ok("")}Deno runtime                 ${Deno.version?.deno ?? "unknown"}`,
+      `${s.ok("")}Deno runtime                 ${
+        Deno.version?.deno ?? "unknown"
+      }`,
     ]
     : await runPreflight(paths, s);
 
@@ -821,13 +898,17 @@ if (import.meta.main) {
   // -------------------------------------------------------------------------
   // SHA-256 integrity
   // -------------------------------------------------------------------------
-  const hash = options.dryRun ? null : await computeFileHash(paths.fullBinaryPath);
+  const hash = options.dryRun
+    ? null
+    : await computeFileHash(paths.fullBinaryPath);
 
   // -------------------------------------------------------------------------
   // Build Official Inbound Passenger Ticket
   // -------------------------------------------------------------------------
-  const isUpgrade = previousVersion && previousVersion !== "0.8.0";
-  const ticketId = `#RF-080-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+  const isUpgrade = previousVersion && previousVersion !== CLI_VERSION;
+  const ticketId = `#RF-090-${
+    Math.random().toString(16).slice(2, 6).toUpperCase()
+  }`;
 
   const cardTitle = options.dryRun
     ? "RailFog Express: Boarding Pass [DRY RUN]"
@@ -839,16 +920,30 @@ if (import.meta.main) {
 
   // Ticket Header Metadata
   cardLines.push(`${s.bold(s.cyan("TICKET NO:"))}    ${s.bold(ticketId)}`);
-  cardLines.push(`${s.dim("ORIGIN:")}       Local Workstation ${s.dim(`(${Deno.build.os}-${Deno.build.arch})`)}`);
+  cardLines.push(
+    `${s.dim("ORIGIN:")}       Local Workstation ${
+      s.dim(`(${Deno.build.os}-${Deno.build.arch})`)
+    }`,
+  );
   cardLines.push(`${s.dim("DESTINATION:")}  Production Edge Station`);
   cardLines.push(`${s.dim("CLASS:")}        Developer Fast-Track`);
 
   if (isUpgrade) {
-    cardLines.push(`${s.dim("STATUS:")}       ${s.ok(s.bold(`UPGRADED (${previousVersion} -> 0.8.0)`))}`);
+    cardLines.push(
+      `${s.dim("STATUS:")}       ${
+        s.ok(s.bold(`UPGRADED (${previousVersion} -> ${CLI_VERSION})`))
+      }`,
+    );
   } else if (options.dryRun) {
-    cardLines.push(`${s.dim("STATUS:")}       ${s.amber(s.bold("PREVIEW ONLY (No changes applied)"))}`);
+    cardLines.push(
+      `${s.dim("STATUS:")}       ${
+        s.amber(s.bold("PREVIEW ONLY (No changes applied)"))
+      }`,
+    );
   } else {
-    cardLines.push(`${s.dim("STATUS:")}       ${s.ok(s.bold("COUPLED & CLEARED FOR RUN"))}`);
+    cardLines.push(
+      `${s.dim("STATUS:")}       ${s.ok(s.bold("COUPLED & CLEARED FOR RUN"))}`,
+    );
   }
 
   cardLines.push("");
@@ -878,7 +973,11 @@ if (import.meta.main) {
     );
     if (Deno.build.os === "windows") {
       cardLines.push(
-        `    ${s.bold(`[Environment]::SetEnvironmentVariable("Path", $env:Path + ";${paths.binDir}", "User")`)}`,
+        `    ${
+          s.bold(
+            `[Environment]::SetEnvironmentVariable("Path", $env:Path + ";${paths.binDir}", "User")`,
+          )
+        }`,
       );
     } else {
       cardLines.push(
@@ -891,13 +990,19 @@ if (import.meta.main) {
   cardLines.push("");
   cardLines.push(s.bold("Boarding Instructions:"));
   cardLines.push(
-    `  ${s.cyan("1.")}  ${s.bold("rail login")}              ${s.dim("Authenticate with Control Plane")}`,
+    `  ${s.cyan("1.")}  ${s.bold("rail login")}              ${
+      s.dim("Authenticate with Control Plane")
+    }`,
   );
   cardLines.push(
-    `  ${s.cyan("2.")}  ${s.bold("rail init my-app")}        ${s.dim("Scaffold your first 4-primitive train")}`,
+    `  ${s.cyan("2.")}  ${s.bold("rail init my-app")}        ${
+      s.dim("Scaffold your first 4-primitive train")
+    }`,
   );
   cardLines.push(
-    `  ${s.cyan("3.")}  ${s.bold("rail deploy")}             ${s.dim("Dispatch to production edge")}`,
+    `  ${s.cyan("3.")}  ${s.bold("rail deploy")}             ${
+      s.dim("Dispatch to production edge")
+    }`,
   );
 
   console.log(renderInstallerCard(cardTitle, cardLines, s));

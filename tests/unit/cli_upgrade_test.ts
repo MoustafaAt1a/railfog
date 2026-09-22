@@ -113,12 +113,12 @@ Deno.test(
 );
 
 Deno.test(
-  "CLI_VERSION: matches current milestone version line (0.8.x)",
+  "CLI_VERSION: matches current milestone version line (0.9.x)",
   () => {
     assertStringIncludes(
       CLI_VERSION,
-      "0.8.",
-      "CLI_VERSION should match the 0.8.x milestone series",
+      "0.9.",
+      "CLI_VERSION should match the 0.9.x milestone series",
     );
   },
 );
@@ -226,7 +226,7 @@ Deno.test(
 
         return Promise.resolve(
           new Response(
-            'export const CLI_VERSION = "0.8.0";\n',
+            'export const CLI_VERSION = "0.9.0";\n',
             { status: 200, headers: { "content-type": "text/plain" } },
           ),
         );
@@ -241,7 +241,7 @@ Deno.test(
         fetchedUrl.includes("main"),
         `Fetched URL should reference default ref 'main'. Got: ${fetchedUrl}`,
       );
-      assertEquals(latest, "0.8.0");
+      assertEquals(latest, "0.9.0");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -552,13 +552,13 @@ Deno.test(
 Deno.test(
   "CLI command dispatch: 'rail upgrade --version <ver> --check' is not hijacked by top-level version flag",
   async () => {
-    const res = await runCli(["upgrade", "--version", "0.8.0", "--check"]);
+    const res = await runCli(["upgrade", "--version", CLI_VERSION, "--check"]);
     assertEquals(
       res.code,
       0,
-      `'rail upgrade --version 0.8.0 --check' must exit 0. Stderr: ${res.stderr}`,
+      `'rail upgrade --version ${CLI_VERSION} --check' must exit 0. Stderr: ${res.stderr}`,
     );
-    // Should output upgrade status, NOT bare 'rail 0.8.0'
+    // Should output upgrade status, NOT bare 'rail <version>'
     assertStringIncludes(
       res.stdout,
       "RailFog CLI is already up to date",
@@ -790,7 +790,7 @@ Deno.test(
         meta !== undefined,
         ".rail-version.json must be written to bin directory",
       );
-      assertEquals(meta.version, "0.8.0");
+      assertEquals(meta.version, CLI_VERSION);
     } finally {
       try {
         await Deno.remove(tempRoot, { recursive: true });

@@ -364,6 +364,7 @@ ${colors.bold(colors.accent("== [System & Maintenance] =="))}
   update       Alias for upgrade subcommand
   sync         Sync CLI with the latest git updates (alias for update)
   uninstall    Remove the RailFog CLI binary and metadata
+  version      Show CLI version and engine telemetry (--detailed, --json)
   completions  Generate shell auto-completion scripts (pwsh, bash, zsh, fish)
 
 ${colors.bold("Options:")}
@@ -438,6 +439,7 @@ const KNOWN_COMMANDS = [
   "uninstall",
   "completions",
   "completion",
+  "version",
 ];
 
 export function findClosestCommand(cmd: string): string | null {
@@ -650,9 +652,71 @@ export async function main(args: string[] = Deno.args): Promise<void> {
   // spec: PLAT-19, T-0814 AC 1 — Top-level --version and -v flag handling
   if (
     args[0] === "--version" ||
-    args[0] === "-v" ||
-    args[0] === "version"
+    args[0] === "-v"
   ) {
+    console.log(`rail ${CLI_VERSION}`);
+    return;
+  }
+
+  if (args[0] === "version") {
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(
+        {
+          cli: CLI_VERSION,
+          deno: Deno.version?.deno ?? "unknown",
+          v8: Deno.version?.v8 ?? "unknown",
+          typescript: Deno.version?.typescript ?? "unknown",
+          os: Deno.build.os,
+          arch: Deno.build.arch,
+        },
+        null,
+        2,
+      ));
+      return;
+    }
+
+    if (
+      args.includes("--detailed") ||
+      args.includes("-d") ||
+      args.includes("--verbose")
+    ) {
+      const cardLines = [
+        `${
+          colors.bold(colors.emerald("[+] Engine Nominal • V8 Isolates Active"))
+        }`,
+        "",
+        `  ${colors.dim("CLI Version:")}    ${
+          colors.bold(colors.emerald(`v${CLI_VERSION} (Beta)`))
+        }`,
+        `  ${colors.dim("Deno Runtime:")}   ${
+          colors.bold(colors.white(`v${Deno.version?.deno ?? "unknown"}`))
+        }`,
+        `  ${colors.dim("V8 Engine:")}      ${
+          colors.slate(Deno.version?.v8 ?? "unknown")
+        }`,
+        `  ${colors.dim("TypeScript:")}     ${
+          colors.slate(Deno.version?.typescript ?? "unknown")
+        }`,
+        `  ${colors.dim("Target OS:")}      ${
+          colors.accent(`${Deno.build.os} (${Deno.build.arch})`)
+        }`,
+        `  ${colors.dim("Primitives:")}     ${colors.accent("Functions")} • ${
+          colors.emerald("KV")
+        } • ${colors.cyan("Objects")} • ${colors.amber("Queues")}`,
+        `  ${colors.dim("Architecture:")}   ${
+          colors.slate("Zero-IAM • Deterministic Routing • LTS")
+        }`,
+      ];
+      console.log(
+        "\n" + renderCard("RailFog Engine Telemetry", cardLines, {
+          borderColor: colors.brand,
+          borderStyle: "unicode",
+          padding: true,
+        }) + "\n",
+      );
+      return;
+    }
+
     console.log(`rail ${CLI_VERSION}`);
     return;
   }

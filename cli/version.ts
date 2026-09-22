@@ -6,4 +6,4 @@
  *
  * @spec docs/contracts/platform.contract.md#PLAT-19
  */
-export const CLI_VERSION = "0.8.0";
+export const CLI_VERSION = "0.9.0";

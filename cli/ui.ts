@@ -1071,7 +1071,7 @@ export async function animateSteamTrain(options?: {
   const fps = options?.fps ?? 6;
   const intervalMs = Math.round(1000 / fps);
   const encoder = new TextEncoder();
-  const ver = options?.version ?? "0.8.0";
+  const ver = options?.version ?? "0.9.0";
 
   if (!isTerm || !colors.enabled) {
     console.log(renderBrandHeader(ver));

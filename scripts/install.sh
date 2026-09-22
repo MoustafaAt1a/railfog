@@ -230,7 +230,7 @@ printf "${BDR}│${RESET}  ${BOLD}Preflight Signal Board:${RESET}               
 
 # Preflight: rail check
 if [ "$DRY_RUN" = "yes" ]; then
-  printf "${BDR}│${RESET}    ${GREEN}[+]${RESET} rail --version ${DIM}....................${RESET} ${BOLD}0.8.0 (preview)${RESET}                     ${BDR}│${RESET}\n"
+  printf "${BDR}│${RESET}    ${GREEN}[+]${RESET} rail --version ${DIM}....................${RESET} ${BOLD}0.9.0 (beta)${RESET}                        ${BDR}│${RESET}\n"
   printf "${BDR}│${RESET}    ${GREEN}[+]${RESET} PATH ${DIM}..............................${RESET} ${GREEN}simulated${RESET}                           ${BDR}│${RESET}\n"
 else
   if command -v "$BINARY_PATH" >/dev/null 2>&1 || [ -x "$BINARY_PATH" ]; then

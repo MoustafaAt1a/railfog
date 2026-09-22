@@ -100,7 +100,7 @@ export async function checkLatestVersion(options?: {
     } catch {
       // Not JSON
     }
-    return "0.8.0";
+    return CLI_VERSION;
   }
 
   // spec: PLAT-19 — Fallback version check via repository deno.json
@@ -138,7 +138,7 @@ export async function checkLatestVersion(options?: {
     return match[1];
   }
 
-  return "0.8.0";
+  return CLI_VERSION;
 }
 
 /**
@@ -251,7 +251,7 @@ export async function runUpgrade(
 
   if (options?.version && !isValidVersion(options.version)) {
     const message =
-      `Invalid version format: "${options.version}". Must be semantic versioning (e.g. 0.8.0).`;
+      `Invalid version format: "${options.version}". Must be semantic versioning (e.g. 0.9.0).`;
     console.error(message);
     return {
       ok: false,
