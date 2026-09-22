@@ -322,20 +322,26 @@ export function createSpinner(options?: SpinnerOptions): Spinner {
 /**
  * Creates a locomotive wheel-rotation spinner (◜ ◠ ◝ ◞ ◡ ◟).
  */
-export function createWheelSpinner(options?: Omit<SpinnerOptions, "style">): Spinner {
+export function createWheelSpinner(
+  options?: Omit<SpinnerOptions, "style">,
+): Spinner {
   return new TerminalSpinner({ ...options, style: "wheel" });
 }
 
 /**
  * Creates a railway station signal lantern aspect spinner (◐ ◓ ◑ ◒).
  */
-export function createSignalSpinner(options?: Omit<SpinnerOptions, "style">): Spinner {
+export function createSignalSpinner(
+  options?: Omit<SpinnerOptions, "style">,
+): Spinner {
   return new TerminalSpinner({ ...options, style: "signal" });
 }
 
 /**
  * Creates a railway track switch / piston stroke spinner.
  */
-export function createTrackSpinner(options?: Omit<SpinnerOptions, "style">): Spinner {
+export function createTrackSpinner(
+  options?: Omit<SpinnerOptions, "style">,
+): Spinner {
   return new TerminalSpinner({ ...options, style: "track" });
 }

@@ -67,6 +67,95 @@ const URL_SCAN_REGEX = /https?:\/\/[^\s"'`<>]+/gi;
 const CODE_FILE_REGEX = /\.(ts|js|mjs|cjs|jsx|tsx)$/i;
 
 /**
+ * Deterministic finite automaton (DFA) scanner counting open and closed curly braces
+ * in TypeScript/JavaScript code, accurately distinguishing strings, template expressions,
+ * and comments (single/multi-line) in O(N) time with O(1) auxiliary state.
+ *
+ * spec: contracts/functions.contract.md#FN-1
+ * spec: contracts/platform.contract.md#PLAT-3
+ */
+export function countUnbalancedCurlyBraces(code: string): number {
+  type LexerState =
+    | "code"
+    | "single_comment"
+    | "multi_comment"
+    | "single_quote"
+    | "double_quote"
+    | "template";
+
+  let state: LexerState = "code";
+  const templateStack: number[] = [];
+  let openBraces = 0;
+  const len = code.length;
+
+  for (let i = 0; i < len; i++) {
+    const c = code[i];
+    const next = i + 1 < len ? code[i + 1] : "";
+
+    if (state === "code") {
+      if (c === "/" && next === "/") {
+        state = "single_comment";
+        i++;
+      } else if (c === "/" && next === "*") {
+        state = "multi_comment";
+        i++;
+      } else if (c === "'") {
+        state = "single_quote";
+      } else if (c === '"') {
+        state = "double_quote";
+      } else if (c === "`") {
+        state = "template";
+      } else if (c === "{") {
+        openBraces++;
+      } else if (c === "}") {
+        openBraces--;
+        if (
+          templateStack.length > 0 &&
+          openBraces === templateStack[templateStack.length - 1]
+        ) {
+          templateStack.pop();
+          state = "template";
+        }
+      }
+    } else if (state === "single_comment") {
+      if (c === "\n" || c === "\r") {
+        state = "code";
+      }
+    } else if (state === "multi_comment") {
+      if (c === "*" && next === "/") {
+        state = "code";
+        i++;
+      }
+    } else if (state === "single_quote") {
+      if (c === "\\") {
+        i++;
+      } else if (c === "'") {
+        state = "code";
+      }
+    } else if (state === "double_quote") {
+      if (c === "\\") {
+        i++;
+      } else if (c === '"') {
+        state = "code";
+      }
+    } else if (state === "template") {
+      if (c === "\\") {
+        i++;
+      } else if (c === "`") {
+        state = "code";
+      } else if (c === "$" && next === "{") {
+        templateStack.push(openBraces);
+        openBraces++;
+        state = "code";
+        i++;
+      }
+    }
+  }
+
+  return openBraces;
+}
+
+/**
  * Normalizes IPv4-mapped IPv6 addresses (e.g. ::ffff:169.254.169.254, ::ffff:a9fe:a9fe)
  * to dotted-decimal IPv4 strings.
  */
@@ -358,15 +447,7 @@ export class DeployDiagnosticsAnalyzer {
 
       // 0. Static syntax and export validation for function source files (FN-1)
       if (CODE_FILE_REGEX.test(file.relPath)) {
-        const stripped = content
-          .replace(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g, "")
-          .replace(/'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g, "");
-
-        let openBraces = 0;
-        for (const char of stripped) {
-          if (char === "{") openBraces++;
-          else if (char === "}") openBraces--;
-        }
+        const openBraces = countUnbalancedCurlyBraces(content);
 
         if (openBraces !== 0) {
           issues.push({

@@ -44,7 +44,9 @@ async function benchmarkIsolateStartup(): Promise<number> {
 /**
  * Executes a comprehensive 5-point platform health and track signal inspection.
  */
-export async function runDoctor(options?: DoctorOptions): Promise<DoctorResult> {
+export async function runDoctor(
+  options?: DoctorOptions,
+): Promise<DoctorResult> {
   const cwd = resolve(options?.cwd ?? Deno.cwd());
   const tomlPath = join(cwd, "railfog.toml");
 
@@ -75,7 +77,9 @@ export async function runDoctor(options?: DoctorOptions): Promise<DoctorResult> 
     name: "SIGNAL 1: V8 Isolate Engine",
     status: "active",
     statusText: "[GREEN - ACTIVE]",
-    detail: `Deno v${denoVer} (V8 ${v8Ver}) • Isolate cold start: < ${isolateBootMs.toFixed(2)}ms`,
+    detail: `Deno v${denoVer} (V8 ${v8Ver}) • Isolate cold start: < ${
+      isolateBootMs.toFixed(2)
+    }ms`,
   });
 
   // Track Signal 2: Zero-IAM Capability Guard
@@ -84,7 +88,9 @@ export async function runDoctor(options?: DoctorOptions): Promise<DoctorResult> 
     id: 2,
     name: "SIGNAL 2: Zero-IAM Capabilities",
     status: hasCapabilityErrors ? "error" : "active",
-    statusText: hasCapabilityErrors ? "[RED - LEAKAGE DETECTED]" : "[GREEN - BOUNDED & SECURE]",
+    statusText: hasCapabilityErrors
+      ? "[RED - LEAKAGE DETECTED]"
+      : "[GREEN - BOUNDED & SECURE]",
     detail: hasCapabilityErrors
       ? "Permission errors detected in railfog.toml (PLAT-6)"
       : "Declarative capability sandbox active; zero ambient network or storage handles",
@@ -96,7 +102,9 @@ export async function runDoctor(options?: DoctorOptions): Promise<DoctorResult> 
     id: 3,
     name: "SIGNAL 3: SSRF Network Barrier",
     status: hasSsrfErrors ? "error" : "active",
-    statusText: hasSsrfErrors ? "[RED - SSRF RISK]" : "[GREEN - ENFORCED (PLAT-5)]",
+    statusText: hasSsrfErrors
+      ? "[RED - SSRF RISK]"
+      : "[GREEN - ENFORCED (PLAT-5)]",
     detail: hasSsrfErrors
       ? "Forbidden IP or cloud metadata range declared in network permissions"
       : "Link-local, 169.254.0.0/16 metadata, and RFC1918 ranges blocked at edge",
@@ -104,7 +112,8 @@ export async function runDoctor(options?: DoctorOptions): Promise<DoctorResult> 
 
   // Track Signal 4: Storage Twin (PLAT-17)
   let storageHealthy = true;
-  let storageDetail = "Local SQLite KV, Queues, and LocalFS Objects operational";
+  let storageDetail =
+    "Local SQLite KV, Queues, and LocalFS Objects operational";
   try {
     const railfogDir = join(cwd, ".railfog");
     await Deno.mkdir(railfogDir, { recursive: true });
@@ -116,7 +125,9 @@ export async function runDoctor(options?: DoctorOptions): Promise<DoctorResult> 
     id: 4,
     name: "SIGNAL 4: Storage Digital Twin",
     status: storageHealthy ? "active" : "warn",
-    statusText: storageHealthy ? "[GREEN - SYNCED]" : "[YELLOW - STORAGE UNVERIFIED]",
+    statusText: storageHealthy
+      ? "[GREEN - SYNCED]"
+      : "[YELLOW - STORAGE UNVERIFIED]",
     detail: storageDetail,
   });
 
@@ -127,13 +138,16 @@ export async function runDoctor(options?: DoctorOptions): Promise<DoctorResult> 
     id: 5,
     name: "SIGNAL 5: Route Timetable",
     status: hasShadowWarnings ? "warn" : "active",
-    statusText: hasShadowWarnings ? "[YELLOW - SHADOW WARNING]" : "[GREEN - DETERMINISTIC]",
+    statusText: hasShadowWarnings
+      ? "[YELLOW - SHADOW WARNING]"
+      : "[GREEN - DETERMINISTIC]",
     detail: hasShadowWarnings
       ? "Duplicate or shadowed route pattern detected; verify route order in railfog.toml"
       : `${routeCount} routes scored and deterministically ordered via PLAT-11 algorithm`,
   });
 
-  const overallHealthy = checkRes.valid && !hasCapabilityErrors && !hasSsrfErrors;
+  const overallHealthy = checkRes.valid && !hasCapabilityErrors &&
+    !hasSsrfErrors;
 
   const report: StationSignalReport = {
     projectName,

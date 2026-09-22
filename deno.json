@@ -70,6 +70,7 @@
     ]
   },
   "exclude": [
-    "**/.gitkeep"
+    "**/.gitkeep",
+    "graphify-out"
   ]
 }

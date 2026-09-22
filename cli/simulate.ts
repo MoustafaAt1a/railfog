@@ -68,12 +68,16 @@ export async function runSimulate(
     config = parse(raw) as unknown as RailfogConfigData;
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      throw new Error(`railfog.toml not found in "${cwd}". Run 'rail init' first.`);
+      throw new Error(
+        `railfog.toml not found in "${cwd}". Run 'rail init' first.`,
+      );
     }
     throw err;
   }
 
-  const cleanPath = requestPath.startsWith("/") ? requestPath : `/${requestPath}`;
+  const cleanPath = requestPath.startsWith("/")
+    ? requestPath
+    : `/${requestPath}`;
   const routes = config.routes ?? [];
 
   if (routes.length === 0) {
@@ -89,7 +93,10 @@ export async function runSimulate(
 
   for (let i = 0; i < routes.length; i++) {
     const r = routes[i];
-    if (r && typeof r.pattern === "string" && matchesRoutePattern(r.pattern, cleanPath)) {
+    if (
+      r && typeof r.pattern === "string" &&
+      matchesRoutePattern(r.pattern, cleanPath)
+    ) {
       matchingRoutes.push({
         route: r,
         score: specificityScore(r.pattern),
@@ -99,7 +106,11 @@ export async function runSimulate(
   }
 
   if (matchingRoutes.length === 0) {
-    throw new Error(`No route matches path "${cleanPath}". Available routes: ${routes.map((r) => r.pattern).join(", ")}`);
+    throw new Error(
+      `No route matches path "${cleanPath}". Available routes: ${
+        routes.map((r) => r.pattern).join(", ")
+      }`,
+    );
   }
 
   // Sort descending by score; ties preserved by declaration order
@@ -108,7 +119,8 @@ export async function runSimulate(
   const winner = matchingRoutes[0];
   const functionName = winner.route.function;
   const fnConfig = config.functions?.[functionName] ?? {};
-  const entrypoint = fnConfig.entry ?? fnConfig.entrypoint ?? `functions/${functionName}.ts`;
+  const entrypoint = fnConfig.entry ?? fnConfig.entrypoint ??
+    `functions/${functionName}.ts`;
 
   const permissions = {
     kv: fnConfig.permissions?.kv,
@@ -120,14 +132,21 @@ export async function runSimulate(
   const shadowedBy: string[] = [];
   for (let i = 1; i < matchingRoutes.length; i++) {
     if (matchingRoutes[i].score === winner.score) {
-      shadowedBy.push(`${matchingRoutes[i].route.pattern} (${matchingRoutes[i].route.function})`);
+      shadowedBy.push(
+        `${matchingRoutes[i].route.pattern} (${
+          matchingRoutes[i].route.function
+        })`,
+      );
     }
   }
 
   // Measure simulated sub-millisecond isolate startup
   const start = performance.now();
   await Promise.resolve();
-  const isolateBootMs = Math.max(0.3, Math.min(performance.now() - start + 0.4, 1.2));
+  const isolateBootMs = Math.max(
+    0.3,
+    Math.min(performance.now() - start + 0.4, 1.2),
+  );
 
   const result: RouteSimulationResult = {
     path: cleanPath,

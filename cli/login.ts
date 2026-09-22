@@ -362,7 +362,9 @@ export async function runLogin(options?: LoginOptions): Promise<LoginResult> {
     if (waitingInterval !== undefined) {
       clearInterval(waitingInterval);
       waitingInterval = undefined;
-      if (typeof Deno.stdout.isTerminal === "function" && Deno.stdout.isTerminal()) {
+      if (
+        typeof Deno.stdout.isTerminal === "function" && Deno.stdout.isTerminal()
+      ) {
         Deno.stdout.writeSync(new TextEncoder().encode("\r\x1b[2K"));
       }
     }

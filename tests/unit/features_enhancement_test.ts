@@ -13,7 +13,8 @@ Deno.test("Features Enhancement: auth = 'bearer' rejects unauthenticated and all
       id: "rev_01SECURE000000000000000001",
       project: "test-proj",
       functionName: "secureFn",
-      artifactId: "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+      artifactId:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000001",
       integrity: "sha256-test",
       state: "Deployed",
       createdAt: Date.now(),
@@ -22,7 +23,7 @@ Deno.test("Features Enhancement: auth = 'bearer' rejects unauthenticated and all
         permissions: {},
         limits: { cpu_ms: 200, timeout_ms: 5000, memory_mb: 128 },
         auth: "bearer",
-      } as any,
+      } as unknown as RevisionRecord["manifest"],
     },
   };
 
@@ -40,8 +41,6 @@ Deno.test("Features Enhancement: auth = 'bearer' rejects unauthenticated and all
     isolationProvider: isolation,
   });
 
-  // Inject snapshot directly into memory for test
-  (server as any).port; // port bound
   const port = server.port;
 
   try {
@@ -74,7 +73,9 @@ Deno.test("Features Enhancement: Environment staging path-prefix and rate limiti
 
   try {
     // Check path-prefix environment resolution: /cloud-demo/staging/unknown-route returns 404 RESOURCE_NOT_FOUND (not crashed)
-    const res = await fetch(`http://127.0.0.1:${port}/cloud-demo/staging/api/test`);
+    const res = await fetch(
+      `http://127.0.0.1:${port}/cloud-demo/staging/api/test`,
+    );
     assertEquals(res.status, 404);
     const body = await res.json();
     assertEquals(body.error.code, "RESOURCE_NOT_FOUND");

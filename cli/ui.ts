@@ -61,24 +61,50 @@ export const colors = {
   gray: (t: string) => colors.enabled ? `\x1b[90m${t}\x1b[39m` : t,
 
   // JetBrains Fleet & Darcula Palette (subtle, high-contrast, professional)
-  accent: (t: string) => colors.enabled ? `\x1b[38;2;89;168;216m${t}\x1b[39m` : t, // Fleet Electric Cyan #59A8D8
-  brand: (t: string) => colors.enabled ? `\x1b[38;2;152;118;170m${t}\x1b[39m` : t,  // Darcula Field Violet #9876AA
-  purple: (t: string) => colors.enabled ? `\x1b[38;2;152;118;170m${t}\x1b[39m` : t, // Darcula Lilac #9876AA
-  emerald: (t: string) => colors.enabled ? `\x1b[38;2;98;151;85m${t}\x1b[39m` : t,  // Darcula Doc Green #629755
-  amber: (t: string) => colors.enabled ? `\x1b[38;2;229;168;75m${t}\x1b[39m` : t,   // IntelliJ Warning Amber #E5A84B
-  coral: (t: string) => colors.enabled ? `\x1b[38;2;199;84;80m${t}\x1b[39m` : t,    // IntelliJ Inspection Red #C75450
-  orange: (t: string) => colors.enabled ? `\x1b[38;2;204;120;50m${t}\x1b[39m` : t,  // Darcula Keyword Orange #CC7832
-  slate: (t: string) => colors.enabled ? `\x1b[38;2;169;183;198m${t}\x1b[39m` : t,  // Darcula Text Slate #A9B7C6
-  border: (t: string) => colors.enabled ? `\x1b[38;2;85;85;85m${t}\x1b[39m` : t,    // Darcula Gutter/Border #555555
-  gutter: (t: string) => colors.enabled ? `\x1b[38;2;96;99;102m${t}\x1b[39m` : t,  // Darcula Gutter Line #606366
+  accent: (t: string) =>
+    colors.enabled ? `\x1b[38;2;89;168;216m${t}\x1b[39m` : t, // Fleet Electric Cyan #59A8D8
+  brand: (t: string) =>
+    colors.enabled ? `\x1b[38;2;152;118;170m${t}\x1b[39m` : t, // Darcula Field Violet #9876AA
+  purple: (t: string) =>
+    colors.enabled ? `\x1b[38;2;152;118;170m${t}\x1b[39m` : t, // Darcula Lilac #9876AA
+  emerald: (t: string) =>
+    colors.enabled ? `\x1b[38;2;98;151;85m${t}\x1b[39m` : t, // Darcula Doc Green #629755
+  amber: (t: string) =>
+    colors.enabled ? `\x1b[38;2;229;168;75m${t}\x1b[39m` : t, // IntelliJ Warning Amber #E5A84B
+  coral: (t: string) => colors.enabled ? `\x1b[38;2;199;84;80m${t}\x1b[39m` : t, // IntelliJ Inspection Red #C75450
+  orange: (t: string) =>
+    colors.enabled ? `\x1b[38;2;204;120;50m${t}\x1b[39m` : t, // Darcula Keyword Orange #CC7832
+  slate: (t: string) =>
+    colors.enabled ? `\x1b[38;2;169;183;198m${t}\x1b[39m` : t, // Darcula Text Slate #A9B7C6
+  border: (t: string) => colors.enabled ? `\x1b[38;2;85;85;85m${t}\x1b[39m` : t, // Darcula Gutter/Border #555555
+  gutter: (t: string) =>
+    colors.enabled ? `\x1b[38;2;96;99;102m${t}\x1b[39m` : t, // Darcula Gutter Line #606366
 
   // Background badges
-  bgBrand: (t: string) => colors.enabled ? `\x1b[48;2;49;46;129;38;2;224;231;255m ${t} \x1b[0m` : `[${t}]`,
-  bgAccent: (t: string) => colors.enabled ? `\x1b[48;2;12;74;110;38;2;224;242;254m ${t} \x1b[0m` : `[${t}]`,
-  bgSuccess: (t: string) => colors.enabled ? `\x1b[48;2;6;78;59;38;2;209;250;229m ${t} \x1b[0m` : `[${t}]`,
-  bgWarn: (t: string) => colors.enabled ? `\x1b[48;2;120;53;15;38;2;254;243;199m ${t} \x1b[0m` : `[${t}]`,
-  bgError: (t: string) => colors.enabled ? `\x1b[48;2;127;29;29;38;2;254;226;226m ${t} \x1b[0m` : `[${t}]`,
-  bgMuted: (t: string) => colors.enabled ? `\x1b[48;2;30;41;59;38;2;203;213;225m ${t} \x1b[0m` : `[${t}]`,
+  bgBrand: (t: string) =>
+    colors.enabled
+      ? `\x1b[48;2;49;46;129;38;2;224;231;255m ${t} \x1b[0m`
+      : `[${t}]`,
+  bgAccent: (t: string) =>
+    colors.enabled
+      ? `\x1b[48;2;12;74;110;38;2;224;242;254m ${t} \x1b[0m`
+      : `[${t}]`,
+  bgSuccess: (t: string) =>
+    colors.enabled
+      ? `\x1b[48;2;6;78;59;38;2;209;250;229m ${t} \x1b[0m`
+      : `[${t}]`,
+  bgWarn: (t: string) =>
+    colors.enabled
+      ? `\x1b[48;2;120;53;15;38;2;254;243;199m ${t} \x1b[0m`
+      : `[${t}]`,
+  bgError: (t: string) =>
+    colors.enabled
+      ? `\x1b[48;2;127;29;29;38;2;254;226;226m ${t} \x1b[0m`
+      : `[${t}]`,
+  bgMuted: (t: string) =>
+    colors.enabled
+      ? `\x1b[48;2;30;41;59;38;2;203;213;225m ${t} \x1b[0m`
+      : `[${t}]`,
 };
 
 /**
@@ -120,7 +146,9 @@ export function renderMethodBadge(method: string): string {
     case "PATCH":
       return colors.enabled ? colors.purple(colors.bold("PATCH ")) : "PATCH ";
     default:
-      return colors.enabled ? colors.slate(colors.bold(m.padEnd(6))) : m.padEnd(6);
+      return colors.enabled
+        ? colors.slate(colors.bold(m.padEnd(6)))
+        : m.padEnd(6);
   }
 }
 
@@ -276,14 +304,19 @@ export function renderCard(
     }
   }
 
-  const isTerm = typeof Deno.stdout?.isTerminal === "function" ? Deno.stdout.isTerminal() : false;
+  const isTerm = typeof Deno.stdout?.isTerminal === "function"
+    ? Deno.stdout.isTerminal()
+    : false;
 
   // Cap outer card to avoid exceeding terminal width
   let targetOuterMax: number;
   if (options?.maxWidth) {
     targetOuterMax = options.maxWidth;
   } else if (isTerm) {
-    targetOuterMax = Math.min(Math.max(80, rawContentMax + 4), Math.max(36, termWidth - 2));
+    targetOuterMax = Math.min(
+      Math.max(80, rawContentMax + 4),
+      Math.max(36, termWidth - 2),
+    );
   } else {
     // Non-interactive / tests / pipe: allow card to expand to content width cleanly
     targetOuterMax = Math.max(80, rawContentMax + 4);
@@ -311,7 +344,10 @@ export function renderCard(
       const indent = indentMatch ? indentMatch[1] : "  ";
       const ruleWidth = Math.max(4, maxInnerWidth - visibleWidth(indent));
       wrappedLines.push(colorFn(indent + cHoriz.repeat(ruleWidth)));
-      maxContentWidth = Math.max(maxContentWidth, visibleWidth(indent) + ruleWidth);
+      maxContentWidth = Math.max(
+        maxContentWidth,
+        visibleWidth(indent) + ruleWidth,
+      );
       continue;
     }
     const chunks = wrapText(l, maxInnerWidth);
@@ -322,7 +358,10 @@ export function renderCard(
   }
 
   // Clamp inner width between content width and maxInnerWidth
-  const innerWidth = Math.max(Math.min(maxContentWidth, maxInnerWidth), titleVis + 2);
+  const innerWidth = Math.max(
+    Math.min(maxContentWidth, maxInnerWidth),
+    titleVis + 2,
+  );
   const cardWidth = innerWidth + 4;
 
   const out: string[] = [];
@@ -330,7 +369,10 @@ export function renderCard(
   // Top border
   const titlePart = title ? ` ${colors.bold(title)} ` : "";
   const topDashes = Math.max(0, cardWidth - titleVis - 4);
-  out.push(colorFn(cTopLeft) + titlePart + colorFn(cHoriz.repeat(topDashes) + cTopRight));
+  out.push(
+    colorFn(cTopLeft) + titlePart +
+      colorFn(cHoriz.repeat(topDashes) + cTopRight),
+  );
 
   const pad = options?.padding !== false;
 
@@ -375,7 +417,9 @@ export function renderErrorCard(err: {
   const rawMsg = err.message;
   if (rawMsg.includes(". Available commands: ")) {
     const parts = rawMsg.split(". Available commands: ");
-    lines.push(`${colors.coral(colors.bold("[-]"))}  ${colors.bold(parts[0] + ".")}`);
+    lines.push(
+      `${colors.coral(colors.bold("[-]"))}  ${colors.bold(parts[0] + ".")}`,
+    );
     lines.push("");
     lines.push(`   ${colors.dim("Available commands:")}`);
     lines.push(`   ${colors.slate(parts[1])}`);
@@ -400,7 +444,11 @@ export function renderErrorCard(err: {
 
   if (err.docs) {
     lines.push("");
-    lines.push(`   ${colors.dim("Reference:")} ${colors.underline(colors.brand(err.docs))}`);
+    lines.push(
+      `   ${colors.dim("Reference:")} ${
+        colors.underline(colors.brand(err.docs))
+      }`,
+    );
   }
 
   if (err.requestId) {
@@ -462,7 +510,9 @@ export function renderModernTable(
       out.push("");
     }
     const hCells = headers.map((h, i) =>
-      colors.bold(colors.accent(padText(h, naturalWidths[i], alignments[i] ?? "left")))
+      colors.bold(
+        colors.accent(padText(h, naturalWidths[i], alignments[i] ?? "left")),
+      )
     );
     out.push("  " + hCells.join("   "));
 
@@ -498,7 +548,9 @@ export function renderModernTable(
   // Overhead: each col has " " + cell + " " plus dividers = (colCount * 3) + 1
   const overhead = (colCount * 3) + 1;
   const termWidth = getTerminalWidth();
-  const isTerm = typeof Deno.stdout?.isTerminal === "function" ? Deno.stdout.isTerminal() : false;
+  const isTerm = typeof Deno.stdout?.isTerminal === "function"
+    ? Deno.stdout.isTerminal()
+    : false;
   const sumNatural = naturalWidths.reduce((a, b) => a + b, 0);
   const naturalTableWidth = sumNatural + overhead;
 
@@ -519,7 +571,10 @@ export function renderModernTable(
 
   if (availableContent > 0 && sumNatural > availableContent) {
     // Columns exceed available width — shrink columns responsively
-    const minColWidth = Math.max(4, Math.floor(availableContent / (colCount * 2)));
+    const minColWidth = Math.max(
+      4,
+      Math.floor(availableContent / (colCount * 2)),
+    );
     const remaining = availableContent - (colCount * minColWidth);
     const excessSum = naturalWidths.reduce(
       (acc, w) => acc + Math.max(0, w - minColWidth),
@@ -550,9 +605,14 @@ export function renderModernTable(
   if (options?.title) {
     const titlePart = ` ${colors.bold(options.title)} `;
     const topDashes = Math.max(0, finalTableWidth - titleVis - 4);
-    out.push(colorFn(cTitleTopLeft) + titlePart + colorFn(cHoriz.repeat(topDashes) + cTopRight));
+    out.push(
+      colorFn(cTitleTopLeft) + titlePart +
+        colorFn(cHoriz.repeat(topDashes) + cTopRight),
+    );
   } else {
-    const top = cTopLeft + colWidths.map((w) => cHoriz.repeat(w + 2)).join(cTopMid) + cTopRight;
+    const top = cTopLeft + colWidths.map((w) =>
+      cHoriz.repeat(w + 2)
+    ).join(cTopMid) + cTopRight;
     out.push(colorFn(top));
   }
 
@@ -564,13 +624,21 @@ export function renderModernTable(
     const cells = [];
     for (let c = 0; c < colCount; c++) {
       const cellText = headerLinesByCol[c]?.[lineIdx] ?? "";
-      cells.push(" " + colors.bold(colors.accent(padText(cellText, colWidths[c], alignments[c] ?? "left"))) + " ");
+      cells.push(
+        " " +
+          colors.bold(
+            colors.accent(
+              padText(cellText, colWidths[c], alignments[c] ?? "left"),
+            ),
+          ) + " ",
+      );
     }
     out.push(colorFn(cVert) + cells.join(colorFn(cVert)) + colorFn(cVert));
   }
 
   // 3. Header separator
-  const mid = cMidLeft + colWidths.map((w) => cHoriz.repeat(w + 2)).join(cMidMid) + cMidRight;
+  const mid = cMidLeft +
+    colWidths.map((w) => cHoriz.repeat(w + 2)).join(cMidMid) + cMidRight;
   out.push(colorFn(mid));
 
   // 4. Data rows (with multi-line cell wrapping)
@@ -586,14 +654,17 @@ export function renderModernTable(
       const cells = [];
       for (let c = 0; c < colCount; c++) {
         const cellText = rowLinesByCol[c]?.[lineIdx] ?? "";
-        cells.push(" " + padText(cellText, colWidths[c], alignments[c] ?? "left") + " ");
+        cells.push(
+          " " + padText(cellText, colWidths[c], alignments[c] ?? "left") + " ",
+        );
       }
       out.push(colorFn(cVert) + cells.join(colorFn(cVert)) + colorFn(cVert));
     }
   }
 
   // 5. Bottom border
-  const bot = cBottomLeft + colWidths.map((w) => cHoriz.repeat(w + 2)).join(cBottomMid) + cBottomRight;
+  const bot = cBottomLeft +
+    colWidths.map((w) => cHoriz.repeat(w + 2)).join(cBottomMid) + cBottomRight;
   out.push(colorFn(bot));
 
   return out.join("\n");
@@ -645,11 +716,13 @@ export function renderProgressBar(
     const emptyCount = Math.max(0, width - filledCount);
 
     if (filledCount === 0) {
-      bar = colors.border("╟") + colors.border("─".repeat(width)) + colors.border("╢");
+      bar = colors.border("╟") + colors.border("─".repeat(width)) +
+        colors.border("╢");
     } else if (filledCount >= width) {
       // Arrived at destination station bumper
       const rails = "═".repeat(Math.max(0, width - 1));
-      bar = colors.border("╟") + colorFn(rails) + colors.bold(colorFn("■")) + colors.border("╢");
+      bar = colors.border("╟") + colorFn(rails) + colors.bold(colorFn("■")) +
+        colors.border("╢");
     } else {
       const traversedLen = filledCount - 1;
       let railStr = "";
@@ -663,7 +736,8 @@ export function renderProgressBar(
       }
       const engine = colors.bold(colors.white("►"));
       const ahead = colors.border("─".repeat(emptyCount));
-      bar = colors.border("╟") + colorFn(railStr) + engine + ahead + colors.border("╢");
+      bar = colors.border("╟") + colorFn(railStr) + engine + ahead +
+        colors.border("╢");
     }
   } else if (style === "sleepers") {
     // Cross-Tie Railroad Sleepers: ╞══╤══╤══●──┬──┬──╡
@@ -677,13 +751,17 @@ export function renderProgressBar(
     for (let i = 0; i < emptyCount; i++) {
       emptyStr += (i % 3 === 2) ? "┬" : "─";
     }
-    const engine = (filledCount > 0 && filledCount < width) ? colors.bold(colors.white("●")) : "";
-    bar = colors.border("╞") + colorFn(filledStr) + engine + colors.border(emptyStr) + colors.border("╡");
+    const engine = (filledCount > 0 && filledCount < width)
+      ? colors.bold(colors.white("●"))
+      : "";
+    bar = colors.border("╞") + colorFn(filledStr) + engine +
+      colors.border(emptyStr) + colors.border("╡");
   } else if (style === "fleet") {
     // JetBrains High-Density Block Gauge: ╟▰▰▰▰▱▱▱▱╢
     const filledCount = Math.round(pct * width);
     const emptyCount = Math.max(0, width - filledCount);
-    bar = colors.border("╟") + colorFn("▰".repeat(filledCount)) + colors.border("▱".repeat(emptyCount)) + colors.border("╢");
+    bar = colors.border("╟") + colorFn("▰".repeat(filledCount)) +
+      colors.border("▱".repeat(emptyCount)) + colors.border("╢");
   } else {
     // Classic pure ASCII: [==========----------]
     const filledCount = Math.round(pct * width);
@@ -697,7 +775,8 @@ export function renderProgressBar(
     } else {
       filledStr = "=".repeat(filledCount);
     }
-    bar = "[" + colors.accent(filledStr) + colors.border("-".repeat(emptyCount)) + "]";
+    bar = "[" + colors.accent(filledStr) +
+      colors.border("-".repeat(emptyCount)) + "]";
   }
 
   let extra = "";
@@ -755,8 +834,11 @@ export function renderTrainLogo(options?: TrainLogoOptions): string[] {
   const lines: string[] = [];
 
   const headlightColor = options?.pulseFrame !== undefined && c
-    ? HEADLIGHT_PULSE_COLORS[Math.abs(options.pulseFrame) % HEADLIGHT_PULSE_COLORS.length]
-    : (t: string) => colors.bold(scheme === "gray" ? colors.gray(t) : colors.white(t));
+    ? HEADLIGHT_PULSE_COLORS[
+      Math.abs(options.pulseFrame) % HEADLIGHT_PULSE_COLORS.length
+    ]
+    : (t: string) =>
+      colors.bold(scheme === "gray" ? colors.gray(t) : colors.white(t));
 
   if (!c) {
     lines.push(
@@ -771,7 +853,8 @@ export function renderTrainLogo(options?: TrainLogoOptions): string[] {
     );
   } else {
     const g = scheme === "white" ? colors.white : colors.gray;
-    const w = (t: string) => colors.bold(scheme === "gray" ? colors.gray(t) : colors.white(t));
+    const w = (t: string) =>
+      colors.bold(scheme === "gray" ? colors.gray(t) : colors.white(t));
     const b = scheme === "gray" ? colors.gray : colors.white;
     const wheels = scheme === "white" ? colors.white : colors.gray;
 
@@ -827,7 +910,9 @@ export function renderBrandHeader(
   if (options?.showTrain === false) {
     return [
       `  ${brandName}  ${verBadge}  ${envBadge}`,
-      `  ${colors.dim(options?.tagline ?? "Minimal Application Infrastructure")}`,
+      `  ${
+        colors.dim(options?.tagline ?? "Minimal Application Infrastructure")
+      }`,
     ].join("\n");
   }
 
@@ -843,7 +928,9 @@ export function renderBrandHeader(
     const rightLines: string[] = [
       `${brandName}  ${verBadge}  ${envBadge}`,
       colors.dim(options?.tagline ?? "Minimal Application Infrastructure"),
-      `${colors.dim("Trigger")} ${colors.accent("→")} ${colors.dim("Function")} ${colors.accent("→")} ${colors.dim("{KV, Objects, Queues}")}`,
+      `${colors.dim("Trigger")} ${colors.accent("→")} ${
+        colors.dim("Function")
+      } ${colors.accent("→")} ${colors.dim("{KV, Objects, Queues}")}`,
       "",
     ];
 
@@ -853,10 +940,18 @@ export function renderBrandHeader(
       }
     } else {
       rightLines.push(
-        `${colors.slate("Engine:")}    ${colors.bold("Deno LTS")} ${colors.dim("•")} ${colors.slate("V8 Isolates")}`,
-        `${colors.slate("Storage:")}   ${colors.accent("KV")} ${colors.dim("•")} ${colors.emerald("Objects")} ${colors.dim("•")} ${colors.amber("Queues")}`,
+        `${colors.slate("Engine:")}    ${colors.bold("Deno LTS")} ${
+          colors.dim("•")
+        } ${colors.slate("V8 Isolates")}`,
+        `${colors.slate("Storage:")}   ${colors.accent("KV")} ${
+          colors.dim("•")
+        } ${colors.emerald("Objects")} ${colors.dim("•")} ${
+          colors.amber("Queues")
+        }`,
         `${colors.slate("Docs:")}      ${colors.dim("docs/contracts/")}`,
-        `${colors.dim("Tips:")}      ${colors.dim("Run")} ${colors.accent("rail --help")} ${colors.dim("for all commands")}`,
+        `${colors.dim("Tips:")}      ${colors.dim("Run")} ${
+          colors.accent("rail --help")
+        } ${colors.dim("for all commands")}`,
       );
     }
 
@@ -875,14 +970,20 @@ export function renderBrandHeader(
       ...trainLines,
       "",
       `  ${brandName}  ${verBadge}  ${envBadge}`,
-      `  ${colors.dim(options?.tagline ?? "Minimal Application Infrastructure")}`,
-      `  ${colors.dim("Trigger")} ${colors.accent("→")} ${colors.dim("Function")} ${colors.accent("→")} ${colors.dim("{KV, Objects, Queues}")}`,
+      `  ${
+        colors.dim(options?.tagline ?? "Minimal Application Infrastructure")
+      }`,
+      `  ${colors.dim("Trigger")} ${colors.accent("→")} ${
+        colors.dim("Function")
+      } ${colors.accent("→")} ${colors.dim("{KV, Objects, Queues}")}`,
     ].join("\n");
   } else {
     // Ultra-compact fallback
     return [
       `  ${brandName}  ${verBadge}  ${envBadge}`,
-      `  ${colors.dim(options?.tagline ?? "Minimal Application Infrastructure")}`,
+      `  ${
+        colors.dim(options?.tagline ?? "Minimal Application Infrastructure")
+      }`,
     ].join("\n");
   }
 }
@@ -909,15 +1010,29 @@ export function renderBoardingPass(info: BoardingPassInfo): string {
     : cleanUrl;
 
   const rightLines = [
-    `${colors.bold(colors.emerald("[+] Connected to Control Plane (Status: Active)"))}`,
+    `${
+      colors.bold(
+        colors.emerald("[+] Connected to Control Plane (Status: Active)"),
+      )
+    }`,
     "",
-    `${colors.dim("PASSENGER:")}     ${colors.emerald(colors.bold(info.orgId))}`,
+    `${colors.dim("PASSENGER:")}     ${
+      colors.emerald(colors.bold(info.orgId))
+    }`,
     `${colors.dim("KEY NAME:")}      ${colors.slate(info.callerId)}`,
     `${colors.dim("ACCESS PASS:")}   ${colors.amber(info.tokenDisplay)}`,
     `${colors.dim("STATION:")}       ${colors.accent(displayStation)}`,
-    `${colors.dim("CLASS:")}         ${colors.bold(info.tier ?? "Production Tier")}`,
-    `${colors.dim("PRIMITIVES:")}    ${colors.accent("FN")} ${colors.dim("•")} ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${colors.amber("QUEUES")}`,
-    `${colors.dim("VALIDATION:")}    ${colors.emerald("[+] ACTIVE & VERIFIED")}`,
+    `${colors.dim("CLASS:")}         ${
+      colors.bold(info.tier ?? "Production Tier")
+    }`,
+    `${colors.dim("PRIMITIVES:")}    ${colors.accent("FN")} ${
+      colors.dim("•")
+    } ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${
+      colors.dim("•")
+    } ${colors.amber("QUEUES")}`,
+    `${colors.dim("VALIDATION:")}    ${
+      colors.emerald("[+] ACTIVE & VERIFIED")
+    }`,
   ];
 
   const termWidth = getTerminalWidth();
@@ -951,7 +1066,8 @@ export async function animateSteamTrain(options?: {
   version?: string;
   signal?: AbortSignal;
 }): Promise<void> {
-  const isTerm = typeof Deno.stdout.isTerminal === "function" && Deno.stdout.isTerminal();
+  const isTerm = typeof Deno.stdout.isTerminal === "function" &&
+    Deno.stdout.isTerminal();
   const fps = options?.fps ?? 6;
   const intervalMs = Math.round(1000 / fps);
   const encoder = new TextEncoder();
@@ -981,7 +1097,9 @@ export async function animateSteamTrain(options?: {
 
   try {
     while (!options?.signal?.aborted) {
-      const banner = renderBrandHeader(ver, "production", { pulseFrame: frame });
+      const banner = renderBrandHeader(ver, "production", {
+        pulseFrame: frame,
+      });
       const renderedLines = banner.split("\n");
       const numLines = renderedLines.length;
 
@@ -1054,23 +1172,33 @@ export function renderTree(
   const contEnd = "    ";
 
   if (options?.showRoot !== false) {
-    lines.push(`${colors.bold(colors.brand(rootPref))} ${colors.bold(rootTitle)}`);
+    lines.push(
+      `${colors.bold(colors.brand(rootPref))} ${colors.bold(rootTitle)}`,
+    );
     lines.push(` ${colors.border(vLine)}`);
   }
 
-  function walk(items: TreeNode[], prefix: string, _isRootLevel: boolean): void {
+  function walk(
+    items: TreeNode[],
+    prefix: string,
+    _isRootLevel: boolean,
+  ): void {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const isLast = i === items.length - 1;
       const branch = isLast ? branchEnd : branchMid;
 
       const badgeStr = item.badge ? ` ${colors.dim(`[${item.badge}]`)}` : "";
-      const valStr = item.value ? `  ${colors.accent("-->")}  ${colors.slate(item.value)}` : "";
+      const valStr = item.value
+        ? `  ${colors.accent("-->")}  ${colors.slate(item.value)}`
+        : "";
       const labelStr = item.children && item.children.length > 0
         ? colors.bold(colors.accent(item.label))
         : colors.slate(item.label);
 
-      lines.push(`${prefix}${colors.border(branch)}${labelStr}${badgeStr}${valStr}`);
+      lines.push(
+        `${prefix}${colors.border(branch)}${labelStr}${badgeStr}${valStr}`,
+      );
 
       if (item.children && item.children.length > 0) {
         const nextPrefix = prefix + (isLast ? contEnd : contMid);
@@ -1120,7 +1248,9 @@ export function renderInspectionGutter(issue: InspectionIssue): string {
   lines.push(`${tag} ${colors.bold(issue.message)}`);
 
   const fileLoc = issue.file
-    ? `    ${colors.accent("-->")} ${colors.slate(issue.file)}${issue.line ? `:${issue.line}` : ""}${issue.column ? `:${issue.column}` : ""}`
+    ? `    ${colors.accent("-->")} ${colors.slate(issue.file)}${
+      issue.line ? `:${issue.line}` : ""
+    }${issue.column ? `:${issue.column}` : ""}`
     : "";
   if (fileLoc) {
     lines.push(fileLoc);
@@ -1129,21 +1259,33 @@ export function renderInspectionGutter(issue: InspectionIssue): string {
 
   if (issue.snippet && issue.line) {
     const lineNum = String(issue.line).padStart(4, " ");
-    lines.push(`  ${colors.border(lineNum)} ${colors.border("│")} ${issue.snippet}`);
+    lines.push(
+      `  ${colors.border(lineNum)} ${colors.border("│")} ${issue.snippet}`,
+    );
     if (issue.column !== undefined) {
       const padCol = " ".repeat(Math.max(0, issue.column - 1));
       const underline = "^".repeat(8);
-      lines.push(`       ${colors.border("│")} ${padCol}${colors.coral(underline)}`);
+      lines.push(
+        `       ${colors.border("│")} ${padCol}${colors.coral(underline)}`,
+      );
     }
     lines.push(`     ${colors.border("│")}`);
   }
 
   if (issue.hint) {
-    lines.push(`     ${colors.border("│")}  ${colors.amber(colors.bold("[Fix]"))} ${colors.slate(issue.hint)}`);
+    lines.push(
+      `     ${colors.border("│")}  ${colors.amber(colors.bold("[Fix]"))} ${
+        colors.slate(issue.hint)
+      }`,
+    );
   }
 
   if (issue.ruleUrl) {
-    lines.push(`     ${colors.border("│")}  ${colors.dim("[Ref]")} ${colors.underline(colors.brand(issue.ruleUrl))}`);
+    lines.push(
+      `     ${colors.border("│")}  ${colors.dim("[Ref]")} ${
+        colors.underline(colors.brand(issue.ruleUrl))
+      }`,
+    );
   }
 
   return lines.join("\n");
@@ -1176,7 +1318,9 @@ export function renderBuildStep(
   durationMs?: number,
 ): string {
   const stepPrefix = `[${step}/${total}]`;
-  const durStr = durationMs !== undefined ? ` ${colors.dim(`(${durationMs}ms)`)}` : "";
+  const durStr = durationMs !== undefined
+    ? ` ${colors.dim(`(${durationMs}ms)`)}`
+    : "";
   let badge = "";
 
   switch (status) {
@@ -1191,7 +1335,9 @@ export function renderBuildStep(
       break;
   }
 
-  return `  ${colors.bold(colors.accent(stepPrefix))} ${title.padEnd(46)} ${badge}${durStr}`;
+  return `  ${colors.bold(colors.accent(stepPrefix))} ${
+    title.padEnd(46)
+  } ${badge}${durStr}`;
 }
 
 export interface ReleaseTrainInfo {
@@ -1213,15 +1359,27 @@ export function renderReleaseTrainCard(info: ReleaseTrainInfo): string {
   const logoWidth = 24;
 
   const rightLines = [
-    `${colors.bold(colors.emerald("[+] Release Train Arrived at Edge Station"))}`,
+    `${
+      colors.bold(colors.emerald("[+] Release Train Arrived at Edge Station"))
+    }`,
     "",
     `${colors.dim("PROJECT:")}     ${colors.accent(colors.bold(info.project))}`,
     `${colors.dim("REVISION:")}    ${colors.amber(info.revision)}`,
     `${colors.dim("DURATION:")}    ${colors.slate(info.duration)}`,
     `${colors.dim("RUNTIME:")}     ${colors.emerald(info.runtimeUrl)}`,
-    `${colors.dim("MANIFEST:")}    ${colors.bold(String(info.functionsCount ?? 1))} functions ${colors.dim("•")} ${colors.bold(String(info.routesCount ?? 1))} routes`,
-    `${colors.dim("PRIMITIVES:")}  ${colors.accent("FN")} ${colors.dim("•")} ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${colors.amber("QUEUES")}`,
-    `${colors.dim("STATUS:")}      ${colors.emerald("[+] ALL CARS COUPLED & ACTIVE")}`,
+    `${colors.dim("MANIFEST:")}    ${
+      colors.bold(String(info.functionsCount ?? 1))
+    } functions ${colors.dim("•")} ${
+      colors.bold(String(info.routesCount ?? 1))
+    } routes`,
+    `${colors.dim("PRIMITIVES:")}  ${colors.accent("FN")} ${colors.dim("•")} ${
+      colors.emerald("KV")
+    } ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${
+      colors.amber("QUEUES")
+    }`,
+    `${colors.dim("STATUS:")}      ${
+      colors.emerald("[+] ALL CARS COUPLED & ACTIVE")
+    }`,
   ];
 
   const termWidth = getTerminalWidth();
@@ -1267,11 +1425,20 @@ export function renderDepartureBoard(
     return renderCard(`Station Departure Board [${projectName}]`, [
       `${colors.dim("No active tracks or routes configured in railfog.toml.")}`,
       "",
-      `   ${colors.amber(">> Next step:")} Run 'rail add sdk' or configure [functions] in railfog.toml.`,
+      `   ${
+        colors.amber(">> Next step:")
+      } Run 'rail add sdk' or configure [functions] in railfog.toml.`,
     ], { borderColor: colors.accent });
   }
 
-  const headers = ["TRACK", "PLATFORM", "ROUTE", "FUNCTION", "TARGET", "STATUS"];
+  const headers = [
+    "TRACK",
+    "PLATFORM",
+    "ROUTE",
+    "FUNCTION",
+    "TARGET",
+    "STATUS",
+  ];
   const rows = items.map((item) => {
     const trackNum = String(item.track).padStart(2, "0");
     const platTag = `[${item.platform.toUpperCase()}]`;
@@ -1314,20 +1481,36 @@ export function renderFreightExpressCard(info: FreightExpressInfo): string {
   const logoWidth = 24;
   const isExport = info.mode === "export";
 
-  const title = isExport ? "Freight Express: State Export" : "Freight Express: State Restore";
+  const title = isExport
+    ? "Freight Express: State Export"
+    : "Freight Express: State Restore";
   const headerStatus = isExport
     ? colors.bold(colors.emerald("[+] Sealed Freight Container (AES-256-GCM)"))
-    : colors.bold(colors.emerald("[+] Freight Delivered & Cluster State Restored"));
+    : colors.bold(
+      colors.emerald("[+] Freight Delivered & Cluster State Restored"),
+    );
 
   const rightLines = [
     headerStatus,
     "",
-    `${colors.dim("PROJECT:")}     ${colors.accent(colors.bold(info.projectName))}`,
-    ...(info.backupId ? [`${colors.dim("BACKUP ID:")}   ${colors.slate(info.backupId)}`] : []),
-    ...(info.location ? [`${colors.dim("LOCATION:")}    ${colors.slate(info.location)}`] : []),
-    ...info.stats.map(([k, v]) => `${colors.dim(k.padEnd(12))} ${colors.bold(v)}`),
-    `${colors.dim("SECURITY:")}    ${colors.emerald("[+] AES-256-GCM SEAL VERIFIED")}`,
-    `${colors.dim("STATUS:")}      ${colors.emerald(isExport ? "[+] EXPORT COMPLETE" : "[+] RESTORE COMPLETE")}`,
+    `${colors.dim("PROJECT:")}     ${
+      colors.accent(colors.bold(info.projectName))
+    }`,
+    ...(info.backupId
+      ? [`${colors.dim("BACKUP ID:")}   ${colors.slate(info.backupId)}`]
+      : []),
+    ...(info.location
+      ? [`${colors.dim("LOCATION:")}    ${colors.slate(info.location)}`]
+      : []),
+    ...info.stats.map(([k, v]) =>
+      `${colors.dim(k.padEnd(12))} ${colors.bold(v)}`
+    ),
+    `${colors.dim("SECURITY:")}    ${
+      colors.emerald("[+] AES-256-GCM SEAL VERIFIED")
+    }`,
+    `${colors.dim("STATUS:")}      ${
+      colors.emerald(isExport ? "[+] EXPORT COMPLETE" : "[+] RESTORE COMPLETE")
+    }`,
   ];
 
   const termWidth = getTerminalWidth();
@@ -1386,7 +1569,8 @@ export async function animateSignalLantern(options?: {
     "All signals green • Ready for departure!",
   ];
   const delay = options?.delayMs ?? 150;
-  const isTerm = typeof Deno.stdout.isTerminal === "function" && Deno.stdout.isTerminal();
+  const isTerm = typeof Deno.stdout.isTerminal === "function" &&
+    Deno.stdout.isTerminal();
 
   if (!isTerm || !colors.enabled) {
     for (let i = 0; i < steps.length; i++) {
@@ -1397,7 +1581,9 @@ export async function animateSignalLantern(options?: {
 
   const encoder = new TextEncoder();
   for (let i = 0; i < steps.length; i++) {
-    const line = `\r\x1b[2K  ${renderSignalLantern(i)}  ${colors.bold(steps[i])}`;
+    const line = `\r\x1b[2K  ${renderSignalLantern(i)}  ${
+      colors.bold(steps[i])
+    }`;
     Deno.stdout.writeSync(encoder.encode(line));
     await new Promise((r) => setTimeout(r, delay));
   }
@@ -1427,16 +1613,32 @@ export function renderStationSignalBoard(report: StationSignalReport): string {
   const logoWidth = 24;
 
   const headerStatus = report.overallHealthy
-    ? colors.bold(colors.emerald("[+] All Track Signals Green • Platform Ready"))
-    : colors.bold(colors.coral("[-] Signal Warnings Detected • Attention Required"));
+    ? colors.bold(
+      colors.emerald("[+] All Track Signals Green • Platform Ready"),
+    )
+    : colors.bold(
+      colors.coral("[-] Signal Warnings Detected • Attention Required"),
+    );
 
   const rightLines = [
     headerStatus,
     "",
-    `${colors.dim("STATION:")}      ${colors.accent(colors.bold(report.projectName))}`,
-    `${colors.dim("ENGINE:")}       ${colors.bold("Deno LTS")} ${colors.dim("•")} ${colors.slate("V8 Isolates")}`,
-    `${colors.dim("COLD START:")}   ${colors.emerald(colors.bold(`< ${report.isolateBootMs.toFixed(2)}ms (Sub-millisecond)`))}`,
-    `${colors.dim("ARCHITECTURE:")} ${colors.accent("Zero-IAM")} ${colors.dim("•")} ${colors.emerald("4-Primitive Twin")} ${colors.dim("•")} ${colors.amber("Deterministic")}`,
+    `${colors.dim("STATION:")}      ${
+      colors.accent(colors.bold(report.projectName))
+    }`,
+    `${colors.dim("ENGINE:")}       ${colors.bold("Deno LTS")} ${
+      colors.dim("•")
+    } ${colors.slate("V8 Isolates")}`,
+    `${colors.dim("COLD START:")}   ${
+      colors.emerald(
+        colors.bold(`< ${report.isolateBootMs.toFixed(2)}ms (Sub-millisecond)`),
+      )
+    }`,
+    `${colors.dim("ARCHITECTURE:")} ${colors.accent("Zero-IAM")} ${
+      colors.dim("•")
+    } ${colors.emerald("4-Primitive Twin")} ${colors.dim("•")} ${
+      colors.amber("Deterministic")
+    }`,
     "",
   ];
 
@@ -1460,7 +1662,9 @@ export function renderStationSignalBoard(report: StationSignalReport): string {
     ...topBlock,
     "",
     colors.bold("  Station Track Signals:"),
-    colors.border("  ───────────────────────────────────────────────────────────────────"),
+    colors.border(
+      "  ───────────────────────────────────────────────────────────────────",
+    ),
   ];
 
   for (const sig of report.signals) {
@@ -1510,16 +1714,30 @@ export interface RouteSimulationResult {
  */
 export function renderRouteSimulatorCard(sim: RouteSimulationResult): string {
   const lines: string[] = [
-    `${colors.bold(colors.accent("[+] Edge Dispatch Engine Simulation Complete"))}`,
+    `${
+      colors.bold(colors.accent("[+] Edge Dispatch Engine Simulation Complete"))
+    }`,
     "",
-    `  ${colors.dim("Request Path:")}     ${colors.bold(colors.white(sim.path))}`,
-    `  ${colors.dim("Matched Route:")}    ${colors.emerald(colors.bold(sim.matchedPattern))}`,
-    `  ${colors.dim("PLAT-11 Score:")}    ${colors.amber(colors.bold(String(sim.specificityScore)))} ${colors.dim("(Specific > Wildcard)")}`,
-    `  ${colors.dim("Target Isolate:")}   ${colors.accent(sim.functionName)} ${colors.dim(`(${sim.entrypoint})`)}`,
-    `  ${colors.dim("Simulated Boot:")}   ${colors.emerald(`< ${sim.isolateBootMs.toFixed(2)}ms (V8 Isolate Density)`)}`,
+    `  ${colors.dim("Request Path:")}     ${
+      colors.bold(colors.white(sim.path))
+    }`,
+    `  ${colors.dim("Matched Route:")}    ${
+      colors.emerald(colors.bold(sim.matchedPattern))
+    }`,
+    `  ${colors.dim("PLAT-11 Score:")}    ${
+      colors.amber(colors.bold(String(sim.specificityScore)))
+    } ${colors.dim("(Specific > Wildcard)")}`,
+    `  ${colors.dim("Target Isolate:")}   ${colors.accent(sim.functionName)} ${
+      colors.dim(`(${sim.entrypoint})`)
+    }`,
+    `  ${colors.dim("Simulated Boot:")}   ${
+      colors.emerald(`< ${sim.isolateBootMs.toFixed(2)}ms (V8 Isolate Density)`)
+    }`,
     "",
     colors.bold("  Injected Sandbox Capabilities (Zero-IAM Boundary):"),
-    colors.border("  ─────────────────────────────────────────────────────────────────"),
+    colors.border(
+      "  ─────────────────────────────────────────────────────────────────",
+    ),
   ];
 
   const kvText = sim.permissions.kv && sim.permissions.kv.length > 0
@@ -1538,13 +1756,20 @@ export function renderRouteSimulatorCard(sim: RouteSimulationResult): string {
   lines.push(`    ${colors.dim("• Queues:")}             ${qText}`);
 
   const netText = sim.permissions.network && sim.permissions.network.length > 0
-    ? sim.permissions.network.map((n) => colors.cyan(n)).join(", ") + colors.dim(" [SSRF Filtered]")
+    ? sim.permissions.network.map((n) => colors.cyan(n)).join(", ") +
+      colors.dim(" [SSRF Filtered]")
     : colors.dim("(none granted - outbound sockets blocked)");
   lines.push(`    ${colors.dim("• Network Egress:")}     ${netText}`);
 
   if (sim.shadowedBy && sim.shadowedBy.length > 0) {
     lines.push("");
-    lines.push(`  ${colors.amber("[!] Warning:")} Shadowed by routes with equal or higher score: ${sim.shadowedBy.join(", ")}`);
+    lines.push(
+      `  ${
+        colors.amber("[!] Warning:")
+      } Shadowed by routes with equal or higher score: ${
+        sim.shadowedBy.join(", ")
+      }`,
+    );
   }
 
   return renderCard("Edge Route Dispatch Simulator", lines, {
@@ -1558,7 +1783,12 @@ export function renderRouteSimulatorCard(sim: RouteSimulationResult): string {
  * Renders the architectural comparison matrix contrasting RailFog with AWS Lambda and Cloudflare Workers.
  */
 export function renderCompetitiveMatrix(): string {
-  const headers = ["Architectural Dimension", "RailFog", "AWS Lambda", "Cloudflare Workers"];
+  const headers = [
+    "Architectural Dimension",
+    "RailFog",
+    "AWS Lambda",
+    "Cloudflare Workers",
+  ];
   const rows = [
     [
       "Cold Start Latency",
@@ -1605,4 +1835,3 @@ export function renderCompetitiveMatrix(): string {
     borderColor: colors.brand,
   });
 }
-

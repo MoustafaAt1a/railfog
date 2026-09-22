@@ -101,7 +101,9 @@ export async function undeployCommand(
   }
 
   console.log(
-    `\n${glyphs.success}  ${colors.bold(colors.emerald("Successfully undeployed"))} project '${colors.bold(projectName)}' from RailFog control plane.\n`,
+    `\n${glyphs.success}  ${
+      colors.bold(colors.emerald("Successfully undeployed"))
+    } project '${colors.bold(projectName)}' from RailFog control plane.\n`,
   );
 
   return {

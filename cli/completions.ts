@@ -19,21 +19,48 @@ export const SUPPORTED_SHELLS: SupportedShell[] = [
 export const SUBCOMMANDS = [
   { name: "init", desc: "Initialize a new RailFog project" },
   { name: "dev", desc: "Start the local development server with hot-reload" },
-  { name: "deploy", desc: "Deploy functions and configuration to Control Plane" },
+  {
+    name: "deploy",
+    desc: "Deploy functions and configuration to Control Plane",
+  },
   { name: "undeploy", desc: "Safely undeploy and remove project from cloud" },
-  { name: "status", desc: "Show status of functions and routes in railfog.toml" },
-  { name: "check", desc: "Validate railfog.toml configuration and route patterns" },
+  {
+    name: "status",
+    desc: "Show status of functions and routes in railfog.toml",
+  },
+  {
+    name: "check",
+    desc: "Validate railfog.toml configuration and route patterns",
+  },
   { name: "add", desc: "Add a dependency or primitive to deno.json" },
   { name: "login", desc: "Authenticate your session via browser or API token" },
   { name: "logout", desc: "Log out and remove local credentials" },
-  { name: "whoami", desc: "Display currently authenticated organization and key" },
-  { name: "secrets", desc: "Manage encrypted project secrets (set, list, delete)" },
+  {
+    name: "whoami",
+    desc: "Display currently authenticated organization and key",
+  },
+  {
+    name: "secrets",
+    desc: "Manage encrypted project secrets (set, list, delete)",
+  },
   { name: "logs", desc: "Stream and filter structured runtime logs" },
-  { name: "rollback", desc: "Rollback a function to a previous revision instantly" },
-  { name: "usage", desc: "Display resource consumption and itemized cost breakdown" },
+  {
+    name: "rollback",
+    desc: "Rollback a function to a previous revision instantly",
+  },
+  {
+    name: "usage",
+    desc: "Display resource consumption and itemized cost breakdown",
+  },
   { name: "cost", desc: "Alias for usage subcommand" },
-  { name: "export", desc: "Export project state to a disaster recovery archive" },
-  { name: "import", desc: "Import and restore project state from disaster recovery archive" },
+  {
+    name: "export",
+    desc: "Export project state to a disaster recovery archive",
+  },
+  {
+    name: "import",
+    desc: "Import and restore project state from disaster recovery archive",
+  },
   { name: "upgrade", desc: "Upgrade the RailFog CLI to the latest version" },
   { name: "update", desc: "Alias for upgrade subcommand" },
   { name: "sync", desc: "Sync CLI with latest git updates (alias for update)" },
@@ -296,7 +323,9 @@ _rail "$@"
 export function generateFishCompletion(): string {
   const subs = SUBCOMMANDS.map(
     (c) =>
-      `complete -c rail -n "__fish_use_subcommand" -a ${c.name} -d "${c.desc.replace(/"/g, "")}"`,
+      `complete -c rail -n "__fish_use_subcommand" -a ${c.name} -d "${
+        c.desc.replace(/"/g, "")
+      }"`,
   ).join("\n");
 
   return `# RailFog CLI Fish completion script
@@ -395,7 +424,9 @@ ${colors.bold("Installation instructions:")}
 `);
 }
 
-export function runCompletions(shellArg?: string): { ok: boolean; script?: string } {
+export function runCompletions(
+  shellArg?: string,
+): { ok: boolean; script?: string } {
   if (!shellArg || shellArg === "-h" || shellArg === "--help") {
     printCompletionsHelp();
     return { ok: true };
@@ -404,7 +435,9 @@ export function runCompletions(shellArg?: string): { ok: boolean; script?: strin
   const normalized = shellArg.toLowerCase().trim() as SupportedShell;
   if (!SUPPORTED_SHELLS.includes(normalized)) {
     console.error(
-      `Error [VALIDATION_FAILED]: Unsupported shell "${shellArg}". Supported shells: ${SUPPORTED_SHELLS.join(", ")}`,
+      `Error [VALIDATION_FAILED]: Unsupported shell "${shellArg}". Supported shells: ${
+        SUPPORTED_SHELLS.join(", ")
+      }`,
     );
     return { ok: false };
   }

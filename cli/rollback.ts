@@ -144,7 +144,9 @@ export async function rollbackCommand(
       "",
       `   ${colors.dim("Project:")}     ${colors.accent(projectName)}`,
       `   ${colors.dim("Function:")}    ${colors.brand(options.functionName)}`,
-      `   ${colors.dim("Active Rev:")}  ${colors.emerald(colors.bold(activeRevisionId))}`,
+      `   ${colors.dim("Active Rev:")}  ${
+        colors.emerald(colors.bold(activeRevisionId))
+      }`,
       `   ${colors.dim("Prior Rev:")}   ${colors.slate(previousRevisionId)}`,
     ], { borderColor: colors.emerald }),
   );

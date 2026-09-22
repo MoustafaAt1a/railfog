@@ -219,7 +219,9 @@ function printSummaryCard(
       duration: durationStr,
       runtimeUrl: summary.runtimeUrl,
       routesCount: routes.length,
-      functionsCount: summary.revisions ? Object.keys(summary.revisions).length : 1,
+      functionsCount: summary.revisions
+        ? Object.keys(summary.revisions).length
+        : 1,
     }),
   );
   console.log("");
@@ -556,7 +558,10 @@ export async function runDeploy(
       if (!realEntry && !isAbsolute(fnConfig.entry)) {
         const fallback = resolve(cwd, "functions", fnConfig.entry);
         const relFallback = relative(cwd, fallback);
-        if (relFallback.startsWith("..") || isAbsolute(relFallback) || relFallback === "") {
+        if (
+          relFallback.startsWith("..") || isAbsolute(relFallback) ||
+          relFallback === ""
+        ) {
           throw new ValidationFailedError(
             `VALIDATION_FAILED: Entrypoint '${fnConfig.entry}' escapes project directory (PLAT-6)`,
           );

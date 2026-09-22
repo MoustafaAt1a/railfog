@@ -412,7 +412,9 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       }
 
       if (fn.auth !== undefined) {
-        if (fn.auth !== "bearer" && fn.auth !== "none" && fn.auth !== "apiKey") {
+        if (
+          fn.auth !== "bearer" && fn.auth !== "none" && fn.auth !== "apiKey"
+        ) {
           errors.push({
             severity: "error",
             code: "VALIDATION_FAILED",
@@ -1160,7 +1162,9 @@ export async function runCheck(
       }
     }
 
-    console.log(`\n${colors.green("[+]")} Configuration valid. Zero errors found.`);
+    console.log(
+      `\n${colors.green("[+]")} Configuration valid. Zero errors found.`,
+    );
     return 0;
   } else {
     console.error(`\n${colors.red("[-] Configuration validation failed:")}`);
@@ -1171,7 +1175,8 @@ export async function runCheck(
           code: e.code,
           message: e.message,
           file: e.path,
-          hint: "Ensure configuration satisfies docs/contracts/ specifications.",
+          hint:
+            "Ensure configuration satisfies docs/contracts/ specifications.",
         }),
       );
     }

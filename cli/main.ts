@@ -144,7 +144,6 @@ export {
   renderStatusBar,
   renderTrainLogo,
   renderTree,
-  SPINNER_STYLES,
   rollbackCommand,
   runAdd,
   runCheck,
@@ -160,6 +159,7 @@ export {
   runUpgrade,
   runUsage,
   runWhoami,
+  SPINNER_STYLES,
   undeployCommand,
   wrapText,
 };
@@ -180,13 +180,13 @@ export type {
   RollbackCommandResult,
   SecretCliOptions,
   SecretListEntry,
+  SupportedShell,
   UndeployCommandOptions,
   UndeployCommandResult,
   UpgradeOptions,
   UpgradeResult,
   UsageCliOptions,
   ValidationIssue,
-  SupportedShell,
 };
 
 export type { LocalServer, RailfogConfig };
@@ -263,7 +263,8 @@ export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
           code: "CONFIG_NOT_FOUND",
           message: "Error: railfog.toml not found in current directory.",
           location: tomlPath,
-          solution: "Run 'rail init' to scaffold a new RailFog application here.",
+          solution:
+            "Run 'rail init' to scaffold a new RailFog application here.",
           docs: "https://railfog.dev/docs/getting-started",
         }),
       );
@@ -377,7 +378,8 @@ export async function devCommand(
           code: "CONFIG_NOT_FOUND",
           message: "Error: railfog.toml not found in current directory.",
           location: tomlPath,
-          solution: "Run 'rail init' to scaffold a new RailFog application here.",
+          solution:
+            "Run 'rail init' to scaffold a new RailFog application here.",
           docs: "https://railfog.dev/docs/dev-server",
         }),
       );
@@ -437,7 +439,9 @@ ${colors.bold("Options:")}
   -v, --version  Show CLI version
   -h, --help     Show help information
 
-${colors.amber(colors.bold("[Tip]"))} Run 'rail <command> --help' for detailed documentation on any command.`);
+${
+    colors.amber(colors.bold("[Tip]"))
+  } Run 'rail <command> --help' for detailed documentation on any command.`);
 }
 
 function printDoctorHelp(): void {
@@ -694,16 +698,59 @@ export function findClosestCommand(cmd: string): string | null {
  * Prompts the user to select an action in the interactive Project Launcher.
  * Supports smooth Arrow Up/Down navigation and Enter/number selection.
  */
-async function promptActionSelection(appName: string, cwd: string): Promise<string> {
+async function promptActionSelection(
+  appName: string,
+  cwd: string,
+): Promise<string> {
   const actions = [
-    { key: "1", tag: "[DEV]", cmd: "dev", desc: "Depart local station (Start dev server with hot-reload)" },
-    { key: "2", tag: "[STATUS]", cmd: "status", desc: "Check route schedule (Inspect functions & routes)" },
-    { key: "3", tag: "[CHECK]", cmd: "check", desc: "Inspect track & signal (Validate railfog.toml schema)" },
-    { key: "4", tag: "[DEPLOY]", cmd: "deploy", desc: "Board express to cloud (Deploy revision to Edge)" },
-    { key: "5", tag: "[LOGS]", cmd: "logs", desc: "Stream runtime logs (Follow execution traffic)" },
-    { key: "6", tag: "[DOCTOR]", cmd: "doctor", desc: "Inspect station signals & V8 isolate health" },
-    { key: "7", tag: "[SIMULATE]", cmd: "simulate", desc: "Simulate edge route dispatch & capabilities" },
-    { key: "0", tag: "[HELP]", cmd: "help", desc: "Station handbook (Display full CLI command manual)" },
+    {
+      key: "1",
+      tag: "[DEV]",
+      cmd: "dev",
+      desc: "Depart local station (Start dev server with hot-reload)",
+    },
+    {
+      key: "2",
+      tag: "[STATUS]",
+      cmd: "status",
+      desc: "Check route schedule (Inspect functions & routes)",
+    },
+    {
+      key: "3",
+      tag: "[CHECK]",
+      cmd: "check",
+      desc: "Inspect track & signal (Validate railfog.toml schema)",
+    },
+    {
+      key: "4",
+      tag: "[DEPLOY]",
+      cmd: "deploy",
+      desc: "Board express to cloud (Deploy revision to Edge)",
+    },
+    {
+      key: "5",
+      tag: "[LOGS]",
+      cmd: "logs",
+      desc: "Stream runtime logs (Follow execution traffic)",
+    },
+    {
+      key: "6",
+      tag: "[DOCTOR]",
+      cmd: "doctor",
+      desc: "Inspect station signals & V8 isolate health",
+    },
+    {
+      key: "7",
+      tag: "[SIMULATE]",
+      cmd: "simulate",
+      desc: "Simulate edge route dispatch & capabilities",
+    },
+    {
+      key: "0",
+      tag: "[HELP]",
+      cmd: "help",
+      desc: "Station handbook (Display full CLI command manual)",
+    },
   ];
 
   // Try raw interactive arrow-key navigation if both stdin and stdout are interactive TTYs
@@ -726,7 +773,9 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
           const isSel = i === selectedIndex;
           const ptr = isSel ? colors.accent("-->") : "   ";
           const keyBadge = colors.accent(`[${a.key}]`);
-          const tagBadge = isSel ? colors.bold(colors.white(a.tag)) : colors.slate(a.tag);
+          const tagBadge = isSel
+            ? colors.bold(colors.white(a.tag))
+            : colors.slate(a.tag);
           const cmdText = isSel
             ? colors.bold(colors.accent(a.cmd.padEnd(8)))
             : colors.bold(a.cmd.padEnd(8));
@@ -743,7 +792,11 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
         Deno.stdout.writeSync(new TextEncoder().encode(`\x1b[${lineCount}A\r`));
       }
       const menu = renderLines();
-      const promptLine = `  ${colors.dim("Use [Up/Down] arrows or type [0-7], then press [Enter] (default: dev):")}\x1b[K\n`;
+      const promptLine = `  ${
+        colors.dim(
+          "Use [Up/Down] arrows or type [0-7], then press [Enter] (default: dev):",
+        )
+      }\x1b[K\n`;
       const fullText = menu + "\n" + promptLine;
       Deno.stdout.writeSync(new TextEncoder().encode(fullText));
       lineCount = fullText.split("\n").length - 1;
@@ -811,7 +864,9 @@ async function promptActionSelection(appName: string, cwd: string): Promise<stri
         `Location:       ${cwd}`,
         "",
         ...actions.map((a) =>
-          `  ${colors.accent(`[${a.key}]`)} ${colors.slate(a.tag)} ${colors.bold(a.cmd.padEnd(7))} ${a.desc}`
+          `  ${colors.accent(`[${a.key}]`)} ${colors.slate(a.tag)} ${
+            colors.bold(a.cmd.padEnd(7))
+          } ${a.desc}`
         ),
       ],
     ),
@@ -1766,7 +1821,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         console.error(
           renderErrorCard({
             code: "UNKNOWN_COMMAND",
-            message: `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, completions`,
+            message:
+              `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, completions`,
             solution: suggestion
               ? `Did you mean "rail ${suggestion}"?\nRun 'rail --help' to see all available commands.`
               : "Run 'rail --help' to browse all available commands and flags.",

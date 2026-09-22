@@ -375,7 +375,9 @@ export function renderSummaryBox(
   ];
 
   const projectName = basename(resolve(result.targetDir)) || "railfog-app";
-  const isWorkedExample = result.filesCreated.some((f) => f.includes("processor.ts"));
+  const isWorkedExample = result.filesCreated.some((f) =>
+    f.includes("processor.ts")
+  );
   const templateName = isWorkedExample ? "Worked Example" : "Minimal Starter";
 
   const trainLines = renderTrainLogo({
@@ -391,7 +393,11 @@ export function renderSummaryBox(
     `${colors.slate("Station:")}     ${colors.bold(projectName)}`,
     `${colors.slate("Template:")}    ${colors.accent(templateName)}`,
     `${colors.slate("Platform:")}    ${colors.dim("Deno LTS • V8 Isolates")}`,
-    `${colors.slate("Primitives:")}  ${colors.accent("FN")} ${colors.dim("•")} ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${colors.dim("•")} ${colors.amber("QUEUES")}`,
+    `${colors.slate("Primitives:")}  ${colors.accent("FN")} ${
+      colors.dim("•")
+    } ${colors.emerald("KV")} ${colors.dim("•")} ${colors.cyan("OBJ")} ${
+      colors.dim("•")
+    } ${colors.amber("QUEUES")}`,
     "",
   ];
 
@@ -425,11 +431,15 @@ export function renderSummaryBox(
 
   const allContent = [...headerLines, ...detailLines];
 
-  const card = renderCard("RailFog Station Ticket: Project Scaffolded", allContent, {
-    borderColor: colors.emerald,
-    borderStyle: "unicode",
-    padding: true,
-  });
+  const card = renderCard(
+    "RailFog Station Ticket: Project Scaffolded",
+    allContent,
+    {
+      borderColor: colors.emerald,
+      borderStyle: "unicode",
+      padding: true,
+    },
+  );
 
   writer.writeSync(new TextEncoder().encode("\n" + card + "\n\n"));
 }

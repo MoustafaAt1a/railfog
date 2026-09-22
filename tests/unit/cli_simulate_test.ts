@@ -24,7 +24,9 @@ Deno.test("Simulate (Unit): matchesRoutePattern correctly evaluates patterns", (
 });
 
 Deno.test("Simulate (Unit): runSimulate selects most specific route per PLAT-11", async () => {
-  const tempDir = await Deno.makeTempDir({ prefix: "railfog-sim-specificity-" });
+  const tempDir = await Deno.makeTempDir({
+    prefix: "railfog-sim-specificity-",
+  });
   try {
     const tomlContent = `
 name = "routing-app"
@@ -51,11 +53,20 @@ function = "checkout"
 `;
     await Deno.writeTextFile(join(tempDir, "railfog.toml"), tomlContent);
     await Deno.mkdir(join(tempDir, "functions"), { recursive: true });
-    await Deno.writeTextFile(join(tempDir, "functions", "generic.ts"), "export default {};");
-    await Deno.writeTextFile(join(tempDir, "functions", "checkout.ts"), "export default {};");
+    await Deno.writeTextFile(
+      join(tempDir, "functions", "generic.ts"),
+      "export default {};",
+    );
+    await Deno.writeTextFile(
+      join(tempDir, "functions", "checkout.ts"),
+      "export default {};",
+    );
 
     // Test specific path /api/checkout -> should resolve to checkout function due to higher PLAT-11 score
-    const simCheckout = await runSimulate("/api/checkout", { cwd: tempDir, method: "POST" });
+    const simCheckout = await runSimulate("/api/checkout", {
+      cwd: tempDir,
+      method: "POST",
+    });
     assertEquals(simCheckout.functionName, "checkout");
     assertEquals(simCheckout.matchedPattern, "/api/checkout");
     assertEquals(simCheckout.method, "POST");

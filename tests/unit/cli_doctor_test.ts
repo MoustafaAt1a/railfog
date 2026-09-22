@@ -1,4 +1,9 @@
-import { assert, assertEquals, assertExists, assertStringIncludes } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertExists,
+  assertStringIncludes,
+} from "@std/assert";
 import { join } from "@std/path";
 import { runDoctor } from "../../cli/doctor.ts";
 
@@ -32,11 +37,19 @@ function = "api"
     assertEquals(result.healthy, true, "Valid project should be healthy");
     assertEquals(result.report.projectName, "doctor-test-app");
     assert(result.isolateBootMs < 10, "Isolate boot benchmark should be fast");
-    assertEquals(result.report.signals.length, 5, "Should have 5 track signals");
+    assertEquals(
+      result.report.signals.length,
+      5,
+      "Should have 5 track signals",
+    );
 
     // Verify all 5 signals are active
     for (const signal of result.report.signals) {
-      assertEquals(signal.status, "active", `Signal ${signal.name} should be active`);
+      assertEquals(
+        signal.status,
+        "active",
+        `Signal ${signal.name} should be active`,
+      );
     }
   } finally {
     await Deno.remove(tempDir, { recursive: true }).catch(() => {});
@@ -95,7 +108,11 @@ function = "api"
     );
 
     const result = await runDoctor({ cwd: tempDir });
-    assertEquals(result.healthy, false, "SSRF violations should mark doctor as unhealthy");
+    assertEquals(
+      result.healthy,
+      false,
+      "SSRF violations should mark doctor as unhealthy",
+    );
     const ssrfSignal = result.report.signals.find((s) => s.id === 3);
     assertExists(ssrfSignal);
     assertEquals(ssrfSignal.status, "error");
@@ -127,8 +144,14 @@ function = "api2"
 `;
     await Deno.writeTextFile(join(tempDir, "railfog.toml"), tomlContent);
     await Deno.mkdir(join(tempDir, "functions"), { recursive: true });
-    await Deno.writeTextFile(join(tempDir, "functions", "api1.ts"), "export default {};");
-    await Deno.writeTextFile(join(tempDir, "functions", "api2.ts"), "export default {};");
+    await Deno.writeTextFile(
+      join(tempDir, "functions", "api1.ts"),
+      "export default {};",
+    );
+    await Deno.writeTextFile(
+      join(tempDir, "functions", "api2.ts"),
+      "export default {};",
+    );
 
     const result = await runDoctor({ cwd: tempDir });
     const routeSignal = result.report.signals.find((s) => s.id === 5);

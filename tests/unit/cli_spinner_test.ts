@@ -9,7 +9,6 @@ import {
   createWheelSpinner,
   type Spinner,
   type SpinnerOptions,
-  SPINNER_STYLES,
 } from "../../cli/spinner.ts";
 
 // ============================================================================
@@ -71,13 +70,15 @@ function hasAnsiColor(text: string): boolean {
 function hasGreenOrCheckmark(text: string): boolean {
   // deno-lint-ignore no-control-regex
   const hasGreen = /\x1b\[(?:32|92)m/.test(text);
-  return hasGreen || text.includes("✔") || text.includes("√") || text.includes("[+]");
+  return hasGreen || text.includes("✔") || text.includes("√") ||
+    text.includes("[+]");
 }
 
 function hasRedOrCross(text: string): boolean {
   // deno-lint-ignore no-control-regex
   const hasRed = /\x1b\[(?:31|91)m/.test(text);
-  return hasRed || text.includes("✖") || text.includes("×") || text.includes("[-]");
+  return hasRed || text.includes("✖") || text.includes("×") ||
+    text.includes("[-]");
 }
 
 /**
@@ -284,8 +285,14 @@ Deno.test("PLAT-19: stop() halts animation and restores cursor without printing 
 
   const output = stream.text;
   assertStringIncludes(output, "\x1b[?25h", "stop() must restore cursor");
-  assertFalse(output.includes("✔") || output.includes("[+]"), "stop() must not print success indicator");
-  assertFalse(output.includes("✖") || output.includes("[-]"), "stop() must not print failure indicator");
+  assertFalse(
+    output.includes("✔") || output.includes("[+]"),
+    "stop() must not print success indicator",
+  );
+  assertFalse(
+    output.includes("✖") || output.includes("[-]"),
+    "stop() must not print failure indicator",
+  );
 });
 
 Deno.test("PLAT-19: calling stop(), succeed(), or fail() multiple times is idempotent", () => {
@@ -737,16 +744,24 @@ Deno.test("Railway DX: createSpinner accepts custom frames array", async () => {
   }, async () => {
     const stream = new MockTerminalStream(true);
     const customFrames = ["▲", "►", "▼", "◄"];
-    const spinner = createSpinner({ stream, intervalMs: 20, frames: customFrames });
+    const spinner = createSpinner({
+      stream,
+      intervalMs: 20,
+      frames: customFrames,
+    });
     spinner.start("Custom gauge running...");
     try {
       await delay(80);
       const text = stream.text;
-      const hasCustom = text.includes("▲") || text.includes("►") || text.includes("▼") || text.includes("◄");
-      assertEquals(hasCustom, true, "Spinner must use custom frames when provided");
+      const hasCustom = text.includes("▲") || text.includes("►") ||
+        text.includes("▼") || text.includes("◄");
+      assertEquals(
+        hasCustom,
+        true,
+        "Spinner must use custom frames when provided",
+      );
     } finally {
       spinner.stop();
     }
   });
 });
-

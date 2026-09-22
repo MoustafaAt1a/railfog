@@ -406,6 +406,20 @@ async function launchProductionTopology(
     secrets,
   );
 
+  // spec: contracts/platform.contract.md#PLAT-9 — Token bucket configuration
+  // Loopback test harness default: provide sufficient IP headroom (100) so multi-tenant tests
+  // sharing 127.0.0.1 are not prematurely throttled at the IP layer before testing project limits.
+  const rateLimiter = new MultiTenantRateLimiter({
+    project: {
+      rate: customLimits?.projectRate ?? 50,
+      burst: customLimits?.projectBurst ?? 100,
+    },
+    ip: {
+      rate: customLimits?.ipRate ?? 100,
+      burst: customLimits?.ipBurst ?? 100,
+    },
+  });
+
   const runtimeServer = await startRuntimeServer({
     port: 0,
     host: "127.0.0.1",
@@ -413,18 +427,7 @@ async function launchProductionTopology(
     projectId: "soak-proj",
     pollIntervalMs: 50, // Rapid polling for deterministic test synchronization
     isolationProvider: executionProvider,
-  });
-
-  // spec: contracts/platform.contract.md#PLAT-9 — Token bucket configuration
-  const rateLimiter = new MultiTenantRateLimiter({
-    project: {
-      rate: customLimits?.projectRate ?? 50,
-      burst: customLimits?.projectBurst ?? 100,
-    },
-    ip: {
-      rate: customLimits?.ipRate ?? 10,
-      burst: customLimits?.ipBurst ?? 20,
-    },
+    rateLimiter,
   });
 
   const gatewayServer = await startGatewayServer({

@@ -11,7 +11,6 @@ import {
   renderDepartureBoard,
   renderErrorCard,
   renderFreightExpressCard,
-  renderModernTable,
   renderProgressBar,
   renderReleaseTrainCard,
   renderRouteSimulatorCard,
@@ -24,29 +23,47 @@ import {
 } from "../../cli/ui.ts";
 
 Deno.test("UI (Unit): wrapText wraps long lines at word boundaries", () => {
-  const text = "This is a long sentence that should be wrapped across multiple lines cleanly.";
+  const text =
+    "This is a long sentence that should be wrapped across multiple lines cleanly.";
   const wrapped = wrapText(text, 25);
   for (const line of wrapped) {
-    assertEquals(visibleWidth(line) <= 25, true, `Line should be <= 25 cols: "${line}"`);
+    assertEquals(
+      visibleWidth(line) <= 25,
+      true,
+      `Line should be <= 25 cols: "${line}"`,
+    );
   }
   assertEquals(wrapped.join(" "), text);
 });
 
 Deno.test("UI (Unit): wrapText preserves leading indentation on wrapped continuation lines", () => {
-  const text = "   init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets";
+  const text =
+    "   init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets";
   const wrapped = wrapText(text, 35);
   assertEquals(wrapped.length > 1, true, "Should wrap into multiple lines");
   for (const line of wrapped) {
-    assertEquals(line.startsWith("   "), true, `Continuation line should preserve indent: "${line}"`);
+    assertEquals(
+      line.startsWith("   "),
+      true,
+      `Continuation line should preserve indent: "${line}"`,
+    );
     assertEquals(visibleWidth(line) <= 35, true, `Line width <= 35: "${line}"`);
   }
 });
 
 Deno.test("UI (Unit): wrapText handles ANSI escape sequences without measuring escape chars", () => {
-  const colored = `${colors.coral("Error:")} ${colors.bold("This is a styled error message that must wrap without breaking color codes.")}`;
+  const colored = `${colors.coral("Error:")} ${
+    colors.bold(
+      "This is a styled error message that must wrap without breaking color codes.",
+    )
+  }`;
   const wrapped = wrapText(colored, 30);
   for (const line of wrapped) {
-    assertEquals(visibleWidth(line) <= 30, true, `Visible width should be <= 30: "${stripAnsi(line)}"`);
+    assertEquals(
+      visibleWidth(line) <= 30,
+      true,
+      `Visible width should be <= 30: "${stripAnsi(line)}"`,
+    );
   }
 });
 
@@ -61,7 +78,11 @@ Deno.test("UI (Unit): renderCard produces uniform width across top border, conte
 
   for (let i = 0; i < lines.length; i++) {
     const w = visibleWidth(lines[i]);
-    assertEquals(w, firstLineWidth, `Line ${i} width (${w}) must equal first line width (${firstLineWidth})`);
+    assertEquals(
+      w,
+      firstLineWidth,
+      `Line ${i} width (${w}) must equal first line width (${firstLineWidth})`,
+    );
   }
 });
 
@@ -79,8 +100,10 @@ Deno.test("UI (Unit): renderCard automatically wraps long lines without overflow
 Deno.test("UI (Unit): renderErrorCard formats UNKNOWN_COMMAND responsively without border corruption", () => {
   const card = renderErrorCard({
     code: "UNKNOWN_COMMAND",
-    message: 'Error: Unknown command "xyz". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, completions',
-    solution: 'Did you mean "rail dev"?\nRun \'rail --help\' to see all available commands.',
+    message:
+      'Error: Unknown command "xyz". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, completions',
+    solution:
+      "Did you mean \"rail dev\"?\nRun 'rail --help' to see all available commands.",
   });
 
   const lines = card.split("\n");
@@ -88,7 +111,11 @@ Deno.test("UI (Unit): renderErrorCard formats UNKNOWN_COMMAND responsively witho
 
   for (let i = 0; i < lines.length; i++) {
     const w = visibleWidth(lines[i]);
-    assertEquals(w, expectedWidth, `Error card line ${i} width (${w}) must match top border (${expectedWidth})`);
+    assertEquals(
+      w,
+      expectedWidth,
+      `Error card line ${i} width (${w}) must match top border (${expectedWidth})`,
+    );
   }
 
   assertStringIncludes(card, "Unknown command");
@@ -136,7 +163,10 @@ Deno.test("UI (Unit): renderTrainLogo supports white, gray, and white-gray monoc
   assertEquals(grayScheme.length, 9);
   assertStringIncludes(grayScheme[0], "┌──────┐");
 
-  const hybridScheme = renderTrainLogo({ colorScheme: "white-gray", colored: true });
+  const hybridScheme = renderTrainLogo({
+    colorScheme: "white-gray",
+    colored: true,
+  });
   assertEquals(hybridScheme.length, 9);
   assertStringIncludes(hybridScheme[0], "┌──────┐");
 });
@@ -202,8 +232,22 @@ Deno.test("UI (Unit): renderReleaseTrainCard outputs structured train deployment
 
 Deno.test("UI (Unit): renderDepartureBoard formats station timetable table", () => {
   const board = renderDepartureBoard("demo-service", [
-    { track: 1, platform: "HTTP", route: "/api/*", functionName: "api", target: "functions/api.ts", status: "READY" },
-    { track: 2, platform: "QUEUE", route: "job-events", functionName: "worker", target: "functions/worker.ts", status: "READY" },
+    {
+      track: 1,
+      platform: "HTTP",
+      route: "/api/*",
+      functionName: "api",
+      target: "functions/api.ts",
+      status: "READY",
+    },
+    {
+      track: 2,
+      platform: "QUEUE",
+      route: "job-events",
+      functionName: "worker",
+      target: "functions/worker.ts",
+      status: "READY",
+    },
   ]);
   assertStringIncludes(board, "Station Departure Board");
   assertStringIncludes(board, "TRACK");
@@ -258,8 +302,20 @@ Deno.test("UI (Unit): renderStationSignalBoard formats multi-track diagnostics c
     isolateBootMs: 0.42,
     overallHealthy: true,
     signals: [
-      { id: 1, name: "V8 Cold Start", status: "active", statusText: "PASS", detail: "Local isolate ready in 0.42ms" },
-      { id: 2, name: "Storage Twin", status: "active", statusText: "PASS", detail: "SQLite backend responsive" },
+      {
+        id: 1,
+        name: "V8 Cold Start",
+        status: "active",
+        statusText: "PASS",
+        detail: "Local isolate ready in 0.42ms",
+      },
+      {
+        id: 2,
+        name: "Storage Twin",
+        status: "active",
+        statusText: "PASS",
+        detail: "SQLite backend responsive",
+      },
     ],
   });
   assertStringIncludes(board, "RailFog Station Signal Board");
@@ -304,7 +360,11 @@ Deno.test("UI (Unit): renderCompetitiveMatrix formats architecture comparison ta
   assertStringIncludes(matrix, "100% Digital Twin (SQLite/FS)");
   assertStringIncludes(matrix, "Disaster Recovery");
   // Ensure no emojis
-  assertEquals(/[\u{1F300}-\u{1F9FF}]/u.test(matrix), false, "Competitive matrix must have 0 emojis");
+  assertEquals(
+    /[\u{1F300}-\u{1F9FF}]/u.test(matrix),
+    false,
+    "Competitive matrix must have 0 emojis",
+  );
 });
 
 Deno.test("UI (Unit): renderProgressBar defaults to locomotive track style with bumpers and engine head", () => {
@@ -325,7 +385,9 @@ Deno.test("UI (Unit): renderProgressBar renders 100% arrival state with station 
 });
 
 Deno.test("UI (Unit): renderProgressBar renders cross-tie sleepers style", () => {
-  const bar = stripAnsi(renderProgressBar(50, 100, { width: 24, style: "sleepers" }));
+  const bar = stripAnsi(
+    renderProgressBar(50, 100, { width: 24, style: "sleepers" }),
+  );
   assertStringIncludes(bar, "╞");
   assertStringIncludes(bar, "╡");
   assertStringIncludes(bar, "●");
@@ -333,7 +395,9 @@ Deno.test("UI (Unit): renderProgressBar renders cross-tie sleepers style", () =>
 });
 
 Deno.test("UI (Unit): renderProgressBar renders JetBrains fleet block style", () => {
-  const bar = stripAnsi(renderProgressBar(50, 100, { width: 20, style: "fleet" }));
+  const bar = stripAnsi(
+    renderProgressBar(50, 100, { width: 20, style: "fleet" }),
+  );
   assertStringIncludes(bar, "╟");
   assertStringIncludes(bar, "╢");
   assertStringIncludes(bar, "▰");
@@ -342,7 +406,9 @@ Deno.test("UI (Unit): renderProgressBar renders JetBrains fleet block style", ()
 });
 
 Deno.test("UI (Unit): renderProgressBar renders classic ASCII fallback", () => {
-  const bar = stripAnsi(renderProgressBar(50, 100, { width: 20, style: "ascii" }));
+  const bar = stripAnsi(
+    renderProgressBar(50, 100, { width: 20, style: "ascii" }),
+  );
   assertStringIncludes(bar, "[");
   assertStringIncludes(bar, "]");
   assertStringIncludes(bar, "=");
@@ -355,5 +421,3 @@ Deno.test("UI (Unit): renderProgressBar renders animated shimmer pulse on track"
   assertStringIncludes(bar, "o");
   assertStringIncludes(bar, "►");
 });
-
-

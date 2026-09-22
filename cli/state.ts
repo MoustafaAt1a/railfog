@@ -104,12 +104,14 @@ export async function exportCommand(
   let archive: StateBackupArchive;
 
   const spinner = (
-    typeof Deno.stdout.isTerminal === "function" &&
-    Deno.stdout.isTerminal() &&
-    !Deno.env.get("CI") &&
-    !Deno.env.get("NO_COLOR")
-  )
-    ? createTrackSpinner().start(`Exporting disaster recovery snapshot for '${projectName}'...`)
+      typeof Deno.stdout.isTerminal === "function" &&
+      Deno.stdout.isTerminal() &&
+      !Deno.env.get("CI") &&
+      !Deno.env.get("NO_COLOR")
+    )
+    ? createTrackSpinner().start(
+      `Exporting disaster recovery snapshot for '${projectName}'...`,
+    )
     : null;
 
   try {
@@ -271,12 +273,14 @@ export async function importCommand(
   let result: ImportProjectResult;
 
   const spinner = (
-    typeof Deno.stdout.isTerminal === "function" &&
-    Deno.stdout.isTerminal() &&
-    !Deno.env.get("CI") &&
-    !Deno.env.get("NO_COLOR")
-  )
-    ? createTrackSpinner().start(`Importing state archive into '${targetProject}'...`)
+      typeof Deno.stdout.isTerminal === "function" &&
+      Deno.stdout.isTerminal() &&
+      !Deno.env.get("CI") &&
+      !Deno.env.get("NO_COLOR")
+    )
+    ? createTrackSpinner().start(
+      `Importing state archive into '${targetProject}'...`,
+    )
     : null;
 
   try {

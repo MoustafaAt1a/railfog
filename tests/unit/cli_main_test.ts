@@ -302,14 +302,27 @@ Deno.test(
 
       // Run rail doctor
       const docRes = await runCli(["doctor"], tempDir);
-      assertEquals(docRes.code, 0, `rail doctor should exit 0. Output:\n${docRes.stdout}\n${docRes.stderr}`);
-      assert(docRes.stdout.includes("RailFog Station Signal Board"), "Should output station signal board");
-      assert(docRes.stdout.includes("SIGNAL 1: V8 Isolate Engine"), "Should include isolate engine signal");
+      assertEquals(
+        docRes.code,
+        0,
+        `rail doctor should exit 0. Output:\n${docRes.stdout}\n${docRes.stderr}`,
+      );
+      assert(
+        docRes.stdout.includes("RailFog Station Signal Board"),
+        "Should output station signal board",
+      );
+      assert(
+        docRes.stdout.includes("SIGNAL 1: V8 Isolate Engine"),
+        "Should include isolate engine signal",
+      );
 
       // Run rail doctor --compare
       const compRes = await runCli(["doctor", "--compare"], tempDir);
       assertEquals(compRes.code, 0);
-      assert(compRes.stdout.includes("RailFog vs AWS Lambda vs Cloudflare Workers"), "Should include competitive matrix");
+      assert(
+        compRes.stdout.includes("RailFog vs AWS Lambda vs Cloudflare Workers"),
+        "Should include competitive matrix",
+      );
     } finally {
       await Deno.remove(tempDir, { recursive: true }).catch(() => {});
     }
@@ -319,7 +332,9 @@ Deno.test(
 Deno.test(
   "Integration: rail simulate runs edge route dispatch against project",
   async () => {
-    const tempDir = await Deno.makeTempDir({ prefix: "railfog-main-simulate-" });
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-main-simulate-",
+    });
     try {
       // Scaffold a project with init
       const initRes = await runCli(["init"], tempDir);
@@ -327,9 +342,19 @@ Deno.test(
 
       // Run rail simulate /api/users
       const simRes = await runCli(["simulate", "/api/users"], tempDir);
-      assertEquals(simRes.code, 0, `rail simulate should exit 0. Output:\n${simRes.stdout}\n${simRes.stderr}`);
-      assert(simRes.stdout.includes("Edge Route Dispatch Simulator"), "Should render simulator card");
-      assert(simRes.stdout.includes("/api/*"), "Should match default /api/* route");
+      assertEquals(
+        simRes.code,
+        0,
+        `rail simulate should exit 0. Output:\n${simRes.stdout}\n${simRes.stderr}`,
+      );
+      assert(
+        simRes.stdout.includes("Edge Route Dispatch Simulator"),
+        "Should render simulator card",
+      );
+      assert(
+        simRes.stdout.includes("/api/*"),
+        "Should match default /api/* route",
+      );
       assert(simRes.stdout.includes("api"), "Should dispatch to api function");
     } finally {
       await Deno.remove(tempDir, { recursive: true }).catch(() => {});
@@ -343,12 +368,21 @@ Deno.test(
     const tempDir = await Deno.makeTempDir({ prefix: "railfog-main-compare-" });
     try {
       const res = await runCli(["compare"], tempDir);
-      assertEquals(res.code, 0, `rail compare should exit 0. Output:\n${res.stdout}\n${res.stderr}`);
-      assert(res.stdout.includes("RailFog vs AWS Lambda vs Cloudflare Workers"), "Should display comparison matrix");
-      assert(res.stdout.includes("Zero-IAM"), "Should highlight Zero-IAM security model");
+      assertEquals(
+        res.code,
+        0,
+        `rail compare should exit 0. Output:\n${res.stdout}\n${res.stderr}`,
+      );
+      assert(
+        res.stdout.includes("RailFog vs AWS Lambda vs Cloudflare Workers"),
+        "Should display comparison matrix",
+      );
+      assert(
+        res.stdout.includes("Zero-IAM"),
+        "Should highlight Zero-IAM security model",
+      );
     } finally {
       await Deno.remove(tempDir, { recursive: true }).catch(() => {});
     }
   },
 );
-

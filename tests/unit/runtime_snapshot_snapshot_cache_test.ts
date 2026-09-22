@@ -205,7 +205,10 @@ Deno.test("SnapshotDistributor - Unit: supports full JSON serialization and dese
   assertEquals(parsed.snapshotId, snapshot.snapshotId);
   assertEquals(parsed.version, snapshot.version);
   assertEquals(parsed.routes, snapshot.routes);
-  assertEquals(parsed.functions, JSON.parse(JSON.stringify(snapshot.functions)));
+  assertEquals(
+    parsed.functions,
+    JSON.parse(JSON.stringify(snapshot.functions)),
+  );
   assertEquals(parsed.generatedAt, snapshot.generatedAt);
 });
 
