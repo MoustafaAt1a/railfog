@@ -1,5 +1,10 @@
-import { join } from "@std/path";
+// spec: contracts/platform.contract.md#PLAT-19 — Repository structure & CLI entrypoint
+// spec: docs/CONSTITUTION.md — SOLID + OOP at module boundaries, Data-Oriented Design in hot paths
+// cli/main.ts — RailFog unified CLI orchestrator and command dispatcher
+
+import { join, resolve } from "@std/path";
 import { parse } from "@std/toml";
+import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
 import {
   formatStartupBanner,
   type LocalServer,
@@ -8,56 +13,27 @@ import {
   startLocalServer,
 } from "../runtime/dev-server/local-server.ts";
 import {
+  addCommand,
+  type AddOptions,
+  type AddResult,
+  printAddHelp,
+  runAdd,
+} from "./add.ts";
+import {
+  checkCommand,
   checkProject,
   type CheckResult,
   normalizeFunctions,
+  printCheckHelp,
   runCheck,
   type ValidationIssue,
 } from "./check.ts";
 import {
-  deployCommand,
-  type DeployCommandOptions,
-  type DeployCommandResult,
-} from "./deploy.ts";
-import { type AddOptions, type AddResult, runAdd } from "./add.ts";
+  compareCommand,
+  printCompareHelp,
+} from "./compare.ts";
 import {
-  initCommand,
-  type InitOptions,
-  type InitResult,
-  type InteractiveInitOptions,
-  runInit,
-  runInteractiveInit,
-} from "./init.ts";
-import {
-  rollbackCommand,
-  type RollbackCommandOptions,
-  type RollbackCommandResult,
-} from "./rollback.ts";
-import {
-  undeployCommand,
-  type UndeployCommandOptions,
-  type UndeployCommandResult,
-} from "./undeploy.ts";
-import {
-  exportCommand,
-  type ExportCommandOptions,
-  importCommand,
-  type ImportCommandOptions,
-} from "./state.ts";
-import {
-  runSecrets,
-  type SecretCliOptions,
-  type SecretListEntry,
-} from "./secrets.ts";
-import {
-  formatLogEntry,
-  type LogEntry,
-  type LogsCliOptions,
-  runLogs,
-} from "./logs.ts";
-import { formatUsageReport, runUsage, type UsageCliOptions } from "./usage.ts";
-import { runLogin, runLogout, runWhoami, systemOpenBrowser } from "./login.ts";
-import {
+  completionsCommand,
   generateBashCompletion,
   generateCompletions,
   generateFishCompletion,
@@ -67,16 +43,101 @@ import {
   runCompletions,
   type SupportedShell,
 } from "./completions.ts";
-import { CLI_VERSION } from "./version.ts";
 import {
-  runUpgrade,
-  type UpgradeOptions,
-  type UpgradeResult,
-} from "./upgrade.ts";
-import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
-import { runDoctor } from "./doctor.ts";
-import { runSimulate } from "./simulate.ts";
-import { runUninstall, type UninstallResult } from "./uninstall.ts";
+  deployCommand,
+  type DeployCommandOptions,
+  type DeployCommandResult,
+  type DeployOptions,
+  type DeploySummary,
+  printDeployHelp,
+  runDeploy,
+} from "./deploy.ts";
+import {
+  devCommand,
+  type DevOptions,
+  printDevHelp,
+  runDev,
+} from "./dev.ts";
+import {
+  doctorCommand,
+  type DoctorOptions,
+  type DoctorResult,
+  printDoctorHelp,
+  runDoctor,
+} from "./doctor.ts";
+import {
+  initCommand,
+  type InitOptions,
+  type InitResult,
+  type InteractiveInitOptions,
+  printInitHelp,
+  runInit,
+  runInteractiveInit,
+  STARTER_CONFIG,
+  STARTER_FUNCTION,
+} from "./init.ts";
+import {
+  loginCommand,
+  type LoginOptions,
+  type LoginResult,
+  logoutCommand,
+  printLoginHelp,
+  printLogoutHelp,
+  printWhoamiHelp,
+  runLogin,
+  runLogout,
+  runWhoami,
+  systemOpenBrowser,
+  whoamiCommand,
+} from "./login.ts";
+import {
+  formatLogEntry,
+  type LogEntry,
+  logsCommand,
+  type LogsCliOptions,
+  printLogsHelp,
+  runLogs,
+} from "./logs.ts";
+import {
+  printRollbackHelp,
+  rollbackCommand,
+  type RollbackCommandOptions,
+  type RollbackCommandResult,
+  runRollback,
+} from "./rollback.ts";
+import {
+  printSecretsHelp,
+  runSecrets,
+  type SecretCliOptions,
+  type SecretListEntry,
+  secretsCommand,
+} from "./secrets.ts";
+import {
+  printSimulateHelp,
+  runSimulate,
+  simulateCommand,
+  type SimulateOptions,
+} from "./simulate.ts";
+import {
+  createSignalSpinner,
+  createSpinner,
+  createTrackSpinner,
+  createWheelSpinner,
+  SPINNER_STYLES,
+} from "./spinner.ts";
+import {
+  exportCommand,
+  type ExportCommandOptions,
+  importCommand,
+  type ImportCommandOptions,
+  printExportHelp,
+  printImportHelp,
+} from "./state.ts";
+import {
+  printStatusHelp,
+  statusCommand,
+  type StatusOptions,
+} from "./status.ts";
 import {
   animateSignalLantern,
   animateSteamTrain,
@@ -100,26 +161,54 @@ import {
   wrapText,
 } from "./ui.ts";
 import {
-  createSignalSpinner,
-  createSpinner,
-  createTrackSpinner,
-  createWheelSpinner,
-  SPINNER_STYLES,
-} from "./spinner.ts";
+  printUndeployHelp,
+  runUndeploy,
+  undeployCommand,
+  type UndeployCommandOptions,
+  type UndeployCommandResult,
+} from "./undeploy.ts";
+import {
+  printUninstallHelp,
+  runUninstall,
+  uninstallCommand,
+  type UninstallResult,
+} from "./uninstall.ts";
+import {
+  printUpgradeHelp,
+  runUpgrade,
+  upgradeCommand,
+  type UpgradeOptions,
+  type UpgradeResult,
+} from "./upgrade.ts";
+import {
+  formatUsageReport,
+  printUsageHelp,
+  runUsage,
+  type UsageCliOptions,
+  usageCommand,
+} from "./usage.ts";
+import { CLI_VERSION } from "./version.ts";
 
 export {
+  addCommand,
   animateSignalLantern,
   animateSteamTrain,
+  checkCommand,
   checkProject,
   CLI_VERSION,
   colors,
+  compareCommand,
+  completionsCommand,
   createSignalSpinner,
   createSpinner,
   createTrackSpinner,
   createWheelSpinner,
   deployCommand,
+  devCommand,
+  doctorCommand,
   exportCommand,
   formatLogEntry,
+  formatStartupBanner,
   formatUsageReport,
   generateBashCompletion,
   generateCompletions,
@@ -129,7 +218,33 @@ export {
   glyphs,
   importCommand,
   initCommand,
+  loginCommand,
+  logoutCommand,
+  logsCommand,
+  normalizeFunctions,
+  normalizeRoutes,
+  printAddHelp,
+  printCheckHelp,
+  printCompareHelp,
   printCompletionsHelp,
+  printDeployHelp,
+  printDevHelp,
+  printDoctorHelp,
+  printExportHelp,
+  printImportHelp,
+  printInitHelp,
+  printLoginHelp,
+  printLogoutHelp,
+  printLogsHelp,
+  printRollbackHelp,
+  printSecretsHelp,
+  printSimulateHelp,
+  printStatusHelp,
+  printUndeployHelp,
+  printUninstallHelp,
+  printUpgradeHelp,
+  printUsageHelp,
+  printWhoamiHelp,
   renderBoardingPass,
   renderBrandHeader,
   renderCard,
@@ -149,39 +264,67 @@ export {
   runAdd,
   runCheck,
   runCompletions,
+  runDeploy,
+  runDev,
   runDoctor,
   runInit,
   runInteractiveInit,
   runLogin,
   runLogout,
   runLogs,
+  runRollback,
   runSecrets,
   runSimulate,
+  runUndeploy,
   runUninstall,
   runUpgrade,
   runUsage,
   runWhoami,
+  secretsCommand,
+  simulateCommand,
   SPINNER_STYLES,
+  STARTER_CONFIG,
+  STARTER_FUNCTION,
+  startLocalServer,
+  statusCommand,
+  systemOpenBrowser,
   undeployCommand,
+  uninstallCommand,
+  upgradeCommand,
+  usageCommand,
+  whoamiCommand,
   wrapText,
 };
+
 export type {
   AddOptions,
   AddResult,
   CheckResult,
   DeployCommandOptions,
   DeployCommandResult,
+  DeployOptions,
+  DeploySummary,
+  DevOptions,
+  DoctorOptions,
+  DoctorResult,
   ExportCommandOptions,
   ImportCommandOptions,
   InitOptions,
   InitResult,
   InteractiveInitOptions,
+  LocalServer,
   LogEntry,
+  LoginOptions,
+  LoginResult,
   LogsCliOptions,
+  PricingRates,
+  RailfogConfig,
   RollbackCommandOptions,
   RollbackCommandResult,
   SecretCliOptions,
   SecretListEntry,
+  SimulateOptions,
+  StatusOptions,
   SupportedShell,
   UndeployCommandOptions,
   UndeployCommandResult,
@@ -191,214 +334,6 @@ export type {
   UsageCliOptions,
   ValidationIssue,
 };
-
-export type { LocalServer, RailfogConfig };
-
-// spec: docs/contracts/platform.contract.md#PLAT-19 — starter configuration scaffold
-export const STARTER_CONFIG = `name = "railfog-app"
-
-[functions.api]
-entry = "functions/api.ts"
-
-[[routes]]
-pattern = "/api/*"
-function = "api"
-`;
-
-// spec: docs/contracts/functions.contract.md#FN-1 — default exported fetch handler
-export const STARTER_FUNCTION = `export default async function handler(
-  _req: Request,
-  _ctx?: unknown,
-): Promise<Response> {
-  await Promise.resolve();
-  return new Response("Hello from RailFog!");
-}
-`;
-
-function printInitHelp(): void {
-  console.log(`RailFog CLI - Initialize project
-
-Usage:
-  rail init [directory] [options]
-
-Arguments:
-  [directory]          Target directory to initialize (default: current directory)
-
-Options:
-  --template <name>    Template to use: minimal (default) or worked-example
-  --name <name>        Project name (default: derived from directory name)
-  --force              Overwrite files in non-empty directory
-  -h, --help           Show help for init command`);
-}
-
-// spec: contracts/platform.contract.md#PLAT-19 — Project dependency management
-export async function addCommand(
-  packageOrPrimitive: string,
-  cwd: string = Deno.cwd(),
-): Promise<AddResult> {
-  const result = await runAdd({ packageOrPrimitive, cwd });
-  console.log(`${glyphs.success} Added ${result.addedImport} to deno.json`);
-  return result;
-}
-
-function printAddHelp(): void {
-  console.log(`RailFog CLI - Add dependency or primitive
-
-Usage:
-  rail add <package> [options]
-
-Arguments:
-  <package>    Package or primitive to add (supported: sdk)
-
-Options:
-  -h, --help   Show help for add command`);
-}
-
-export async function statusCommand(cwd: string = Deno.cwd()): Promise<void> {
-  const tomlPath = join(cwd, "railfog.toml");
-  let content: string;
-  try {
-    content = await Deno.readTextFile(tomlPath);
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      console.error(
-        renderErrorCard({
-          code: "CONFIG_NOT_FOUND",
-          message: "Error: railfog.toml not found in current directory.",
-          location: tomlPath,
-          solution:
-            "Run 'rail init' to scaffold a new RailFog application here.",
-          docs: "https://railfog.dev/docs/getting-started",
-        }),
-      );
-      Deno.exit(1);
-    }
-    throw err;
-  }
-
-  const parsed = parse(content) as Record<string, unknown>;
-  const appName = typeof parsed.name === "string" ? parsed.name : "(unnamed)";
-  const functions = normalizeFunctions(parsed.functions);
-  const routes = normalizeRoutes(parsed as unknown as RailfogConfig);
-
-  const fnEntries = Object.entries(functions);
-  const fnNodes = fnEntries.map(([name, fnConfig]) => {
-    const entry = (fnConfig?.entry as string) ??
-      (fnConfig?.entrypoint as string) ?? "(no entry)";
-    return {
-      label: name,
-      value: entry,
-    };
-  });
-
-  const routeNodes = routes.map((r) => ({
-    label: r.pattern ?? "",
-    value: r.function ?? "",
-  }));
-
-  const tree = renderTree(
-    `${appName} (${cwd})`,
-    [
-      {
-        label: "Functions:",
-        children: fnNodes.length > 0
-          ? fnNodes
-          : [{ label: "(no functions declared)" }],
-      },
-      {
-        label: "Routes:",
-        children: routeNodes.length > 0
-          ? routeNodes
-          : [{ label: "(no routes configured)" }],
-      },
-      {
-        label: "Backing Services:",
-        children: [
-          { label: "KV & Queues: SQLite" },
-          { label: "Objects:     LocalFS" },
-        ],
-      },
-    ],
-  );
-
-  const departureItems = routes.map((r, idx) => {
-    const fnName = r.function ?? "(unmapped)";
-    const fnConfig = functions[fnName];
-    const target = (fnConfig?.entry as string) ??
-      (fnConfig?.entrypoint as string) ?? "(inline)";
-    return {
-      track: idx + 1,
-      platform: "HTTP",
-      route: r.pattern ?? "/*",
-      functionName: fnName,
-      target,
-      status: "READY",
-    };
-  });
-
-  console.log(renderDepartureBoard(appName, departureItems));
-  console.log();
-  console.log(tree);
-  console.log();
-  console.log(
-    renderStatusBar([
-      { label: "Project", value: appName },
-      { label: "Tracks", value: String(departureItems.length) },
-      { label: "Functions", value: String(fnEntries.length) },
-      { label: "Routes", value: String(routes.length) },
-      { label: "Status", value: "Ready" },
-    ]),
-  );
-}
-
-function printDevHelp(): void {
-  console.log(`RailFog CLI - Local development server
-
-Usage:
-  rail dev [options]
-
-Options:
-  --port <number>    HTTP port to listen on (default: 8000)
-  --host <string>    Host interface to bind to (default: localhost)
-  --no-watch         Disable file watching and automatic hot reload
-  -h, --help         Show help for dev command`);
-}
-
-// spec: docs/contracts/platform.contract.md#PLAT-17, tasks/milestone-0.5-developer-experience/T-0508-local-dev-server-reload.md
-export async function devCommand(
-  cwd: string = Deno.cwd(),
-  port?: number,
-  options?: { host?: string; watch?: boolean },
-): Promise<LocalServer> {
-  const tomlPath = join(cwd, "railfog.toml");
-  let content: string;
-  try {
-    content = await Deno.readTextFile(tomlPath);
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      console.error(
-        renderErrorCard({
-          code: "CONFIG_NOT_FOUND",
-          message: "Error: railfog.toml not found in current directory.",
-          location: tomlPath,
-          solution:
-            "Run 'rail init' to scaffold a new RailFog application here.",
-          docs: "https://railfog.dev/docs/dev-server",
-        }),
-      );
-      Deno.exit(1);
-    }
-    throw err;
-  }
-
-  const parsed = parse(content) as unknown as RailfogConfig;
-  const server = await startLocalServer(parsed, port, {
-    cwd,
-    host: options?.host,
-    watch: options?.watch ?? true,
-  });
-  return server;
-}
 
 function printGeneralHelp(): void {
   console.log(renderBrandHeader(CLI_VERSION));
@@ -448,178 +383,6 @@ ${
   } Run 'rail <command> --help' for detailed documentation on any command.`);
 }
 
-function printDoctorHelp(): void {
-  console.log(`RailFog CLI - Platform health & track signal inspector
-
-Usage:
-  rail doctor [options]
-
-Options:
-  -c, --compare    Display architectural comparison vs AWS Lambda & Cloudflare Workers
-  -h, --help       Show help for doctor command`);
-}
-
-function printSimulateHelp(): void {
-  console.log(`RailFog CLI - Edge route dispatch & capability simulator
-
-Usage:
-  rail simulate <path> [options]
-
-Arguments:
-  <path>              HTTP request path to evaluate (e.g. /api/users/123)
-
-Options:
-  -m, --method <str>  HTTP method to simulate (default: GET)
-  --dir <path>        Target project directory (default: current directory)
-  -h, --help          Show help for simulate command`);
-}
-
-function printLoginHelp(): void {
-  console.log(`RailFog CLI - Login
-
-Usage:
-  rail login [options]
-
-Options:
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_URL or https://railfog-control-production.up.railway.app)
-  --token <key>          Directly provide API key (non-interactive / CI)
-  --manual               Skip browser callback server and prompt on stdin
-  -h, --help             Show help for login command`);
-}
-
-function printCheckHelp(): void {
-  console.log(`RailFog CLI - Check configuration
-
-Usage:
-  rail check [path] [options]
-
-Arguments:
-  [path]         Directory or railfog.toml file path to validate (default: current directory)
-
-Options:
-  -h, --help     Show help for check command`);
-}
-
-function printDeployHelp(): void {
-  console.log(`RailFog CLI - Deploy
-
-Usage:
-  rail deploy [options]
-
-Options:
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
-  --project <name>       Override project name declared in railfog.toml
-  -e, --env <name>       Target deployment environment (default: production)
-  -h, --help             Show help for deploy command`);
-}
-
-function printRollbackHelp(): void {
-  console.log(`RailFog CLI - Rollback
-
-Usage:
-  rail rollback <functionName> --to <revisionId> [options]
-
-Options:
-  --to <revisionId>      The target revision ID to rollback to (required)
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
-  --project <name>       Override project name declared in railfog.toml
-  -h, --help             Show help for rollback command`);
-}
-
-function printExportHelp(): void {
-  console.log(`RailFog CLI - Export project state
-
-Usage:
-  rail export [options]
-
-Options:
-  --out <path>           Output backup archive JSON file path (default: <backup_id>.json)
-  --project <name>       Override project name declared in railfog.toml
-  --org <id>             Organization ID (default: default)
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
-  -h, --help             Show help for export command`);
-}
-
-function printImportHelp(): void {
-  console.log(`RailFog CLI - Import project state
-
-Usage:
-  rail import --in <file> [options]
-
-Options:
-  --in <path>            Input backup archive JSON file path (required)
-  --project <name>       Target project name (defaults to railfog.toml or archive)
-  --org <id>             Target organization ID
-  --overwrite-kv         Overwrite existing KV keys in target project
-  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
-  -h, --help             Show help for import command`);
-}
-
-function printSecretsHelp(): void {
-  console.log(`RailFog CLI - Secrets management
-
-Usage:
-  rail secrets <subcommand> [arguments] [options]
-
-Subcommands:
-  set <KEY> [VALUE] [--file <path>]   Set or update an encrypted secret
-  list                                List stored secret keys
-  delete <KEY>                        Delete an encrypted secret
-
-Options:
-  --file <path>                       Read secret value from file (for multiline secrets)
-  -h, --help                          Show help for secrets command`);
-}
-
-function printLogsHelp(): void {
-  console.log(`RailFog CLI - Logs viewer and streamer
-
-Usage:
-  rail logs [options]
-
-Options:
-  --function <name>      Filter logs by function name
-  --level <level>        Minimum log level: debug, info, warn, error
-  --limit <number>       Maximum number of log entries to display (default: 50)
-  --format <format>      Output format: pretty (default) or json
-  -f, --follow           Tail/follow logs in real-time
-  -h, --help             Show help for logs command`);
-}
-
-function printUsageHelp(): void {
-  console.log(`RailFog CLI - Usage and cost reporting
-
-Usage:
-  rail usage [options]
-  rail cost [options]
-
-Options:
-  --format <pretty|json>   Output format: pretty (default) or json
-  --project-dir <path>     Project root directory (default: current directory)
-  --project <name>         Project ID or name override
-  --source <path|json>     Custom usage source JSON string or file path
-  --rates <json>           Custom pricing rates JSON override
-  -h, --help               Show help for usage command`);
-}
-
-function printUpgradeHelp(): void {
-  console.log(`RailFog CLI - Self-upgrade mechanism
-
-Usage:
-  rail upgrade [options]
-  rail update [options]
-  rail sync [options]
-
-Options:
-  --check               Check for newer versions without installing
-  -f, --force           Force reinstallation even if already up to date
-  -l, --local           Sync directly from local repository sources
-  --version <version>   Upgrade to a specific semantic version
-  --ref <ref>           Upgrade to a specific git branch or tag (default: main)
-  --compile             Compile into a standalone native binary
-  -h, --help            Show help for upgrade command`);
-}
-
 /**
  * Calculates the Levenshtein edit distance between two strings.
  * Minimalist dynamic programming: O(m * n) time, O(min(m, n)) space.
@@ -631,8 +394,8 @@ function levenshtein(a: string, b: string): number {
 
   const m = a.length;
   const n = b.length;
-  let prevRow = new Array<number>(n + 1);
-  let currRow = new Array<number>(n + 1);
+  const prevRow = new Array<number>(n + 1);
+  const currRow = new Array<number>(n + 1);
 
   for (let j = 0; j <= n; j++) prevRow[j] = j;
 
@@ -647,9 +410,9 @@ function levenshtein(a: string, b: string): number {
         prevRow[j - 1] + cost,
       );
     }
-    const temp = prevRow;
-    prevRow = currRow;
-    currRow = temp;
+    for (let j = 0; j <= n; j++) {
+      prevRow[j] = currRow[j];
+    }
   }
 
   return prevRow[n];
@@ -751,6 +514,12 @@ async function promptActionSelection(
       desc: "Simulate edge route dispatch & capabilities",
     },
     {
+      key: "8",
+      tag: "[COMPARE]",
+      cmd: "compare",
+      desc: "Architectural comparison vs AWS Lambda & Cloudflare",
+    },
+    {
       key: "0",
       tag: "[HELP]",
       cmd: "help",
@@ -799,7 +568,7 @@ async function promptActionSelection(
       const menu = renderLines();
       const promptLine = `  ${
         colors.dim(
-          "Use [Up/Down] arrows or type [0-7], then press [Enter] (default: dev):",
+          "Use [Up/Down] arrows or type [0-8], then press [Enter] (default: dev):",
         )
       }\x1b[K\n`;
       const fullText = menu + "\n" + promptLine;
@@ -836,7 +605,7 @@ async function promptActionSelection(
           selectedIndex = (selectedIndex + 1) % actions.length;
           draw();
         }
-        // Direct number keys '0' through '5'
+        // Direct number keys
         const char = String.fromCharCode(buf[0]);
         const match = actions.find((a) => a.key === char);
         if (match) {
@@ -870,16 +639,21 @@ async function promptActionSelection(
         "",
         ...actions.map((a) =>
           `  ${colors.accent(`[${a.key}]`)} ${colors.slate(a.tag)} ${
-            colors.bold(a.cmd.padEnd(7))
+            colors.bold(a.cmd.padEnd(8))
           } ${a.desc}`
         ),
       ],
     ),
   );
-  const choice = prompt("Select an action [0-7] (default: 1 dev):");
+  const choice = prompt("Select an action [0-8] (default: 1 dev):");
   return choice?.trim().toLowerCase() ?? "";
 }
 
+/**
+ * Main command dispatcher for the RailFog CLI.
+ *
+ * @spec contracts/platform.contract.md#PLAT-19
+ */
 export async function main(args: string[] = Deno.args): Promise<void> {
   // spec: PLAT-19, T-0814 AC 1 — Top-level --version and -v flag handling
   if (
@@ -912,7 +686,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printInitHelp();
           return;
         }
-        if (arg === "--force") {
+        if (arg === "-f" || arg === "--force") {
           force = true;
         } else if (arg === "--template" && args[i + 1]) {
           template = args[i + 1] as "minimal" | "worked-example";
@@ -921,11 +695,26 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           template = arg.slice("--template=".length) as
             | "minimal"
             | "worked-example";
-        } else if (arg === "--name" && args[i + 1]) {
+        } else if ((arg === "--name" || arg === "-n" || arg === "--project" || arg === "-p") && args[i + 1]) {
           projectName = args[i + 1];
           i++;
         } else if (arg.startsWith("--name=")) {
           projectName = arg.slice("--name=".length);
+        } else if (arg.startsWith("--project=")) {
+          projectName = arg.slice("--project=".length);
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          directory = args[i + 1];
+          hasPositionalDir = true;
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          directory = arg.slice("--dir=".length);
+          hasPositionalDir = true;
+        } else if (arg.startsWith("--cwd=")) {
+          directory = arg.slice("--cwd=".length);
+          hasPositionalDir = true;
+        } else if (arg.startsWith("--project-dir=")) {
+          directory = arg.slice("--project-dir=".length);
+          hasPositionalDir = true;
         } else if (!arg.startsWith("-")) {
           directory = arg;
           hasPositionalDir = true;
@@ -951,15 +740,27 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "add": {
       let pkg: string | undefined;
+      let cwd = Deno.cwd();
+
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
           printAddHelp();
           return;
         }
-        if (!arg.startsWith("-") && !pkg) {
+        if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
+        } else if (!arg.startsWith("-") && !pkg) {
           pkg = arg;
         }
       }
@@ -972,7 +773,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
 
       try {
-        await addCommand(pkg, Deno.cwd());
+        await addCommand(pkg, cwd);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
@@ -980,30 +781,74 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
-    case "status":
-      await statusCommand();
+
+    case "status": {
+      let cwd = Deno.cwd();
+      let json = false;
+
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printStatusHelp();
+          return;
+        }
+        if (arg === "--json" || arg === "--format=json") {
+          json = true;
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
+        } else if (!arg.startsWith("-")) {
+          cwd = resolve(arg);
+        }
+      }
+
+      await statusCommand(cwd, { json });
       break;
+    }
+
     case "check": {
       let targetPath: string | undefined;
+      let json = false;
+
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
           printCheckHelp();
           return;
         }
-        if (!arg.startsWith("-") && !targetPath) {
+        if (arg === "--json" || arg === "--format=json") {
+          json = true;
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          targetPath = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          targetPath = arg.slice("--dir=".length);
+        } else if (arg.startsWith("--cwd=")) {
+          targetPath = arg.slice("--cwd=".length);
+        } else if (arg.startsWith("--project-dir=")) {
+          targetPath = arg.slice("--project-dir=".length);
+        } else if (!arg.startsWith("-") && !targetPath) {
           targetPath = arg;
         }
       }
-      const exitCode = await runCheck(targetPath ?? Deno.cwd());
+
+      const exitCode = await runCheck(targetPath ?? Deno.cwd(), { json });
       if (exitCode !== 0) {
         Deno.exit(exitCode);
       }
       break;
     }
+
     case "doctor": {
       let compare = false;
       let targetPath: string | undefined;
+
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
@@ -1012,21 +857,33 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
         if (arg === "-c" || arg === "--compare") {
           compare = true;
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          targetPath = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          targetPath = arg.slice("--dir=".length);
+        } else if (arg.startsWith("--cwd=")) {
+          targetPath = arg.slice("--cwd=".length);
+        } else if (arg.startsWith("--project-dir=")) {
+          targetPath = arg.slice("--project-dir=".length);
         } else if (!arg.startsWith("-") && !targetPath) {
           targetPath = arg;
         }
       }
-      const res = await runDoctor({ cwd: targetPath ?? Deno.cwd(), compare });
+
+      const res = await doctorCommand({ cwd: targetPath ?? Deno.cwd(), compare });
       if (!res.healthy) {
         Deno.exit(1);
       }
       break;
     }
+
     case "simulate":
     case "sim": {
       let method: string | undefined;
       let targetPath: string | undefined;
       let targetDir: string | undefined;
+
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
@@ -1038,18 +895,26 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--method=")) {
           method = arg.slice("--method=".length);
-        } else if (arg === "--dir" && args[i + 1]) {
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           targetDir = args[i + 1];
           i++;
+        } else if (arg.startsWith("--dir=")) {
+          targetDir = arg.slice("--dir=".length);
+        } else if (arg.startsWith("--cwd=")) {
+          targetDir = arg.slice("--cwd=".length);
+        } else if (arg.startsWith("--project-dir=")) {
+          targetDir = arg.slice("--project-dir=".length);
         } else if (!arg.startsWith("-") && !targetPath) {
           targetPath = arg;
         }
       }
+
       if (!targetPath) {
         targetPath = "/";
       }
+
       try {
-        await runSimulate(targetPath, { cwd: targetDir ?? Deno.cwd(), method });
+        await simulateCommand(targetPath, { cwd: targetDir ?? Deno.cwd(), method });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
@@ -1057,21 +922,32 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "compare": {
-      console.log("\n" + renderCompetitiveMatrix() + "\n");
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printCompareHelp();
+          return;
+        }
+      }
+      compareCommand();
       break;
     }
+
     case "dev": {
       let port: number | undefined;
       let host: string | undefined;
       let watch = true;
+      let cwd = Deno.cwd();
+
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
           printDevHelp();
           return;
         }
-        if (arg === "--port" && args[i + 1]) {
+        if ((arg === "-p" || arg === "--port") && args[i + 1]) {
           port = parseInt(args[i + 1], 10);
           i++;
         } else if (arg.startsWith("--port=")) {
@@ -1083,78 +959,29 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           host = arg.slice("--host=".length);
         } else if (arg === "--no-watch") {
           watch = false;
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
         }
       }
-      const server = await devCommand(Deno.cwd(), port, { host, watch });
 
-      // Interactive terminal shortcuts (Wrangler / Railway parity)
-      if (
-        typeof Deno.stdin.isTerminal === "function" && Deno.stdin.isTerminal()
-      ) {
-        try {
-          Deno.stdin.setRaw(true);
-          const buf = new Uint8Array(16);
-          while (true) {
-            const n = await Deno.stdin.read(buf);
-            if (n === null || n === 0) break;
-            const char = new TextDecoder().decode(buf.subarray(0, n));
-            // Ctrl+C (\x03) or 'q' / 'Q'
-            if (char === "\x03" || char === "q" || char === "Q") {
-              try {
-                Deno.stdin.setRaw(false);
-              } catch {
-                // ignore
-              }
-              await server.close();
-              console.log("\nDev server stopped.");
-              Deno.exit(0);
-            }
-            // 'b' / 'B': open in browser
-            if (char === "b" || char === "B") {
-              const url = `http://${host ?? "localhost"}:${server.port}`;
-              console.log(`\nOpening ${url} in browser...`);
-              await systemOpenBrowser(url);
-            }
-            // 'd' / 'D': open dashboard in browser
-            if (char === "d" || char === "D") {
-              const url = `http://${
-                host ?? "localhost"
-              }:${server.port}/__railfog`;
-              console.log(`\nOpening dashboard ${url} in browser...`);
-              await systemOpenBrowser(url);
-            }
-            // 'c' / 'C': clear console and reprint banner
-            if (char === "c" || char === "C") {
-              console.clear();
-              try {
-                const tomlPath = join(Deno.cwd(), "railfog.toml");
-                const tomlContent = await Deno.readTextFile(tomlPath);
-                const cfg = parse(tomlContent) as unknown as RailfogConfig;
-                console.log(
-                  formatStartupBanner(cfg, server.port, { host, watch }),
-                );
-              } catch {
-                // ignore
-              }
-            }
-          }
-        } catch {
-          // If raw mode cannot be set or stdin ends, remain alive
-        } finally {
-          try {
-            Deno.stdin.setRaw(false);
-          } catch {
-            // ignore
-          }
-        }
-      }
+      await runDev({ cwd, port, host, watch });
       break;
     }
+
     case "deploy": {
       let controlPlaneUrl: string | undefined;
       let project: string | undefined;
       let token: string | undefined;
       let env: string | undefined;
+      let cwd = Deno.cwd();
+      let json = false;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1172,16 +999,22 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           );
           Deno.exit(1);
         }
-        if (arg === "--control-url" && args[i + 1]) {
+        if (arg === "--json" || arg === "--format=json") {
+          json = true;
+        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
-        } else if (arg === "--project" && args[i + 1]) {
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
+        } else if (arg.startsWith("--name=")) {
+          project = arg.slice("--name=".length);
         } else if ((arg === "--env" || arg === "-e") && args[i + 1]) {
           env = args[i + 1];
           i++;
@@ -1192,16 +1025,26 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--token=")) {
           token = arg.slice("--token=".length);
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
         }
       }
 
       try {
         await deployCommand({
-          cwd: Deno.cwd(),
+          cwd,
           controlPlaneUrl,
           project,
           token,
           env,
+          json,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1214,11 +1057,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "rollback": {
       let functionName: string | undefined;
       let targetRevisionId: string | undefined;
       let controlPlaneUrl: string | undefined;
       let project: string | undefined;
+      let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1232,16 +1077,29 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--to=")) {
           targetRevisionId = arg.slice("--to=".length);
-        } else if (arg === "--control-url" && args[i + 1]) {
+        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
-        } else if (arg === "--project" && args[i + 1]) {
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
+        } else if (arg.startsWith("--name=")) {
+          project = arg.slice("--name=".length);
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
         } else if (!arg.startsWith("-") && !functionName) {
           functionName = arg;
         }
@@ -1258,7 +1116,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
 
       try {
         await rollbackCommand({
-          cwd: Deno.cwd(),
+          cwd,
           controlPlaneUrl,
           project,
           functionName,
@@ -1271,32 +1129,47 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "undeploy": {
       let project: string | undefined;
       let controlPlaneUrl: string | undefined;
+      let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === "-h" || arg === "--help") {
-          console.log(`Usage: rail undeploy [--project <project>] [options]`);
+          printUndeployHelp();
           return;
         }
-        if (arg === "--project" && args[i + 1]) {
+        if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
-        } else if (arg === "--control-plane-url" && args[i + 1]) {
+        } else if (arg.startsWith("--name=")) {
+          project = arg.slice("--name=".length);
+        } else if ((arg === "--control-plane-url" || arg === "--control-url") && args[i + 1]) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-plane-url=")) {
           controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if (arg.startsWith("--control-url=")) {
+          controlPlaneUrl = arg.slice("--control-url=".length);
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
         }
       }
 
       try {
         await undeployCommand({
-          cwd: Deno.cwd(),
+          cwd,
           controlPlaneUrl,
           project,
         });
@@ -1307,11 +1180,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "export": {
       let outputFile: string | undefined;
       let project: string | undefined;
       let org: string | undefined;
       let controlPlaneUrl: string | undefined;
+      let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1324,27 +1199,40 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--out=")) {
           outputFile = arg.slice("--out=".length);
-        } else if (arg === "--project" && args[i + 1]) {
+        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
+        } else if (arg.startsWith("--name=")) {
+          project = arg.slice("--name=".length);
         } else if (arg === "--org" && args[i + 1]) {
           org = args[i + 1];
           i++;
         } else if (arg.startsWith("--org=")) {
           org = arg.slice("--org=".length);
-        } else if (arg === "--control-url" && args[i + 1]) {
+        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
         }
       }
 
       try {
         await exportCommand({
-          cwd: Deno.cwd(),
+          cwd,
           outputFile,
           project,
           org,
@@ -1357,12 +1245,14 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "import": {
       let inputFile: string | undefined;
       let project: string | undefined;
       let org: string | undefined;
       let overwriteKv = false;
       let controlPlaneUrl: string | undefined;
+      let cwd = Deno.cwd();
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1375,11 +1265,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--in=")) {
           inputFile = arg.slice("--in=".length);
-        } else if (arg === "--project" && args[i + 1]) {
+        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
+        } else if (arg.startsWith("--name=")) {
+          project = arg.slice("--name=".length);
         } else if (arg === "--org" && args[i + 1]) {
           org = args[i + 1];
           i++;
@@ -1387,11 +1279,22 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           org = arg.slice("--org=".length);
         } else if (arg === "--overwrite-kv") {
           overwriteKv = true;
-        } else if (arg === "--control-url" && args[i + 1]) {
+        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlPlaneUrl = arg.slice("--control-plane-url=".length);
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+          cwd = resolve(args[i + 1]);
+          i++;
+        } else if (arg.startsWith("--dir=")) {
+          cwd = resolve(arg.slice("--dir=".length));
+        } else if (arg.startsWith("--cwd=")) {
+          cwd = resolve(arg.slice("--cwd=".length));
+        } else if (arg.startsWith("--project-dir=")) {
+          cwd = resolve(arg.slice("--project-dir=".length));
         } else if (!arg.startsWith("-") && !inputFile) {
           inputFile = arg;
         }
@@ -1404,7 +1307,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
 
       try {
         await importCommand({
-          cwd: Deno.cwd(),
+          cwd,
           inputFile,
           targetProject: project,
           targetOrgId: org,
@@ -1418,6 +1321,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "secrets": {
       const sub = args[1];
       if (!sub || sub === "-h" || sub === "--help") {
@@ -1442,9 +1346,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--file=")) {
           filePath = arg.slice("--file=".length);
-        } else if (arg === "--project-dir" && subArgs[i + 1]) {
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && subArgs[i + 1]) {
           projectDir = subArgs[i + 1];
           i++;
+        } else if (arg.startsWith("--dir=")) {
+          projectDir = arg.slice("--dir=".length);
+        } else if (arg.startsWith("--cwd=")) {
+          projectDir = arg.slice("--cwd=".length);
         } else if (arg.startsWith("--project-dir=")) {
           projectDir = arg.slice("--project-dir=".length);
         } else if (!arg.startsWith("-")) {
@@ -1456,7 +1364,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
       }
 
-      const exitCode = await runSecrets({
+      const exitCode = await secretsCommand({
         subcommand: sub as "set" | "list" | "delete",
         key,
         value,
@@ -1468,6 +1376,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "logs": {
       let functionName: string | undefined;
       let level: "debug" | "info" | "warn" | "error" | undefined;
@@ -1486,6 +1395,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
         if (arg === "-f" || arg === "--follow") {
           follow = true;
+        } else if (arg === "--json") {
+          format = "json";
         } else if (arg === "--function" && args[i + 1]) {
           functionName = args[i + 1];
           i++;
@@ -1510,25 +1421,33 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--format=")) {
           format = arg.slice("--format=".length) as "pretty" | "json";
-        } else if (arg === "--project-dir" && args[i + 1]) {
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           projectDir = args[i + 1];
           i++;
+        } else if (arg.startsWith("--dir=")) {
+          projectDir = arg.slice("--dir=".length);
+        } else if (arg.startsWith("--cwd=")) {
+          projectDir = arg.slice("--cwd=".length);
         } else if (arg.startsWith("--project-dir=")) {
           projectDir = arg.slice("--project-dir=".length);
-        } else if ((arg === "--project" || arg === "-p") && args[i + 1]) {
+        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
-        } else if (arg === "--control-url" && args[i + 1]) {
+        } else if (arg.startsWith("--name=")) {
+          project = arg.slice("--name=".length);
+        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlPlaneUrl = arg.slice("--control-plane-url=".length);
         }
       }
 
-      const exitCode = await runLogs({
+      const exitCode = await logsCommand({
         functionName,
         level,
         limit,
@@ -1543,6 +1462,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "usage":
     case "cost": {
       let format: "pretty" | "json" | undefined;
@@ -1557,7 +1477,9 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printUsageHelp();
           return;
         }
-        if (arg === "--format" && args[i + 1]) {
+        if (arg === "--json") {
+          format = "json";
+        } else if (arg === "--format" && args[i + 1]) {
           const val = args[i + 1];
           if (val !== "pretty" && val !== "json") {
             console.error(
@@ -1576,16 +1498,22 @@ export async function main(args: string[] = Deno.args): Promise<void> {
             Deno.exit(1);
           }
           format = val as "pretty" | "json";
-        } else if (arg === "--project-dir" && args[i + 1]) {
+        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
           projectDir = args[i + 1];
           i++;
+        } else if (arg.startsWith("--dir=")) {
+          projectDir = arg.slice("--dir=".length);
+        } else if (arg.startsWith("--cwd=")) {
+          projectDir = arg.slice("--cwd=".length);
         } else if (arg.startsWith("--project-dir=")) {
           projectDir = arg.slice("--project-dir=".length);
-        } else if (arg === "--project" && args[i + 1]) {
+        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
           projectId = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           projectId = arg.slice("--project=".length);
+        } else if (arg.startsWith("--name=")) {
+          projectId = arg.slice("--name=".length);
         } else if (arg === "--source" && args[i + 1]) {
           source = args[i + 1];
           i++;
@@ -1623,7 +1551,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
       }
 
-      const exitCode = await runUsage({
+      const exitCode = await usageCommand({
         format,
         projectDir,
         projectId,
@@ -1635,6 +1563,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "login": {
       let controlUrl: string | undefined;
       let token: string | undefined;
@@ -1646,11 +1575,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printLoginHelp();
           return;
         }
-        if (arg === "--control-url" && args[i + 1]) {
+        if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
           controlUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlUrl = arg.slice("--control-url=".length);
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlUrl = arg.slice("--control-plane-url=".length);
         } else if (arg === "--token" && args[i + 1]) {
           token = args[i + 1];
           i++;
@@ -1661,33 +1592,49 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
       }
 
-      const res = await runLogin({ controlUrl, token, manual });
+      const res = await loginCommand({ controlUrl, token, manual });
       if (!res.ok) {
         Deno.exit(1);
       }
       break;
     }
+
     case "logout": {
-      await runLogout();
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printLogoutHelp();
+          return;
+        }
+      }
+      await logoutCommand();
       break;
     }
+
     case "whoami": {
       let controlUrl: string | undefined;
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
-        if (arg === "--control-url" && args[i + 1]) {
+        if (arg === "-h" || arg === "--help") {
+          printWhoamiHelp();
+          return;
+        }
+        if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
           controlUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlUrl = arg.slice("--control-url=".length);
+        } else if (arg.startsWith("--control-plane-url=")) {
+          controlUrl = arg.slice("--control-plane-url=".length);
         }
       }
-      const res = await runWhoami({ controlUrl });
+      const res = await whoamiCommand({ controlUrl });
       if (!res.authenticated) {
         Deno.exit(1);
       }
       break;
     }
+
     case "upgrade":
     case "update":
     case "sync": {
@@ -1726,7 +1673,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
 
       // spec: docs/contracts/platform.contract.md#PLAT-19, tasks/milestone-0.8-developer-experience-ux/T-0814-cli-self-upgrade-mechanism.md
-      const res = await runUpgrade({
+      const res = await upgradeCommand({
         checkOnly,
         force,
         version,
@@ -1740,10 +1687,19 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+
     case "uninstall": {
-      await runUninstall();
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "-h" || arg === "--help") {
+          printUninstallHelp();
+          return;
+        }
+      }
+      await uninstallCommand();
       break;
     }
+
     case "completions":
     case "completion": {
       let shellArg: string | undefined;
@@ -1757,7 +1713,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           shellArg = arg;
         }
       }
-      const res = runCompletions(shellArg);
+      const res = completionsCommand(shellArg);
       if (!res.ok) {
         Deno.exit(1);
       }
@@ -1804,10 +1760,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
               await main(["logs"]);
               return;
             } else if (trimmed === "6" || trimmed === "doctor") {
-              await runDoctor({ cwd: Deno.cwd() });
+              await doctorCommand({ cwd: Deno.cwd() });
               return;
             } else if (trimmed === "7" || trimmed === "simulate") {
-              await runSimulate("/", { cwd: Deno.cwd() });
+              await simulateCommand("/", { cwd: Deno.cwd() });
+              return;
+            } else if (trimmed === "8" || trimmed === "compare") {
+              compareCommand();
               return;
             } else if (trimmed === "0" || trimmed === "help") {
               printGeneralHelp();
@@ -1831,7 +1790,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           renderErrorCard({
             code: "UNKNOWN_COMMAND",
             message:
-              `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, uninstall, completions`,
+              `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, doctor, simulate, compare, login, logout, whoami, upgrade, update, sync, uninstall, completions`,
             solution: suggestion
               ? `Did you mean "rail ${suggestion}"?\nRun 'rail --help' to see all available commands.`
               : "Run 'rail --help' to browse all available commands and flags.",

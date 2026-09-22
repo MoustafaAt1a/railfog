@@ -602,3 +602,42 @@ export async function initCommand(
       : (options?.interactive ?? true),
   });
 }
+
+export function printInitHelp(): void {
+  console.log(`RailFog CLI - Initialize project
+
+Usage:
+  rail init [directory] [options]
+
+Arguments:
+  [directory]             Target directory to initialize (default: current directory)
+
+Options:
+  --template <name>       Template to use: minimal (default) or worked-example
+  -n, --name <name>       Project name (alias: --project, default: derived from directory name)
+  -f, --force             Overwrite files in non-empty directory
+  -h, --help              Show help for init command`);
+}
+
+// spec: docs/contracts/platform.contract.md#PLAT-19 — starter configuration scaffold
+export const STARTER_CONFIG = `name = "railfog-app"
+
+[functions.api]
+entry = "functions/api.ts"
+
+[[routes]]
+pattern = "/api/*"
+function = "api"
+`;
+
+// spec: docs/contracts/functions.contract.md#FN-1 — default exported fetch handler
+export const STARTER_FUNCTION = `export default async function handler(
+  _req: Request,
+  _ctx?: unknown,
+): Promise<Response> {
+  await Promise.resolve();
+  return new Response("Hello from RailFog!");
+}
+`;
+
+

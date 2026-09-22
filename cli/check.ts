@@ -1132,8 +1132,14 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
  */
 export async function runCheck(
   configPath: string = Deno.cwd(),
+  options?: { json?: boolean },
 ): Promise<number> {
   const result = await checkProject(configPath);
+
+  if (options?.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result.valid ? 0 : 1;
+  }
 
   if (result.valid) {
     if (result.routeSummary && result.routeSummary.length > 0) {
@@ -1198,3 +1204,28 @@ export async function runCheck(
     return 1;
   }
 }
+
+export function printCheckHelp(): void {
+  console.log(`RailFog CLI - Validate configuration & route topology
+
+Usage:
+  rail check [path] [options]
+
+Arguments:
+  [path]             Project directory or path to railfog.toml (default: current directory)
+
+Options:
+  -C, --dir <path>   Project directory (alias: --project-dir, --cwd, default: current directory)
+  --json             Output validation results as structured JSON
+  -h, --help         Show help for check command`);
+}
+
+export async function checkCommand(
+  targetPath?: string,
+  options?: { json?: boolean; cwd?: string },
+): Promise<number> {
+  const dir = targetPath ?? options?.cwd ?? Deno.cwd();
+  return await runCheck(dir, options);
+}
+
+

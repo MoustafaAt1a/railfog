@@ -61,6 +61,18 @@ export const SUBCOMMANDS = [
     name: "import",
     desc: "Import and restore project state from disaster recovery archive",
   },
+  {
+    name: "doctor",
+    desc: "Inspect platform health, track signals & V8 isolate benchmark",
+  },
+  {
+    name: "simulate",
+    desc: "Simulate edge route dispatch & capability matrix (alias: sim)",
+  },
+  {
+    name: "compare",
+    desc: "Display architectural comparison vs AWS Lambda & Cloudflare",
+  },
   { name: "upgrade", desc: "Upgrade the RailFog CLI to the latest version" },
   { name: "update", desc: "Alias for upgrade subcommand" },
   { name: "sync", desc: "Sync CLI with latest git updates (alias for update)" },
@@ -447,3 +459,10 @@ export function runCompletions(
   console.log(script);
   return { ok: true, script };
 }
+
+export function completionsCommand(
+  shellArg?: string,
+): { ok: boolean; script?: string } {
+  return runCompletions(shellArg);
+}
+

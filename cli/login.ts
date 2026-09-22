@@ -408,6 +408,7 @@ export async function runWhoami(options?: {
     options?.controlUrl ||
     config.controlUrl ||
     Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ||
+    Deno.env.get("RAILFOG_CONTROL_URL") ||
     DEFAULT_CONTROL_URL
   ).replace(/\/+$/, "");
 
@@ -459,3 +460,53 @@ export async function runWhoami(options?: {
     return { authenticated: false };
   }
 }
+
+export async function loginCommand(options?: LoginOptions): Promise<LoginResult> {
+  return await runLogin(options);
+}
+
+export async function logoutCommand(options?: { configPath?: string }): Promise<void> {
+  await runLogout(options);
+}
+
+export async function whoamiCommand(options?: {
+  controlUrl?: string;
+  configPath?: string;
+}): Promise<{ authenticated: boolean; orgId?: string; callerId?: string }> {
+  return await runWhoami(options);
+}
+
+export function printLoginHelp(): void {
+  console.log(`RailFog CLI - Login
+
+Usage:
+  rail login [options]
+
+Options:
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  --token <key>          Directly provide API key (non-interactive / CI)
+  --manual               Skip browser callback server and prompt on stdin
+  -h, --help             Show help for login command`);
+}
+
+export function printLogoutHelp(): void {
+  console.log(`RailFog CLI - Logout
+
+Usage:
+  rail logout [options]
+
+Options:
+  -h, --help             Show help for logout command`);
+}
+
+export function printWhoamiHelp(): void {
+  console.log(`RailFog CLI - Whoami
+
+Usage:
+  rail whoami [options]
+
+Options:
+  --control-url <url>    Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  -h, --help             Show help for whoami command`);
+}
+

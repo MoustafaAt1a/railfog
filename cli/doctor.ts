@@ -168,3 +168,22 @@ export async function runDoctor(
     report,
   };
 }
+
+export async function doctorCommand(
+  options?: DoctorOptions,
+): Promise<DoctorResult> {
+  return await runDoctor(options);
+}
+
+export function printDoctorHelp(): void {
+  console.log(`RailFog CLI - Platform health & track signal inspector
+
+Usage:
+  rail doctor [options]
+
+Options:
+  -C, --dir <path>       Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -c, --compare          Display architectural comparison vs AWS Lambda & Cloudflare Workers
+  -h, --help             Show help for doctor command`);
+}
+

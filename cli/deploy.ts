@@ -1031,3 +1031,20 @@ export async function deployCommand(
     state: summary.ok ? "Deployed" : "Failed",
   };
 }
+
+export function printDeployHelp(): void {
+  console.log(`RailFog CLI - Deploy
+
+Usage:
+  rail deploy [options]
+
+Options:
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  --control-url <url>      Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
+  -e, --env <name>         Target deployment environment (default: production)
+  --token <key>            Directly provide API key for deployment
+  --json                   Output machine-readable JSON deployment summary
+  -h, --help               Show help for deploy command`);
+}
+

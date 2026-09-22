@@ -163,3 +163,27 @@ export async function runSimulate(
   console.log("\n" + renderRouteSimulatorCard(result) + "\n");
   return result;
 }
+
+export async function simulateCommand(
+  requestPath: string,
+  options?: SimulateOptions,
+): Promise<RouteSimulationResult> {
+  return await runSimulate(requestPath, options);
+}
+
+export function printSimulateHelp(): void {
+  console.log(`RailFog CLI - Edge route dispatch & capability simulator
+
+Usage:
+  rail simulate <path> [options]
+  rail sim <path> [options]
+
+Arguments:
+  <path>                 HTTP request path to evaluate (e.g. /api/users/123)
+
+Options:
+  -m, --method <str>     HTTP method to simulate (default: GET)
+  -C, --dir <path>       Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -h, --help             Show help for simulate command`);
+}
+

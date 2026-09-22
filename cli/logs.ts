@@ -407,6 +407,7 @@ async function* getLineStream(
     }
     const targetProject = detectedProject || "default";
     const remoteUrl = options.controlPlaneUrl ||
+      Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ||
       Deno.env.get("RAILFOG_CONTROL_URL") ||
       "https://railfog-control-production.up.railway.app";
     const query = new URLSearchParams();
@@ -582,3 +583,29 @@ export async function runLogs(options: LogsCliOptions = {}): Promise<number> {
     return 1;
   }
 }
+
+export async function logsCommand(
+  options: LogsCliOptions,
+): Promise<number> {
+  return await runLogs(options);
+}
+
+export function printLogsHelp(): void {
+  console.log(`RailFog CLI - Logs viewer and streamer
+
+Usage:
+  rail logs [options]
+
+Options:
+  --function <name>        Filter logs by function name
+  --level <level>          Minimum log level: debug, info, warn, error
+  --limit <number>         Maximum number of log entries to display (default: 50)
+  --format <format>        Output format: pretty (default) or json (alias: --json)
+  --json                   Output machine-readable JSON logs
+  -f, --follow             Tail/follow logs in real-time
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
+  --control-url <url>      Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  -h, --help               Show help for logs command`);
+}
+

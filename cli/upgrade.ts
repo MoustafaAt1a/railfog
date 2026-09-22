@@ -462,3 +462,28 @@ export async function runUpgrade(
     message: successMessage,
   };
 }
+
+export async function upgradeCommand(
+  options?: UpgradeOptions,
+): Promise<UpgradeResult> {
+  return await runUpgrade(options);
+}
+
+export function printUpgradeHelp(): void {
+  console.log(`RailFog CLI - Self-upgrade mechanism
+
+Usage:
+  rail upgrade [options]
+  rail update [options]
+  rail sync [options]
+
+Options:
+  --check               Check for newer versions without installing
+  -f, --force           Force reinstallation even if already up to date
+  -l, --local           Sync directly from local repository sources
+  --version <version>   Upgrade to a specific semantic version
+  --ref <ref>           Upgrade to a specific git branch or tag (default: main)
+  --compile             Compile into a standalone native binary
+  -h, --help            Show help for upgrade command`);
+}
+

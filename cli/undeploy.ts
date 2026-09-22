@@ -14,7 +14,7 @@ import {
   ValidationFailedError,
 } from "../packages/errors/mod.ts";
 import { resolveAuthHeader } from "./auth-config.ts";
-import { colors, glyphs } from "./ui.ts";
+import { colors, glyphs, renderCard, renderStatusBar } from "./ui.ts";
 
 export interface UndeployCommandOptions {
   cwd?: string;
@@ -36,6 +36,19 @@ interface RailfogToml {
 export const PRODUCTION_CONTROL_PLANE_URL =
   "https://railfog-control-production.up.railway.app";
 export const DEFAULT_CONTROL_PLANE_URL = PRODUCTION_CONTROL_PLANE_URL;
+
+export function printUndeployHelp(): void {
+  console.log(`RailFog CLI - Safely undeploy and remove a project
+
+Usage:
+  rail undeploy [options]
+
+Options:
+  -p, --project <name>     Target project name (defaults to railfog.toml, alias: --name)
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  -h, --help               Show help for undeploy command`);
+}
 
 export async function undeployCommand(
   options: UndeployCommandOptions,
@@ -69,6 +82,7 @@ export async function undeployCommand(
   } else {
     const rawUrl = options.controlPlaneUrl ??
       Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
+      Deno.env.get("RAILFOG_CONTROL_URL") ??
       DEFAULT_CONTROL_PLANE_URL;
     const baseUrl = rawUrl.replace(/\/+$/, "");
     let authHeaders = {};
@@ -100,10 +114,22 @@ export async function undeployCommand(
     deleted = json.deleted;
   }
 
+  console.log();
   console.log(
-    `\n${glyphs.success}  ${
-      colors.bold(colors.emerald("Successfully undeployed"))
-    } project '${colors.bold(projectName)}' from RailFog control plane.\n`,
+    renderCard("Project Undeployment Complete", [
+      `${glyphs.success}  ${colors.bold("Successfully undeployed from RailFog Control Plane")}`,
+      "",
+      `   ${colors.dim("Project:")}     ${colors.accent(colors.bold(projectName))}`,
+      `   ${colors.dim("Status:")}      ${colors.emerald("DELETED / PURGED")}`,
+      `   ${colors.dim("Routing:")}     ${colors.slate("All routes decoupled")}`,
+    ], { borderColor: colors.emerald }),
+  );
+  console.log();
+  console.log(
+    renderStatusBar([
+      { label: "Project", value: projectName },
+      { label: "Status", value: "Undeployed" },
+    ]),
   );
 
   return {
@@ -111,3 +137,6 @@ export async function undeployCommand(
     deleted,
   };
 }
+
+export const runUndeploy = undeployCommand;
+

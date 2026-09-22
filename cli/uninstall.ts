@@ -260,3 +260,22 @@ export async function runUninstall(): Promise<UninstallResult> {
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+export async function uninstallCommand(): Promise<UninstallResult> {
+  return await runUninstall();
+}
+
+export function printUninstallHelp(): void {
+  console.log(`RailFog CLI - Self-uninstaller
+
+Usage:
+  rail uninstall [options]
+
+Description:
+  Removes the RailFog CLI binary and local metadata.
+  Automatically resolves installation directories.
+
+Options:
+  -h, --help       Show help for uninstall command`);
+}
+

@@ -126,3 +126,30 @@ export async function runAdd(options: AddOptions): Promise<AddResult> {
     createdNewFile: false,
   };
 }
+
+export function printAddHelp(): void {
+  console.log(`RailFog CLI - Add dependency or primitive
+
+Usage:
+  rail add <package> [options]
+
+Arguments:
+  <package>    Package or primitive to add (supported: sdk)
+
+Options:
+  --dir <path> Target project directory (default: current directory)
+  -h, --help   Show help for add command`);
+}
+
+/**
+ * CLI command handler for 'rail add'.
+ */
+export async function addCommand(
+  packageOrPrimitive: string,
+  cwd: string = Deno.cwd(),
+): Promise<AddResult> {
+  const result = await runAdd({ packageOrPrimitive, cwd });
+  console.log(`[+] Added ${result.addedImport} to deno.json`);
+  return result;
+}
+

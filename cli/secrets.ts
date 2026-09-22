@@ -267,3 +267,27 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
     return 1;
   }
 }
+
+export async function secretsCommand(
+  options: SecretCliOptions,
+): Promise<number> {
+  return await runSecrets(options);
+}
+
+export function printSecretsHelp(): void {
+  console.log(`RailFog CLI - Secrets management
+
+Usage:
+  rail secrets <subcommand> [arguments] [options]
+
+Subcommands:
+  set <KEY> [VALUE] [--file <path>]   Set or update an encrypted secret
+  list                                List stored secret keys
+  delete <KEY>                        Delete an encrypted secret
+
+Options:
+  --file <path>                       Read secret value from file (for multiline secrets)
+  -C, --dir <path>                    Project root directory (alias: --project-dir, --cwd, default: current directory)
+  -h, --help                          Show help for secrets command`);
+}
+

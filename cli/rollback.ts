@@ -43,6 +43,23 @@ export const PRODUCTION_CONTROL_PLANE_URL =
   "https://railfog-control-production.up.railway.app";
 export const DEFAULT_CONTROL_PLANE_URL = PRODUCTION_CONTROL_PLANE_URL;
 
+export function printRollbackHelp(): void {
+  console.log(`RailFog CLI - Rollback function revision
+
+Usage:
+  rail rollback <functionName> --to <revisionId> [options]
+
+Arguments:
+  <functionName>         Name of the function to rollback
+
+Options:
+  --to <revisionId>        The target revision ID to rollback to (required)
+  -C, --dir <path>         Project directory (alias: --project-dir, --cwd, default: current directory)
+  --control-url <url>      Control Plane API URL (alias: --control-plane-url)
+  -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
+  -h, --help               Show help for rollback command`);
+}
+
 // spec: docs/contracts/platform.contract.md#PLAT-3 — Deployment pipeline (pointer-flip rollback)
 // spec: docs/contracts/platform.contract.md#PLAT-12 — Error model
 // spec: docs/contracts/platform.contract.md#PLAT-18 — Project -> Function hierarchy
@@ -101,6 +118,7 @@ export async function rollbackCommand(
   } else {
     const rawUrl = options.controlPlaneUrl ??
       Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
+      Deno.env.get("RAILFOG_CONTROL_URL") ??
       DEFAULT_CONTROL_PLANE_URL;
     const baseUrl = rawUrl.replace(/\/+$/, "");
     const authHeaders = await resolveAuthHeader(options);
@@ -133,14 +151,10 @@ export async function rollbackCommand(
     activeRevisionId = json.activeRevisionId;
   }
 
-  console.log(
-    `Rolled back function '${options.functionName}' in project '${projectName}' to revision ${activeRevisionId}.`,
-  );
-
   console.log();
   console.log(
     renderCard("Function Rollback Complete", [
-      `${glyphs.success}  Pointer flipped successfully (Instant cutover)`,
+      `${glyphs.success}  ${colors.bold("Pointer flipped successfully (Instant cutover)")}`,
       "",
       `   ${colors.dim("Project:")}     ${colors.accent(projectName)}`,
       `   ${colors.dim("Function:")}    ${colors.brand(options.functionName)}`,
@@ -167,3 +181,6 @@ export async function rollbackCommand(
     activeRevisionId,
   };
 }
+
+export const runRollback = rollbackCommand;
+

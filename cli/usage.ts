@@ -404,3 +404,27 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
     return 1;
   }
 }
+
+export async function usageCommand(
+  options?: UsageCliOptions,
+): Promise<number> {
+  return await runUsage(options);
+}
+
+export function printUsageHelp(): void {
+  console.log(`RailFog CLI - Usage and cost reporting
+
+Usage:
+  rail usage [options]
+  rail cost [options]
+
+Options:
+  --format <pretty|json>   Output format: pretty (default) or json (alias: --json)
+  --json                   Output machine-readable JSON (alias for --format=json)
+  -C, --dir <path>         Project root directory (alias: --project-dir, --cwd, default: current directory)
+  -p, --project <name>     Project ID or name override (alias: --name)
+  --source <path|json>     Custom usage source JSON string or file path
+  --rates <json>           Custom pricing rates JSON override
+  -h, --help               Show help for usage command`);
+}
+

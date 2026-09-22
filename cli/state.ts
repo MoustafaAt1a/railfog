@@ -123,6 +123,7 @@ export async function exportCommand(
     } else {
       const rawUrl = options?.controlPlaneUrl ??
         Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
+        Deno.env.get("RAILFOG_CONTROL_URL") ??
         DEFAULT_CONTROL_PLANE_URL;
       const baseUrl = rawUrl.replace(/\/+$/, "");
 
@@ -294,6 +295,7 @@ export async function importCommand(
     } else {
       const rawUrl = options.controlPlaneUrl ??
         Deno.env.get("RAILFOG_CONTROL_PLANE_URL") ??
+        Deno.env.get("RAILFOG_CONTROL_URL") ??
         DEFAULT_CONTROL_PLANE_URL;
       const baseUrl = rawUrl.replace(/\/+$/, "");
       const authHeaders = await resolveAuthHeader(options);
@@ -352,3 +354,35 @@ export async function importCommand(
 
   return result;
 }
+
+export function printExportHelp(): void {
+  console.log(`RailFog CLI - Export project state
+
+Usage:
+  rail export [options]
+
+Options:
+  --out <path>             Output backup archive JSON file path (default: <backup_id>.json)
+  -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
+  --org <id>               Organization ID (default: default)
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  --control-url <url>      Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  -h, --help               Show help for export command`);
+}
+
+export function printImportHelp(): void {
+  console.log(`RailFog CLI - Import project state
+
+Usage:
+  rail import --in <file> [options]
+
+Options:
+  --in <path>              Input backup archive JSON file path (required)
+  -p, --project <name>     Target project name (defaults to railfog.toml or archive, alias: --name)
+  --org <id>               Target organization ID
+  --overwrite-kv           Overwrite existing KV keys in target project
+  -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
+  --control-url <url>      Control Plane API URL (default: RAILFOG_CONTROL_PLANE_URL or https://railfog-control-production.up.railway.app)
+  -h, --help               Show help for import command`);
+}
+
