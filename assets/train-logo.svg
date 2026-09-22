@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 260" width="100%" height="100%">
+  <defs>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --card-bdr: #30363d;
+        --gray: #8b949e;
+        --white: #f0f6fc;
+        --pulse: #ffffff;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f6f8fa;
+          --card-bdr: #d0d7de;
+          --gray: #656d76;
+          --white: #1f2328;
+          --pulse: #1f2328;
+        }
+      }
+      .terminal-card {
+        fill: var(--bg);
+        stroke: var(--card-bdr);
+        stroke-width: 1.5;
+        rx: 12px;
+      }
+      .train-text {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 15px;
+        font-weight: 700;
+        white-space: pre;
+      }
+      .gray { fill: var(--gray); }
+      .white { fill: var(--white); }
+      .pulse { fill: var(--pulse); }
+    </style>
+  </defs>
+
+  <rect width="100%" height="100%" class="terminal-card"/>
+
+  <text class="train-text" xml:space="preserve">
+    <tspan x="65" y="45" class="gray">       ┌──────┐</tspan>
+    <tspan x="65" y="66" class="pulse">         ████</tspan>
+    <tspan x="65" y="87" class="gray">   ┌──────────────┐</tspan>
+    <tspan x="65" y="108"><tspan class="gray">   │</tspan><tspan class="white">████</tspan><tspan class="gray">  </tspan><tspan class="white">██</tspan><tspan class="gray">  </tspan><tspan class="white">████</tspan><tspan class="gray">│</tspan></tspan>
+    <tspan x="65" y="129"><tspan class="gray">   │</tspan><tspan class="white">██████████████</tspan><tspan class="gray">│</tspan></tspan>
+    <tspan x="65" y="150"><tspan class="gray">   │</tspan><tspan class="white">██████████████</tspan><tspan class="gray">│</tspan></tspan>
+    <tspan x="65" y="171"><tspan class="gray">   │</tspan><tspan class="gray">██  ██  ██  ██</tspan><tspan class="gray">│</tspan></tspan>
+    <tspan x="65" y="192"><tspan class="gray">   │</tspan><tspan class="gray">██  ██  ██  ██</tspan><tspan class="gray">│</tspan></tspan>
+    <tspan x="65" y="213" class="gray">  ══════════════════</tspan>
+  </text>
+</svg>

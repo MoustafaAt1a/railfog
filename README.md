@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/train-logo.svg" alt="RailFog Train Logo" width="300" />
+</p>
+
 # RailFog
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
