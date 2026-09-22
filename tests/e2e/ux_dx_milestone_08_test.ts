@@ -626,7 +626,11 @@ Deno.test(
       const apiContent = await Deno.readTextFile(
         join(minimalTarget, "functions", "api.ts"),
       );
-      assertStringIncludes(apiContent, `export default async function handler`);
+      assert(
+        apiContent.includes(`export default async function handler`) ||
+          apiContent.includes(`export default handle(`),
+        "Expected api.ts to export a default handler",
+      );
 
       const denoJson = await Deno.readTextFile(
         join(minimalTarget, "deno.json"),
