@@ -571,7 +571,6 @@ function printHelp(): void {
   console.log(`        ${s.bold("--ref")} ${s.dim("<ref>")}       Git ref/tag/branch to install ${s.gray("(default: main)")}`);
   console.log(`        ${s.bold("--commit")} ${s.dim("<sha>")}    Exact git commit SHA to install ${s.gray("(bypasses CDN caches)")}`);
   console.log(`        ${s.bold("--repo")} ${s.dim("<repo>")}     GitHub repository ${s.gray("(default: MoustafaAt1a/railfog)")}`);
-  console.log(`        ${s.bold("--uninstall")}        Remove rail binary and metadata`);
   console.log(`    ${s.bold("-h")}, ${s.bold("--help")}            Show this help information`);
   console.log("");
   console.log(`  ${s.bdr("─".repeat(60))}`);
@@ -690,67 +689,6 @@ async function runPreflight(
   return checks;
 }
 
-/**
- * Handles the --uninstall flag: removes binary and metadata.
- */
-async function runUninstall(options: InstallerOptions): Promise<void> {
-  const s = createStyles();
-  const paths = resolveInstallPaths(options);
-
-  console.log("");
-  console.log(`  ${s.bold(s.cyan("RailFog CLI Uninstaller"))}`);
-  console.log("");
-
-  let removed = false;
-
-  // Remove binary
-  try {
-    await Deno.remove(paths.fullBinaryPath);
-    console.log(
-      `  ${s.ok(`Removed ${paths.fullBinaryPath}`)}`,
-    );
-    removed = true;
-  } catch {
-    console.log(
-      `  ${s.info(`Binary not found at ${paths.fullBinaryPath}`)}`,
-    );
-  }
-
-  // On Windows also remove the shell script shim
-  if (Deno.build.os === "windows") {
-    const shellPath = join(paths.binDir, "rail");
-    try {
-      await Deno.remove(shellPath);
-      console.log(`  ${s.ok(`Removed ${shellPath}`)}`);
-      removed = true;
-    } catch {
-      // May not exist
-    }
-  }
-
-  // Remove metadata
-  const metaPath = join(paths.binDir, ".rail-version.json");
-  try {
-    await Deno.remove(metaPath);
-    console.log(
-      `  ${s.ok("Removed .rail-version.json")}`,
-    );
-    removed = true;
-  } catch {
-    // May not exist
-  }
-
-  console.log("");
-  if (removed) {
-    console.log(`  ${s.ok(s.bold("RailFog CLI uninstalled cleanly."))}`);
-  } else {
-    console.log(
-      `  ${s.info("No RailFog CLI installation found to remove.")}`,
-    );
-  }
-  console.log("");
-}
-
 // ============================================================================
 // Main CLI Entrypoint
 // ============================================================================
@@ -761,12 +699,6 @@ if (import.meta.main) {
 
   if (options.help) {
     printHelp();
-    Deno.exit(0);
-  }
-
-  // Handle --uninstall
-  if (Deno.args.includes("--uninstall")) {
-    await runUninstall(options);
     Deno.exit(0);
   }
 
