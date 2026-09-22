@@ -322,8 +322,8 @@ Deno.test("Adversarial PLAT-16: Provider signatures strictly reject ambient para
   type ComputeMethods = keyof ComputeProvider;
   type IsolationMethods = keyof IsolationProvider;
 
-  const computeOnlyRun: Equal<ComputeMethods, "run"> = true;
-  const isolationOnlyRun: Equal<IsolationMethods, "run"> = true;
+  const computeOnlyRun: Equal<ComputeMethods, "run" | "prewarm"> = true;
+  const isolationOnlyRun: Equal<IsolationMethods, "run" | "prewarm"> = true;
 
   assertEquals(
     computeArgCountValid &&

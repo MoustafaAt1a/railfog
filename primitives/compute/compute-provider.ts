@@ -69,6 +69,7 @@ export interface ComputeProvider {
     limits: Limits,
     invocation?: InvocationRequest,
   ): Promise<ExecutionResult>;
+  prewarm?(artifact: Artifact, limits?: Limits): Promise<void>;
 }
 
 /**
@@ -83,4 +84,5 @@ export interface IsolationProvider {
     limits: Limits,
     invocation?: InvocationRequest,
   ): Promise<ExecutionResult>;
+  prewarm?(artifact: Artifact, limits?: Limits): Promise<void>;
 }

@@ -758,7 +758,9 @@ export class LocalIsolationProvider implements IsolationProvider {
     try {
       mod = await import(fileUrl);
     } catch (importErr) {
-      const errMsg = importErr instanceof Error ? importErr.message : String(importErr);
+      const errMsg = importErr instanceof Error
+        ? importErr.message
+        : String(importErr);
       throw new ValidationFailedError(
         `Failed to load function module: ${errMsg}`,
       );
@@ -772,7 +774,10 @@ export class LocalIsolationProvider implements IsolationProvider {
 
     const instance: WarmInstance = {
       cacheKey,
-      handler: mod.default as (req: Request, ctx: RailFogContext) => Promise<Response>,
+      handler: mod.default as (
+        req: Request,
+        ctx: RailFogContext,
+      ) => Promise<Response>,
       lastUsed: Date.now(),
       invocationCount: 1,
       filePath,
@@ -780,6 +785,39 @@ export class LocalIsolationProvider implements IsolationProvider {
 
     this.warmInstances.set(cacheKey, instance);
     return instance;
+  }
+
+  /**
+   * Loads or gets the warm module instance for an artifact and revision tuple.
+   * Spec-anchor: docs/contracts/functions.contract.md#FN-6.
+   */
+  private async getOrLoadModule(
+    artifact: Artifact,
+    tuple: FunctionRevisionTuple,
+  ): Promise<WarmInstance> {
+    return await this.getOrCreateWarmInstance(tuple, artifact);
+  }
+
+  /**
+   * Pre-warms isolate / code caches for an artifact before the first request.
+   * Spec-anchor: docs/contracts/functions.contract.md#FN-6.
+   */
+  async prewarm(artifact: Artifact, _limits?: Limits): Promise<void> {
+    if (!artifact || typeof artifact !== "object") {
+      return;
+    }
+    const tuple = this.extractMetadata(artifact);
+    const cacheKey = JSON.stringify([
+      tuple.orgId ?? "",
+      tuple.project,
+      tuple.functionName,
+      tuple.revision,
+    ]);
+    if (this.warmInstances.has(cacheKey)) {
+      return;
+    }
+    const instance = await this.getOrLoadModule(artifact, tuple);
+    instance.invocationCount = 0;
   }
 
   /**

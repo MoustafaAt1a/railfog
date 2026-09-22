@@ -705,16 +705,23 @@ export async function startControlServer(
 
       // Undeploy / Delete project endpoint (PLAT-18)
       if (
-        (projectMatch && (projectMatch[2] === "delete" || projectMatch[2] === "undeploy")) ||
+        (projectMatch &&
+          (projectMatch[2] === "delete" || projectMatch[2] === "undeploy")) ||
         (pathname.match(/^\/v1\/projects\/([^/]+)$/) && req.method === "DELETE")
       ) {
         const directMatch = pathname.match(/^\/v1\/projects\/([^/]+)$/);
         const projectId = decodeURIComponent(
           projectMatch ? projectMatch[1] : (directMatch ? directMatch[1] : ""),
         );
-        const deleted = options.deploymentService.deleteProject?.(projectId) ?? false;
+        const deleted = options.deploymentService.deleteProject?.(projectId) ??
+          false;
         return new Response(
-          JSON.stringify({ ok: true, deleted, projectId, request_id: requestId }),
+          JSON.stringify({
+            ok: true,
+            deleted,
+            projectId,
+            request_id: requestId,
+          }),
           {
             status: HTTP_STATUS_OK,
             headers: {
@@ -1173,11 +1180,16 @@ if (import.meta.main) {
 
   const port = parseInt(Deno.env.get("PORT") || "8081", 10);
   const host = Deno.env.get("HOST") || "0.0.0.0";
-  let storage: import("../../primitives/objects/object-provider.ts").ObjectProvider;
-  const s3Endpoint = Deno.env.get("R2_ENDPOINT") || Deno.env.get("OBJECTS_ENDPOINT");
-  const s3Bucket = Deno.env.get("R2_BUCKET_NAME") || Deno.env.get("OBJECTS_BUCKET");
-  const s3AccessKey = Deno.env.get("R2_ACCESS_KEY_ID") || Deno.env.get("OBJECTS_ACCESS_KEY_ID");
-  const s3SecretKey = Deno.env.get("R2_SECRET_ACCESS_KEY") || Deno.env.get("OBJECTS_SECRET_ACCESS_KEY");
+  let storage:
+    import("../../primitives/objects/object-provider.ts").ObjectProvider;
+  const s3Endpoint = Deno.env.get("R2_ENDPOINT") ||
+    Deno.env.get("OBJECTS_ENDPOINT");
+  const s3Bucket = Deno.env.get("R2_BUCKET_NAME") ||
+    Deno.env.get("OBJECTS_BUCKET");
+  const s3AccessKey = Deno.env.get("R2_ACCESS_KEY_ID") ||
+    Deno.env.get("OBJECTS_ACCESS_KEY_ID");
+  const s3SecretKey = Deno.env.get("R2_SECRET_ACCESS_KEY") ||
+    Deno.env.get("OBJECTS_SECRET_ACCESS_KEY");
 
   let storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR");
   if (!storageDir) {
@@ -1197,7 +1209,9 @@ if (import.meta.main) {
   const localFsStorage = new LocalFSProvider(storageDir);
 
   if (s3Endpoint && s3Bucket && s3AccessKey && s3SecretKey) {
-    const { R2Provider } = await import("../../providers/objects/r2-provider.ts");
+    const { R2Provider } = await import(
+      "../../providers/objects/r2-provider.ts"
+    );
     const r2 = new R2Provider({
       endpoint: s3Endpoint,
       bucket: s3Bucket,
@@ -1266,7 +1280,9 @@ if (import.meta.main) {
         }
       },
     };
-    console.log("[railfog-control] using resilient R2/S3 object storage provider with local fallback");
+    console.log(
+      "[railfog-control] using resilient R2/S3 object storage provider with local fallback",
+    );
   } else {
     storage = localFsStorage;
   }

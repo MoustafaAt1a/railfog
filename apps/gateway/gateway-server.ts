@@ -54,6 +54,7 @@ export interface GatewayOptions {
   host?: string;
   controlPlaneUrl: string;
   dataPlaneUrl: string;
+  dataPlaneSocketPath?: string;
   rateLimiter?: MultiTenantRateLimiter;
   signal?: AbortSignal;
 }
@@ -210,8 +211,16 @@ async function proxyRequest(
   requestId: string,
 ): Promise<Response> {
   const upstreamHeaders = new Headers(req.headers);
+
+  // Perimeter hardening: Strip untrusted client-supplied internal headers (O(1) zero-allocation)
+  upstreamHeaders.delete("x-forwarded-by");
+  upstreamHeaders.delete("x-railfog-trigger");
+  upstreamHeaders.delete("x-railfog-call-depth");
+  upstreamHeaders.delete("x-railfog-invocation-id");
+
   upstreamHeaders.set("x-request-id", requestId);
   upstreamHeaders.set("request-id", requestId);
+  upstreamHeaders.set("x-forwarded-by", "railfog-gateway");
 
   const hasBody = req.method !== "GET" && req.method !== "HEAD" &&
     req.body !== null;

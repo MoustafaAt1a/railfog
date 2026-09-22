@@ -57,11 +57,13 @@ const DEFAULT_POLL_INTERVAL_MS = 5000;
 export interface RuntimeServerOptions {
   port?: number;
   host?: string;
+  socketPath?: string;
   controlPlaneUrl?: string;
   projectId: string;
   orgId?: string;
   snapshotDiskCachePath?: string;
   isolationProvider: IsolationProvider;
+  rateLimiter?: MultiTenantRateLimiter;
   pollIntervalMs?: number; // default: 5000ms
   signal?: AbortSignal;
 }
@@ -72,6 +74,7 @@ export interface RuntimeServerOptions {
  */
 export interface RuntimeServer {
   port: number;
+  socketPath?: string;
   getSnapshotVersion(): number;
   close(): Promise<void>;
 }
@@ -122,7 +125,6 @@ function createErrorResponse(
   });
 }
 
-
 /**
  * Persists routing snapshot to disk cache for cold start resilience.
  *
@@ -153,7 +155,7 @@ export async function startRuntimeServer(
   let currentSnapshot: RoutingSnapshot | null = null;
   const projectSnapshots = new Map<string, RoutingSnapshot>();
   const artifactCache = new Map<string, Uint8Array>();
-  const rateLimiter = new MultiTenantRateLimiter();
+  const rateLimiter = options.rateLimiter ?? new MultiTenantRateLimiter();
   let isClosed = false;
   let timerId: ReturnType<typeof setInterval> | undefined = undefined;
 
@@ -274,6 +276,67 @@ export async function startRuntimeServer(
         }, intervalMs);
 
         cronTimers.set(timerKey, timer);
+      }
+    }
+  };
+
+  // Pre-warms isolate / code caches on snapshot ingestion
+  const prewarmSnapshotFunctions = async (
+    snapshot: RoutingSnapshot,
+    pId: string,
+  ) => {
+    if (
+      !options.isolationProvider ||
+      typeof options.isolationProvider.prewarm !== "function" ||
+      !snapshot.functions
+    ) {
+      return;
+    }
+
+    for (const [fnName, fnSnap] of Object.entries(snapshot.functions)) {
+      try {
+        let artifactCode = artifactCache.get(fnSnap.artifactId);
+        if (
+          (!artifactCode || artifactCode.byteLength === 0) &&
+          options.controlPlaneUrl
+        ) {
+          try {
+            const baseUrl = options.controlPlaneUrl.replace(/\/+$/, "");
+            const artUrl = `${baseUrl}/v1/artifacts/${
+              encodeURIComponent(fnSnap.artifactId)
+            }`;
+            const artRes = await fetch(artUrl);
+            if (artRes.status === 200) {
+              artifactCode = new Uint8Array(await artRes.arrayBuffer());
+              artifactCache.set(fnSnap.artifactId, artifactCode);
+            }
+          } catch {
+            // ignore fetch failure during prewarm
+          }
+        }
+
+        const artifact: Artifact = {
+          id: fnSnap.artifactId,
+          integrity: fnSnap.artifactId,
+          entrypoint: "index.ts",
+          code: artifactCode ?? new Uint8Array(),
+        };
+        (artifact as unknown as Record<string, unknown>).project = pId;
+        (artifact as unknown as Record<string, unknown>).function = fnName;
+        (artifact as unknown as Record<string, unknown>).revision =
+          fnSnap.revisionId;
+        (artifact as unknown as Record<string, unknown>).orgId =
+          options.orgId ?? "default-org";
+
+        const limits: Limits = {
+          cpuMs: fnSnap.limits.cpu_ms,
+          timeoutMs: fnSnap.limits.timeout_ms,
+          memoryMb: fnSnap.limits.memory_mb,
+        };
+
+        await options.isolationProvider.prewarm(artifact, limits);
+      } catch {
+        // Non-fatal: prewarm failure does not break snapshot ingestion
       }
     }
   };
@@ -430,6 +493,7 @@ export async function startRuntimeServer(
       if (currentSnapshot) {
         projectSnapshots.set(options.projectId, currentSnapshot);
         syncCronSchedules(currentSnapshot, options.projectId);
+        await prewarmSnapshotFunctions(currentSnapshot, options.projectId);
       }
     } catch {
       // Non-fatal: disk cache absent or corrupt, proceed with initial fetch
@@ -471,6 +535,7 @@ export async function startRuntimeServer(
               );
             }
           }
+          await prewarmSnapshotFunctions(validated, pId);
           return validated;
         }
       }
@@ -582,7 +647,8 @@ export async function startRuntimeServer(
 
           const org = options.orgId ?? "default-org";
           for (const candProject of candidateProjects) {
-            const filePath = `${tempDir}/objects/${org}/${candProject}/${objPath}`;
+            const filePath =
+              `${tempDir}/objects/${org}/${candProject}/${objPath}`;
             try {
               const data = await Deno.readFile(filePath);
               return new Response(data, {
@@ -682,65 +748,73 @@ export async function startRuntimeServer(
       }
 
       // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (IP Scope)
-      const clientIp = req.headers.get("cf-connecting-ip") ||
-        req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-        "127.0.0.1";
-      const ipDecision = rateLimiter.check("ip", clientIp);
-      if (!ipDecision.allowed) {
-        return new Response(
-          JSON.stringify({
-            error: {
-              code: "RATE_LIMITED",
-              message: "Rate limit exceeded. Please retry later.",
-              request_id: requestId,
-              retry_after: ipDecision.retryAfterSeconds ?? 1,
-            },
-          }),
-          {
-            status: 429,
-            headers: {
-              "content-type": "application/json",
-              "retry-after": String(ipDecision.retryAfterSeconds ?? 1),
-              "x-ratelimit-limit": String(ipDecision.limit),
-              "x-ratelimit-remaining": String(ipDecision.remaining),
-              "x-request-id": requestId,
-              "request-id": requestId,
-            },
-          },
-        );
-      }
+      // When request arrives via the edge Ingress Gateway (apps/gateway), rate limiting has already
+      // been verified at perimeter. Bypass redundant internal double-deduction.
+      const isGatewayForwarded =
+        req.headers.get("x-forwarded-by") === "railfog-gateway";
 
-      // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (Identity Scope)
-      const authHeader = req.headers.get("authorization");
-      if (authHeader) {
-        const idDecision = rateLimiter.check("identity", authHeader);
-        if (!idDecision.allowed) {
+      if (!isGatewayForwarded) {
+        const clientIp = req.headers.get("cf-connecting-ip") ||
+          req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+          "127.0.0.1";
+        const ipDecision = rateLimiter.check("ip", clientIp);
+        if (!ipDecision.allowed) {
           return new Response(
             JSON.stringify({
               error: {
                 code: "RATE_LIMITED",
-                message: "Rate limit exceeded for token. Please retry later.",
+                message: "Rate limit exceeded. Please retry later.",
                 request_id: requestId,
-                retry_after: idDecision.retryAfterSeconds ?? 1,
+                retry_after: ipDecision.retryAfterSeconds ?? 1,
               },
             }),
             {
               status: 429,
               headers: {
                 "content-type": "application/json",
-                "retry-after": String(idDecision.retryAfterSeconds ?? 1),
-                "x-ratelimit-limit": String(idDecision.limit),
-                "x-ratelimit-remaining": String(idDecision.remaining),
+                "retry-after": String(ipDecision.retryAfterSeconds ?? 1),
+                "x-ratelimit-limit": String(ipDecision.limit),
+                "x-ratelimit-remaining": String(ipDecision.remaining),
                 "x-request-id": requestId,
                 "request-id": requestId,
               },
             },
           );
         }
+
+        // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (Identity Scope)
+        const authHeader = req.headers.get("authorization");
+        if (authHeader) {
+          const idDecision = rateLimiter.check("identity", authHeader);
+          if (!idDecision.allowed) {
+            return new Response(
+              JSON.stringify({
+                error: {
+                  code: "RATE_LIMITED",
+                  message: "Rate limit exceeded for token. Please retry later.",
+                  request_id: requestId,
+                  retry_after: idDecision.retryAfterSeconds ?? 1,
+                },
+              }),
+              {
+                status: 429,
+                headers: {
+                  "content-type": "application/json",
+                  "retry-after": String(idDecision.retryAfterSeconds ?? 1),
+                  "x-ratelimit-limit": String(idDecision.limit),
+                  "x-ratelimit-remaining": String(idDecision.remaining),
+                  "x-request-id": requestId,
+                  "request-id": requestId,
+                },
+              },
+            );
+          }
+        }
       }
 
       // spec: contracts/platform.contract.md#PLAT-7, PLAT-8, PLAT-11, PLAT-15 — Multi-tenant project resolution
-      let requestedProject = req.headers.get("x-railfog-project")?.trim();
+      let requestedProject = req.headers.get("x-railfog-project")?.trim() ||
+        req.headers.get("x-project-id")?.trim();
       let lookupPath = url.pathname;
 
       // 1. Host resolution (custom domains or subdomains)
@@ -805,7 +879,7 @@ export async function startRuntimeServer(
 
       let activeSnapshot: RoutingSnapshot | null = null;
       let winningRoute: { pattern: string; function: string } | null = null;
-      let resolvedProjectId = options.projectId;
+      let resolvedProjectId = requestedProject || options.projectId;
 
       if (requestedProject && projectSnapshots.has(requestedProject)) {
         const snap = projectSnapshots.get(requestedProject)!;
@@ -817,7 +891,6 @@ export async function startRuntimeServer(
         }
       }
 
-
       if (
         !winningRoute && currentSnapshot && currentSnapshot.routes.length > 0
       ) {
@@ -825,7 +898,7 @@ export async function startRuntimeServer(
         if (match) {
           activeSnapshot = currentSnapshot;
           winningRoute = match;
-          resolvedProjectId = options.projectId;
+          resolvedProjectId = requestedProject || options.projectId;
         }
       }
 
@@ -852,29 +925,31 @@ export async function startRuntimeServer(
       }
 
       // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (Project Scope)
-      const projectDecision = rateLimiter.check("project", resolvedProjectId);
-      if (!projectDecision.allowed) {
-        return new Response(
-          JSON.stringify({
-            error: {
-              code: "RATE_LIMITED",
-              message: "Rate limit exceeded for project. Please retry later.",
-              request_id: requestId,
-              retry_after: projectDecision.retryAfterSeconds ?? 1,
+      if (!isGatewayForwarded) {
+        const projectDecision = rateLimiter.check("project", resolvedProjectId);
+        if (!projectDecision.allowed) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "RATE_LIMITED",
+                message: "Rate limit exceeded for project. Please retry later.",
+                request_id: requestId,
+                retry_after: projectDecision.retryAfterSeconds ?? 1,
+              },
+            }),
+            {
+              status: 429,
+              headers: {
+                "content-type": "application/json",
+                "retry-after": String(projectDecision.retryAfterSeconds ?? 1),
+                "x-ratelimit-limit": String(projectDecision.limit),
+                "x-ratelimit-remaining": String(projectDecision.remaining),
+                "x-request-id": requestId,
+                "request-id": requestId,
+              },
             },
-          }),
-          {
-            status: 429,
-            headers: {
-              "content-type": "application/json",
-              "retry-after": String(projectDecision.retryAfterSeconds ?? 1),
-              "x-ratelimit-limit": String(projectDecision.limit),
-              "x-ratelimit-remaining": String(projectDecision.remaining),
-              "x-request-id": requestId,
-              "request-id": requestId,
-            },
-          },
-        );
+          );
+        }
       }
 
       // spec: contracts/platform.contract.md#PLAT-8, PLAT-12 — Safe function metadata lookup (prototype pollution defense)
@@ -957,7 +1032,7 @@ export async function startRuntimeServer(
       };
 
       // spec: contracts/functions.contract.md#FN-6 — Fresh invocation headers (zero bleeding across warm invocations)
-      const invocationHeaders: Record<string, string> = {};
+      const invocationHeaders: Record<string, string> = Object.create(null);
       for (const [key, value] of req.headers.entries()) {
         invocationHeaders[key] = value;
       }
@@ -967,6 +1042,7 @@ export async function startRuntimeServer(
       invocationHeaders["x-railfog-function"] = winningRoute.function;
       invocationHeaders["x-railfog-revision"] = fnSnapshot.revisionId;
       invocationHeaders["x-railfog-org"] = options.orgId ?? "default-org";
+      invocationHeaders["x-railfog-trigger"] = "http";
 
       // spec: contracts/functions.contract.md#FN-5 — Request body size limit (10MB default, reject with 413 PAYLOAD_TOO_LARGE)
       const maxRequestBodyBytes = 10 * 1024 * 1024;
@@ -1074,16 +1150,37 @@ export async function startRuntimeServer(
     }
   };
 
-  // spec: contracts/platform.contract.md#PLAT-1, PLAT-19 — Server binding lifecycle
-  const server = Deno.serve(
-    {
-      port: options.port ?? DEFAULT_RUNTIME_PORT,
-      hostname: options.host ?? DEFAULT_RUNTIME_HOST,
-      signal: options.signal,
-      onListen: () => {},
-    },
-    handler,
+  const isUnixSocket = Boolean(
+    options.socketPath && Deno.build.os !== "windows",
   );
+
+  if (isUnixSocket && options.socketPath) {
+    try {
+      await Deno.remove(options.socketPath);
+    } catch {
+      // Non-fatal: ignore if socket file does not exist
+    }
+  }
+
+  // spec: contracts/platform.contract.md#PLAT-1, PLAT-19 — Server binding lifecycle
+  const server = isUnixSocket
+    ? Deno.serve(
+      {
+        path: options.socketPath!,
+        signal: options.signal,
+        onListen: () => {},
+      },
+      handler,
+    )
+    : Deno.serve(
+      {
+        port: options.port ?? DEFAULT_RUNTIME_PORT,
+        hostname: options.host ?? DEFAULT_RUNTIME_HOST,
+        signal: options.signal,
+        onListen: () => {},
+      },
+      handler,
+    );
 
   // Hook AbortSignal for graceful shutdown of background timer
   if (options.signal) {
@@ -1099,10 +1196,16 @@ export async function startRuntimeServer(
     });
   }
 
-  const assignedPort = (server.addr as Deno.NetAddr).port;
+  const assignedPort = "port" in server.addr
+    ? (server.addr as Deno.NetAddr).port
+    : undefined;
+  const boundSocketPath = "path" in server.addr
+    ? (server.addr as Deno.UnixAddr).path
+    : (isUnixSocket ? options.socketPath : undefined);
 
   const runtimeServer: RuntimeServer = {
-    port: assignedPort,
+    port: assignedPort ?? 0,
+    socketPath: boundSocketPath,
     getSnapshotVersion: () => currentSnapshot?.version ?? 0,
     close: async () => {
       isClosed = true;
@@ -1118,6 +1221,13 @@ export async function startRuntimeServer(
       } catch {
         // Non-fatal: server may already be shut down via AbortSignal
       }
+      if (isUnixSocket && options.socketPath) {
+        try {
+          await Deno.remove(options.socketPath);
+        } catch {
+          // Best effort cleanup of socket file
+        }
+      }
     },
   };
 
@@ -1128,6 +1238,8 @@ export async function startRuntimeServer(
 if (import.meta.main) {
   const port = parseInt(Deno.env.get("PORT") || "8080", 10);
   const host = Deno.env.get("HOST") || "0.0.0.0";
+  const socketPath = Deno.env.get("SOCKET_PATH") ||
+    Deno.env.get("RAILFOG_SOCKET_PATH") || undefined;
   const controlPlaneUrl = Deno.env.get("RAILFOG_CONTROL_URL") || undefined;
   const projectId = Deno.env.get("RAILFOG_PROJECT_ID") || "default";
   const orgId = Deno.env.get("RAILFOG_ORG_ID") || "default-org";
@@ -1136,11 +1248,16 @@ if (import.meta.main) {
   const server = await startRuntimeServer({
     port,
     host,
+    socketPath,
     controlPlaneUrl,
     projectId,
     orgId,
     isolationProvider,
   });
 
-  console.log(`[railfog-runtime] listening on http://${host}:${server.port}`);
+  if (server.socketPath) {
+    console.log(`[railfog-runtime] listening on unix://${server.socketPath}`);
+  } else {
+    console.log(`[railfog-runtime] listening on http://${host}:${server.port}`);
+  }
 }

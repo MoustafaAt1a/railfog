@@ -318,6 +318,7 @@ Deno.test("AC1: startRuntimeServer loads initial snapshot and serves /healthz wi
 
   try {
     const options: RuntimeServerOptions = {
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -367,6 +368,7 @@ Deno.test("AC1: GET /healthz propagates existing request_id header unchanged per
 
   try {
     const options: RuntimeServerOptions = {
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -440,6 +442,7 @@ Deno.test("AC2: dispatches requests according to PLAT-11 specificity score", asy
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -490,6 +493,7 @@ Deno.test("AC2: unmapped route returns HTTP 404 RESOURCE_NOT_FOUND per PLAT-12",
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -527,6 +531,7 @@ Deno.test("AC2: propagates HTTP method, request headers, and body to IsolationPr
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -583,6 +588,7 @@ Deno.test("PLAT-12: unhandled error in isolation provider returns HTTP 500 INTER
   };
 
   const options: RuntimeServerOptions = {
+    port: 0,
     projectId,
     controlPlaneUrl: mockCp.url,
     isolationProvider,
@@ -624,6 +630,7 @@ Deno.test("AC3: continues serving traffic indefinitely during complete control p
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -678,6 +685,7 @@ Deno.test("AC3: cold starts from disk cache when control plane is completely una
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: deadControlPlaneUrl,
       snapshotDiskCachePath: diskCachePath,
@@ -740,6 +748,7 @@ Deno.test("AC4 & Security: consecutive invocations in warm isolates receive fres
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -818,6 +827,7 @@ Deno.test("AC5: dynamically updates routing snapshot in background without dropp
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -875,6 +885,7 @@ Deno.test("AC5: poller includes If-None-Match header and handles 304 Not Modifie
 
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -914,6 +925,7 @@ Deno.test("Server Lifecycle: close() terminates cleanly and stops polling withou
   const isolationProvider = new MockIsolationProvider();
 
   const server = await startRuntimeServer({
+    port: 0,
     projectId,
     controlPlaneUrl: mockCp.url,
     isolationProvider,
@@ -942,6 +954,7 @@ Deno.test("Server Lifecycle: respects AbortSignal for graceful shutdown", async 
   const controller = new AbortController();
 
   const server = await startRuntimeServer({
+    port: 0,
     projectId,
     controlPlaneUrl: mockCp.url,
     isolationProvider,
@@ -981,6 +994,7 @@ Deno.test("FN-5: runtime server rejects request body exceeding 10MB limit with H
   let server: RuntimeServer | null = null;
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -1011,6 +1025,7 @@ Deno.test("Control Plane Routing: proxies /login to controlPlaneUrl when configu
   let server: RuntimeServer | null = null;
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId,
       controlPlaneUrl: mockCp.url,
       isolationProvider,
@@ -1035,6 +1050,7 @@ Deno.test("Control Plane Routing: returns informative 404 when /login accessed w
   let server: RuntimeServer | null = null;
   try {
     server = await startRuntimeServer({
+      port: 0,
       projectId: "proj_test_no_cp",
       isolationProvider,
       pollIntervalMs: 10000,
