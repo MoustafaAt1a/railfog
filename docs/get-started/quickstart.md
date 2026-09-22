@@ -1,11 +1,13 @@
 # 5-Minute Quickstart
 
 > [!NOTE]
-> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp;
-> **Prerequisites**: Deno v2.0+ (or use standalone native binary) &nbsp;|&nbsp;
-> **Time to Complete**: 5 minutes
+> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp; **Prerequisites**:
+> Deno v2.0+ (or use standalone native binary) &nbsp;|&nbsp; **Time to
+> Complete**: 5 minutes
 
-This guide walks you through installing the RailFog CLI, creating a project, running the local development server with SQLite backing services, and deploying to production.
+This guide walks you through installing the RailFog CLI, creating a project,
+running the local development server with SQLite backing services, and deploying
+to production.
 
 ---
 
@@ -25,6 +27,7 @@ rail --version
 
 > [!TIP]
 > Alternatively, compile a standalone binary with zero dependencies:
+>
 > ```bash
 > deno compile -A -o rail cli/main.ts
 > ```
@@ -41,6 +44,7 @@ cd hello-world
 ```
 
 This generates the standard project structure:
+
 ```text
 hello-world/
 ├── railfog.toml      # Declarative manifest (triggers, limits, permissions)
@@ -53,7 +57,8 @@ hello-world/
 
 ## Step 3: Inspect the Function Handler
 
-Open `functions/api.ts`. RailFog handlers use standard Web API `Request` and `Response` objects alongside the injected `RailFogContext`:
+Open `functions/api.ts`. RailFog handlers use standard Web API `Request` and
+`Response` objects alongside the injected `RailFogContext`:
 
 ```typescript
 import { handle } from "@railfog/sdk";
@@ -82,6 +87,7 @@ rail dev
 ```
 
 Terminal output:
+
 ```text
 RailFog dev server running on http://localhost:8000
 Dashboard on http://localhost:8000/__railfog
@@ -95,6 +101,7 @@ Routes:
 ```
 
 Test the endpoint:
+
 ```bash
 curl http://localhost:8000/api/hello
 ```
@@ -103,13 +110,15 @@ curl http://localhost:8000/api/hello
 
 ## Step 5: Validate Configuration Statically
 
-Before deployment, run `rail check` to statically verify your configuration and entrypoints:
+Before deployment, run `rail check` to statically verify your configuration and
+entrypoints:
 
 ```bash
 rail check
 ```
 
 `rail check` validates:
+
 - `railfog.toml` schema adherence.
 - Entrypoint existence and security constraints.
 - Route specificity score calculations (`PLAT-11`).
@@ -129,12 +138,15 @@ rail login
 rail deploy
 ```
 
-RailFog bundles your TypeScript functions, computes content-addressed SHA-256 hashes (`OBJ-4`), pre-warms runtime sandboxes, and executes an atomic traffic flip to the new revision.
+RailFog bundles your TypeScript functions, computes content-addressed SHA-256
+hashes (`OBJ-4`), pre-warms runtime sandboxes, and executes an atomic traffic
+flip to the new revision.
 
 ---
 
 ## Next Steps
 
 - Explore the [Project Structure Guide](project-structure.md).
-- Learn about the [Declarative Manifest (`railfog.toml`)](../configuration/manifest.md).
+- Learn about the
+  [Declarative Manifest (`railfog.toml`)](../configuration/manifest.md).
 - Dive into the [TypeScript SDK Guide](../sdk/overview.md).

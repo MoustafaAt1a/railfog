@@ -1,34 +1,49 @@
 # TypeScript SDK Developer Guide (`@railfog/sdk`)
 
 > [!NOTE]
-> **Package**: `@railfog/sdk` &nbsp;|&nbsp;
-> **Runtime**: Deno v2.0+ &nbsp;|&nbsp;
-> **Dependencies**: Zero External (Native Web Standards Only) &nbsp;|&nbsp;
-> **Types**: Strict Mode Compatible
+> **Package**: `@railfog/sdk` &nbsp;|&nbsp; **Runtime**: Deno v2.0+
+> &nbsp;|&nbsp; **Dependencies**: Zero External (Native Web Standards Only)
+> &nbsp;|&nbsp; **Types**: Strict Mode Compatible
 
-This guide provides the complete developer reference for building functions, consumers, and services using `@railfog/sdk`.
+This guide provides the complete developer reference for building functions,
+consumers, and services using `@railfog/sdk`.
 
 ---
 
 ## 1. Core Architecture & Invocation Model
 
-RailFog strictly enforces the **Trigger -> Function** computational model ([`PLAT-2`](contracts/platform.contract.md#PLAT-2), [`FN-1`](contracts/functions.contract.md#FN-1), [`FN-2`](contracts/functions.contract.md#FN-2)). Workloads originating from HTTP routes, scheduled cron ticks, queue messages, or webhooks invoke isolated TypeScript function handlers.
+RailFog strictly enforces the **Trigger -> Function** computational model
+([`PLAT-2`](contracts/platform.contract.md#PLAT-2),
+[`FN-1`](contracts/functions.contract.md#FN-1),
+[`FN-2`](contracts/functions.contract.md#FN-2)). Workloads originating from HTTP
+routes, scheduled cron ticks, queue messages, or webhooks invoke isolated
+TypeScript function handlers.
 
 ### Capability Injection ([`PLAT-6`](contracts/platform.contract.md#PLAT-6), [`FN-4`](contracts/functions.contract.md#FN-4))
-Functions do not import a global ambient SDK client. Instead, each invocation receives an isolated `RailFogContext` (`ctx`) carrying capability bindings physically scoped to the manifest declarations in `railfog.toml`:
-- `ctx.kv`: Key-Value storage scoped to the declared namespace ([`KV-2`](contracts/kv.contract.md#KV-2)).
-- `ctx.objects`: Object storage scoped to the declared bucket ([`OBJ-2`](contracts/objects.contract.md#OBJ-2)).
-- `ctx.queues`: Queue sender scoped to the declared target queue ([`Q-2`](contracts/queues.contract.md#Q-2)).
-- `ctx.env`: Environment secrets scoped to declared secret keys ([`PLAT-15`](contracts/platform.contract.md#PLAT-15)).
+
+Functions do not import a global ambient SDK client. Instead, each invocation
+receives an isolated `RailFogContext` (`ctx`) carrying capability bindings
+physically scoped to the manifest declarations in `railfog.toml`:
+
+- `ctx.kv`: Key-Value storage scoped to the declared namespace
+  ([`KV-2`](contracts/kv.contract.md#KV-2)).
+- `ctx.objects`: Object storage scoped to the declared bucket
+  ([`OBJ-2`](contracts/objects.contract.md#OBJ-2)).
+- `ctx.queues`: Queue sender scoped to the declared target queue
+  ([`Q-2`](contracts/queues.contract.md#Q-2)).
+- `ctx.env`: Environment secrets scoped to declared secret keys
+  ([`PLAT-15`](contracts/platform.contract.md#PLAT-15)).
 
 > [!IMPORTANT]
-> If a capability is not declared in `railfog.toml`, the property on `ctx` is undefined. Undeclared resources cannot be accessed at runtime.
+> If a capability is not declared in `railfog.toml`, the property on `ctx` is
+> undefined. Undeclared resources cannot be accessed at runtime.
 
 ---
 
 ## 2. Invocation Context: `RailFogContext` ([`FN-4`](contracts/functions.contract.md#FN-4))
 
-The `RailFogContext` interface provides invocation metadata and capability-scoped bindings:
+The `RailFogContext` interface provides invocation metadata and
+capability-scoped bindings:
 
 ```typescript
 import type {
@@ -52,7 +67,9 @@ export default async function handler(
   // Deadline tracking and execution budget (FN-4, FN-5)
   const msRemaining = ctx.timeRemaining();
   if (msRemaining < 50) {
-    return Response.json({ error: "Execution deadline imminent" }, { status: 504 });
+    return Response.json({ error: "Execution deadline imminent" }, {
+      status: 504,
+    });
   }
 
   // Access capability-scoped secrets (PLAT-15)
@@ -64,25 +81,28 @@ export default async function handler(
 
 ### Context API Reference
 
-| Member | Type | Spec Anchor | Description |
-|---|---|---|---|
-| `ctx.requestId` | `string` | [`PLAT-14`](contracts/platform.contract.md#PLAT-14) | Monotonically sortable ULID tracking the invocation across gateway, logs, and storage. |
-| `ctx.project` | `string` | [`PLAT-18`](contracts/platform.contract.md#PLAT-18) | Project resource name declared in `railfog.toml`. |
-| `ctx.function` | `string` | [`FN-1`](contracts/functions.contract.md#FN-1) | Name of the currently executing function. |
-| `ctx.revision` | `string` | [`PLAT-3`](contracts/platform.contract.md#PLAT-3) | Immutable deployment revision identifier. |
-| `ctx.deadline` | `number` | [`FN-5`](contracts/functions.contract.md#FN-5) | Epoch millisecond timestamp of the hard termination deadline. |
-| `ctx.timeRemaining()` | `() => number` | [`FN-4`](contracts/functions.contract.md#FN-4) | Returns milliseconds remaining before hard termination. |
-| `ctx.kv` | `KVBinding` | [`KV-2`](contracts/kv.contract.md#KV-2) | Capability-scoped Key-Value storage handle. |
-| `ctx.objects` | `ObjectBinding` | [`OBJ-2`](contracts/objects.contract.md#OBJ-2) | Capability-scoped Object storage handle. |
-| `ctx.queues` | `QueueBinding` | [`Q-2`](contracts/queues.contract.md#Q-2) | Capability-scoped Queue sender handle. |
-| `ctx.env` | `EnvBinding` | [`PLAT-15`](contracts/platform.contract.md#PLAT-15) | Capability-scoped encrypted secret resolver. |
+| Member                | Type            | Spec Anchor                                         | Description                                                                            |
+| --------------------- | --------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `ctx.requestId`       | `string`        | [`PLAT-14`](contracts/platform.contract.md#PLAT-14) | Monotonically sortable ULID tracking the invocation across gateway, logs, and storage. |
+| `ctx.project`         | `string`        | [`PLAT-18`](contracts/platform.contract.md#PLAT-18) | Project resource name declared in `railfog.toml`.                                      |
+| `ctx.function`        | `string`        | [`FN-1`](contracts/functions.contract.md#FN-1)      | Name of the currently executing function.                                              |
+| `ctx.revision`        | `string`        | [`PLAT-3`](contracts/platform.contract.md#PLAT-3)   | Immutable deployment revision identifier.                                              |
+| `ctx.deadline`        | `number`        | [`FN-5`](contracts/functions.contract.md#FN-5)      | Epoch millisecond timestamp of the hard termination deadline.                          |
+| `ctx.timeRemaining()` | `() => number`  | [`FN-4`](contracts/functions.contract.md#FN-4)      | Returns milliseconds remaining before hard termination.                                |
+| `ctx.kv`              | `KVBinding`     | [`KV-2`](contracts/kv.contract.md#KV-2)             | Capability-scoped Key-Value storage handle.                                            |
+| `ctx.objects`         | `ObjectBinding` | [`OBJ-2`](contracts/objects.contract.md#OBJ-2)      | Capability-scoped Object storage handle.                                               |
+| `ctx.queues`          | `QueueBinding`  | [`Q-2`](contracts/queues.contract.md#Q-2)           | Capability-scoped Queue sender handle.                                                 |
+| `ctx.env`             | `EnvBinding`    | [`PLAT-15`](contracts/platform.contract.md#PLAT-15) | Capability-scoped encrypted secret resolver.                                           |
 
 ---
 
 ## 3. Storage Primitives
 
 ### 3.1 Key-Value Storage (`ctx.kv` / `KVBinding`) ([`KV-2`](contracts/kv.contract.md#KV-2), [`KV-5`](contracts/kv.contract.md#KV-5))
-The KV primitive provides structured state management up to 256 KB per entry ([`KV-1`](contracts/kv.contract.md#KV-1)) using hierarchical string tuple keys and atomic Check-And-Set transactions ([`KV-3`](contracts/kv.contract.md#KV-3)).
+
+The KV primitive provides structured state management up to 256 KB per entry
+([`KV-1`](contracts/kv.contract.md#KV-1)) using hierarchical string tuple keys
+and atomic Check-And-Set transactions ([`KV-3`](contracts/kv.contract.md#KV-3)).
 
 ```typescript
 import type {
@@ -95,10 +115,15 @@ import type {
 
 export async function demonstrateKV(kv: KVBinding): Promise<void> {
   // Set value with optional TTL in seconds (KV-2)
-  await kv.set(["sessions", "user-123"], { authenticated: true }, { ttl: 3600 });
+  await kv.set(["sessions", "user-123"], { authenticated: true }, {
+    ttl: 3600,
+  });
 
   // Retrieve typed value
-  const session = await kv.get<{ authenticated: boolean }>(["sessions", "user-123"]);
+  const session = await kv.get<{ authenticated: boolean }>([
+    "sessions",
+    "user-123",
+  ]);
 
   // Atomic Check-And-Set (CAS) transaction (KV-2, KV-3)
   const atomic = kv.atomic();
@@ -122,12 +147,18 @@ export async function demonstrateKV(kv: KVBinding): Promise<void> {
 ---
 
 ### 3.2 Object Storage (`ctx.objects` / `ObjectBinding`) ([`OBJ-2`](contracts/objects.contract.md#OBJ-2), [`OBJ-3`](contracts/objects.contract.md#OBJ-3))
-The Object primitive stores durable binary assets such as file uploads, media, and datasets ([`OBJ-1`](contracts/objects.contract.md#OBJ-1)).
+
+The Object primitive stores durable binary assets such as file uploads, media,
+and datasets ([`OBJ-1`](contracts/objects.contract.md#OBJ-1)).
 
 #### Direct Client-to-Storage Transfer ([`OBJ-3`](contracts/objects.contract.md#OBJ-3) — Never a Bandwidth Proxy)
-RailFog functions **never act as a bandwidth proxy**. Streaming large binary payloads through serverless functions consumes isolate memory, CPU cycles, and network bandwidth while degrading concurrency.
 
-Instead, functions generate time-limited SigV4 presigned URLs via `ctx.objects.presign`, allowing clients to stream bytes directly to storage:
+RailFog functions **never act as a bandwidth proxy**. Streaming large binary
+payloads through serverless functions consumes isolate memory, CPU cycles, and
+network bandwidth while degrading concurrency.
+
+Instead, functions generate time-limited SigV4 presigned URLs via
+`ctx.objects.presign`, allowing clients to stream bytes directly to storage:
 
 ```typescript
 import type {
@@ -165,7 +196,10 @@ Client ───────(3) PUT Binary Bytes Direct───► S3 / R2 Buck
 ---
 
 ### 3.3 Asynchronous Queues (`ctx.queues` / `QueueBinding`) ([`Q-2`](contracts/queues.contract.md#Q-2), [`Q-3`](contracts/queues.contract.md#Q-3))
-Queues provide decoupled message processing with at-least-once delivery ([`Q-1`](contracts/queues.contract.md#Q-1)). Payloads are capped at 128 KB ([`Q-2`](contracts/queues.contract.md#Q-2)).
+
+Queues provide decoupled message processing with at-least-once delivery
+([`Q-1`](contracts/queues.contract.md#Q-1)). Payloads are capped at 128 KB
+([`Q-2`](contracts/queues.contract.md#Q-2)).
 
 ```typescript
 import type {
@@ -178,7 +212,9 @@ import type {
 
 export async function dispatchJobs(queues: QueueBinding): Promise<void> {
   // Send single message with optional delivery delay up to 15 minutes (Q-2)
-  const { id } = await queues.send({ taskId: "task_456", action: "index" }, { delay: 60 });
+  const { id } = await queues.send({ taskId: "task_456", action: "index" }, {
+    delay: 60,
+  });
 
   // Send batch of messages atomically
   const results = await queues.sendBatch([
@@ -192,12 +228,19 @@ export async function dispatchJobs(queues: QueueBinding): Promise<void> {
 
 ## 4. Reliability Helpers
 
-RailFog provides standard reliability primitives in `@railfog/sdk` as library code built over KV ([`Q-6`](contracts/queues.contract.md#Q-6)), avoiding unnecessary platform complexity.
+RailFog provides standard reliability primitives in `@railfog/sdk` as library
+code built over KV ([`Q-6`](contracts/queues.contract.md#Q-6)), avoiding
+unnecessary platform complexity.
 
 ### 4.1 `withIdempotency` ([`Q-4`](contracts/queues.contract.md#Q-4), [`KV-2`](contracts/kv.contract.md#KV-2))
-Guarantees exactly-once execution semantics for queue consumers under at-least-once delivery ([`Q-1`](contracts/queues.contract.md#Q-1)).
 
-The deduplication marker is stored in KV with a mandatory TTL matching the queue's retention window (`14 * 24 * 3600` seconds / 14 days per [`Q-4`](contracts/queues.contract.md#Q-4)). Omission of TTL is strictly rejected to prevent unbounded database growth.
+Guarantees exactly-once execution semantics for queue consumers under
+at-least-once delivery ([`Q-1`](contracts/queues.contract.md#Q-1)).
+
+The deduplication marker is stored in KV with a mandatory TTL matching the
+queue's retention window (`14 * 24 * 3600` seconds / 14 days per
+[`Q-4`](contracts/queues.contract.md#Q-4)). Omission of TTL is strictly rejected
+to prevent unbounded database growth.
 
 ```typescript
 import { withIdempotency } from "@railfog/sdk";
@@ -209,7 +252,10 @@ import type {
   RailFogContext,
 } from "@railfog/sdk";
 
-export async function processOrder(kv: KVBinding, orderId: string): Promise<void> {
+export async function processOrder(
+  kv: KVBinding,
+  orderId: string,
+): Promise<void> {
   const dedupeKey = ["processed_orders", orderId];
 
   const { processed, result } = await withIdempotency(
@@ -227,11 +273,15 @@ export async function processOrder(kv: KVBinding, orderId: string): Promise<void
 ---
 
 ### 4.2 `withRetry` ([`Q-5`](contracts/queues.contract.md#Q-5))
-Executes transient network operations using exponential backoff with decorrelated jitter to prevent thundering herds:
+
+Executes transient network operations using exponential backoff with
+decorrelated jitter to prevent thundering herds:
 
 $$t_{\text{sleep}} = \min(\text{cap}, \text{random\_uniform}(\text{base}, t_{\text{prev}} \times 3))$$
 
-Default parameters: `baseMs = 100`, `capMs = 20000`, `maxAttempts = 5`. On exhaustion of retry attempts, the original error is preserved and rethrown unchanged ([`PLAT-12`](contracts/platform.contract.md#PLAT-12)).
+Default parameters: `baseMs = 100`, `capMs = 20000`, `maxAttempts = 5`. On
+exhaustion of retry attempts, the original error is preserved and rethrown
+unchanged ([`PLAT-12`](contracts/platform.contract.md#PLAT-12)).
 
 ```typescript
 import { withRetry } from "@railfog/sdk";
@@ -261,28 +311,32 @@ export async function fetchWithBackoff(targetUrl: string): Promise<Response> {
 
 ## 5. Machine-Readable Error Model ([`PLAT-12`](contracts/platform.contract.md#PLAT-12))
 
-All RailFog platform exceptions inherit from `RailFogError` and map to one of 10 exhaustive, machine-readable error codes:
+All RailFog platform exceptions inherit from `RailFogError` and map to one of 10
+exhaustive, machine-readable error codes:
 
-| Error Code | HTTP Status | Description |
-|---|---|---|
-| `RESOURCE_NOT_FOUND` | 404 | Target project, function, or revision not found. |
-| `PERMISSION_DENIED` | 403 | Capability not present in resolved binding ([`PLAT-6`](contracts/platform.contract.md#PLAT-6)). |
-| `VALIDATION_FAILED` | 400 | Configuration or payload failed schema validation. |
-| `RATE_LIMITED` | 429 | Token bucket capacity exceeded (`PLAT-9`). Includes `Retry-After`. |
-| `CALL_DEPTH_EXCEEDED`| 429 | Recursive function call depth exceeded limit (`FN-7`). |
-| `TIMEOUT` | 504 | Wall-clock execution deadline exceeded ([`FN-5`](contracts/functions.contract.md#FN-5)). |
-| `PAYLOAD_TOO_LARGE` | 413 | Request body, KV value, or queue message exceeded size ceiling. |
-| `CONFLICT` | 409 | CAS version mismatch in `kv.atomic()` ([`KV-3`](contracts/kv.contract.md#KV-3)). |
-| `UNAVAILABLE` | 503 | Control plane unreachable; serving from cached snapshot ([`PLAT-8`](contracts/platform.contract.md#PLAT-8)). |
-| `INTERNAL` | 500 | Unclassified platform or isolate failure. |
+| Error Code            | HTTP Status | Description                                                                                                  |
+| --------------------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| `RESOURCE_NOT_FOUND`  | 404         | Target project, function, or revision not found.                                                             |
+| `PERMISSION_DENIED`   | 403         | Capability not present in resolved binding ([`PLAT-6`](contracts/platform.contract.md#PLAT-6)).              |
+| `VALIDATION_FAILED`   | 400         | Configuration or payload failed schema validation.                                                           |
+| `RATE_LIMITED`        | 429         | Token bucket capacity exceeded (`PLAT-9`). Includes `Retry-After`.                                           |
+| `CALL_DEPTH_EXCEEDED` | 429         | Recursive function call depth exceeded limit (`FN-7`).                                                       |
+| `TIMEOUT`             | 504         | Wall-clock execution deadline exceeded ([`FN-5`](contracts/functions.contract.md#FN-5)).                     |
+| `PAYLOAD_TOO_LARGE`   | 413         | Request body, KV value, or queue message exceeded size ceiling.                                              |
+| `CONFLICT`            | 409         | CAS version mismatch in `kv.atomic()` ([`KV-3`](contracts/kv.contract.md#KV-3)).                             |
+| `UNAVAILABLE`         | 503         | Control plane unreachable; serving from cached snapshot ([`PLAT-8`](contracts/platform.contract.md#PLAT-8)). |
+| `INTERNAL`            | 500         | Unclassified platform or isolate failure.                                                                    |
 
 ---
 
 ## 6. Canonical Worked Example: `upload-demo`
 
-The canonical worked example ([`docs/contracts/worked-example.md`](contracts/worked-example.md)) exercises all four platform primitives end-to-end:
+The canonical worked example
+([`docs/contracts/worked-example.md`](contracts/worked-example.md)) exercises
+all four platform primitives end-to-end:
 
 ### Project Configuration (`railfog.toml`)
+
 ```toml
 name = "upload-demo"
 
@@ -306,6 +360,7 @@ function = "api"
 ```
 
 ### Handler: `functions/api.ts`
+
 ```typescript
 import type {
   KVBinding,
@@ -329,6 +384,7 @@ export default async function handler(
 ```
 
 ### Queue Consumer: `functions/processor.ts`
+
 ```typescript
 import type {
   KVBinding,
@@ -363,7 +419,9 @@ export default async function consume(
 ## 7. Ergonomic Handlers & Utilities
 
 ### 7.1 Minimalist HTTP Handler (`handle`)
-Eliminates boilerplate with auto-destructured context and automatic JSON response serialization:
+
+Eliminates boilerplate with auto-destructured context and automatic JSON
+response serialization:
 
 ```typescript
 import { handle } from "@railfog/sdk";
@@ -376,6 +434,7 @@ export default handle(async ({ kv }) => {
 ```
 
 ### 7.2 Micro-Router (`api`)
+
 Handles multiple HTTP methods and paths in a single function file:
 
 ```typescript
@@ -394,6 +453,7 @@ export default api({
 ```
 
 ### 7.3 Streaming Responses (`c.stream`)
+
 Emits chunked Web Streams responses:
 
 ```typescript
@@ -409,6 +469,7 @@ export default handle((c) => {
 ```
 
 ### 7.4 Server-Sent Events (`c.sse`)
+
 Streams real-time event frames:
 
 ```typescript
@@ -423,6 +484,7 @@ export default handle((c) => {
 ```
 
 ### 7.5 Type-Safe RPC Client (`createRpcClient`)
+
 Enables end-to-end typed communication from frontend or external microservices:
 
 ```typescript
@@ -430,4 +492,200 @@ import { createRpcClient } from "@railfog/sdk";
 
 const client = createRpcClient("https://api.example.com");
 const data = await client.get<{ total: number }>("/api/metrics");
+```
+
+### 7.6 Universal Schema Validation (`c.body(schema)`)
+
+Validates incoming JSON payloads using
+[Standard Schema](https://standardschema.dev) (`~standard`), Zod / Valibot
+duck-typing (`safeParse`), or custom validator predicates:
+
+```typescript
+import { handle } from "@railfog/sdk";
+import { z } from "npm:zod";
+
+const CreateUserSchema = z.object({
+  username: z.string().min(3),
+  email: z.string().email(),
+});
+
+export default handle(async ({ body, kv }) => {
+  // Automatically parses, validates, and throws canonical ValidationFailedError (HTTP 400) on error
+  const user = await body(CreateUserSchema);
+  await kv.set(["users", user.username], user);
+  return { ok: true, user };
+});
+```
+
+### 7.7 Fluent Micro-Router (`router()`)
+
+Chain HTTP methods, URLPattern route parameters, and middleware handlers
+directly:
+
+```typescript
+import { router } from "@railfog/sdk";
+
+interface Item {
+  id: string;
+  name?: string;
+}
+
+const app = router()
+  .use(async (c, next) => {
+    const res = await next();
+    res.headers.set("x-request-id", c.requestId);
+    return res;
+  })
+  .get("/items", async ({ kv, json }) => {
+    const items = await kv.get<Item[]>(["items"]);
+    return json(items ?? []);
+  })
+  .post("/items", async ({ body, kv, json }) => {
+    const item = await body<Item>();
+    await kv.set(["items", item.id], item);
+    return json(item, 201);
+  })
+  .get("/items/:id", async ({ params, kv, notFound, json }) => {
+    const id = params?.id;
+    if (!id) notFound("Item ID required");
+    const item = await kv.get<Item>(["items", id!]);
+    if (!item) notFound("Item not found");
+    return json(item);
+  });
+
+export default app;
+```
+
+### 7.8 Declarative Queue Consumer (`consumer()`)
+
+Wraps queue message handlers with optional automatic 14-day KV idempotency
+deduplication (`Q-4`):
+
+```typescript
+import { consumer, type KVBinding } from "@railfog/sdk";
+
+export default consumer<{ orderId: string }>(
+  async (message, ctx) => {
+    const { orderId } = message.body;
+    await ctx.kv.set(["orders", orderId], { processed: true });
+  },
+  { idempotent: true }, // Automatically deduplicates via KV with 14-day TTL
+);
+```
+
+### 7.9 Optimistic Concurrency Mutator (`mutate()`)
+
+Atomically updates KV values using Check-And-Set (`KV-3`) and decorrelated
+jitter retry loops (`Q-5`):
+
+```typescript
+import { handle, mutate } from "@railfog/sdk";
+
+export default handle(async ({ kv }) => {
+  const updatedCounter = await mutate<number>(
+    kv,
+    ["stats", "page_views"],
+    (current) => (current ?? 0) + 1,
+    { maxRetries: 5 },
+  );
+  return { views: updatedCounter };
+});
+```
+
+### 7.10 Scoped Namespaces (`scopedKV()`)
+
+Prefixes all keys and transparently strips prefixes when listing entries
+(`KV-2`, `PLAT-6`):
+
+```typescript
+import { handle, scopedKV } from "@railfog/sdk";
+
+export default handle(async ({ kv }) => {
+  const tenantKV = scopedKV(kv, "tenant_acme");
+  await tenantKV.set(["settings"], { dark_mode: true }); // Stored as ["tenant_acme", "settings"]
+  const res = await tenantKV.list([]); // Returns keys stripped back to ["settings"]
+  return res.entries;
+});
+```
+
+### 7.11 Cookie & Header Helpers (`c.cookie`, `c.setCookie`, `c.clearCookie`, `c.header`)
+
+Read and format HTTP cookies and headers with native Web Standards:
+
+```typescript
+import { handle } from "@railfog/sdk";
+
+export default handle((c) => {
+  const auth = c.header("authorization");
+  const session = c.cookie("session_token");
+
+  // Sets RFC 6265 compliant Set-Cookie header on response
+  c.setCookie("session_token", "new_token", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    maxAge: 86400,
+  });
+
+  // Clears a cookie
+  c.clearCookie("old_tracker");
+
+  return { session, auth };
+});
+```
+
+### 7.12 Zero-Config Unit Testing (`createMockContext()`)
+
+Test any RailFog function in microseconds with in-memory storage, zero mocks,
+and zero Docker:
+
+```typescript
+import { assertEquals } from "@std/assert";
+import { createMockContext, handle } from "@railfog/sdk";
+
+const apiHandler = handle(async ({ body, kv }) => {
+  const user = await body<{ username: string }>();
+  await kv.set(["users", user.username], user);
+  return { ok: true, user };
+});
+
+Deno.test("creates user and verifies KV", async () => {
+  const ctx = createMockContext({
+    env: { STRIPE_KEY: "sk_test_123" },
+  });
+
+  const req = new Request("https://app.railfog.net/api/users", {
+    method: "POST",
+    body: JSON.stringify({ username: "alice" }),
+  });
+
+  const res = await apiHandler(req, ctx);
+  assertEquals(res.status, 200);
+
+  // Inspect storage directly
+  assertEquals(await ctx.kv.get(["users", "alice"]), { username: "alice" });
+});
+```
+
+### 7.13 Zero-Boilerplate Object Stream Readers (`readBytes`, `readText`, `readJson`)
+
+Safely consume binary and text object streams returned from
+`c.objects.get(key)`:
+
+```typescript
+import { handle, readBytes, readJson, readText } from "@railfog/sdk";
+
+interface AppConfig {
+  theme: string;
+}
+
+export default handle(async ({ objects }) => {
+  const stream = await objects.get("notes.txt");
+  const text = await readText(stream);
+
+  const config = await readJson<AppConfig>(await objects.get("config.json"));
+  const rawBytes = await readBytes(await objects.get("avatar.png"));
+
+  return { text, config, bytes: rawBytes.byteLength };
+});
 ```

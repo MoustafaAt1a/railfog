@@ -1,11 +1,13 @@
 # SDK — Context & Capability Bindings (`FN-4`)
 
 > [!NOTE]
-> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp;
-> **Specification**: [FN-4 (RailFogContext), PLAT-6 (Capability Injection)](../contracts/platform.contract.md) &nbsp;|&nbsp;
-> **Lifecycle**: Fresh instance generated per invocation
+> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp; **Specification**:
+> [FN-4 (RailFogContext), PLAT-6 (Capability Injection)](../contracts/platform.contract.md)
+> &nbsp;|&nbsp; **Lifecycle**: Fresh instance generated per invocation
 
-Every function invocation in RailFog receives a `RailFogContext` (`ctx`) instance carrying invocation metadata and capability bindings scoped to the declarations in `railfog.toml`.
+Every function invocation in RailFog receives a `RailFogContext` (`ctx`)
+instance carrying invocation metadata and capability bindings scoped to the
+declarations in `railfog.toml`.
 
 ---
 
@@ -50,7 +52,9 @@ const handler: FunctionHandler = async (req, ctx) => {
 
   // 2. Budget and deadline management (FN-4, FN-5)
   if (ctx.timeRemaining() < 50) {
-    return Response.json({ error: "Execution budget exhausted" }, { status: 504 });
+    return Response.json({ error: "Execution budget exhausted" }, {
+      status: 504,
+    });
   }
 
   // 3. Capability-scoped storage operations

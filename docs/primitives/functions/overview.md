@@ -2,17 +2,21 @@
 
 > [!NOTE]
 > **Documentation**: [Docs Home](../../README.md) &nbsp;|&nbsp;
-> **Specification**: [FN-1, FN-2, FN-4](../../contracts/functions.contract.md) &nbsp;|&nbsp;
-> **Handler Signature**: `(req: Request, ctx: RailFogContext) => Promise<Response>`
+> **Specification**: [FN-1, FN-2, FN-4](../../contracts/functions.contract.md)
+> &nbsp;|&nbsp; **Handler Signature**:
+> `(req: Request, ctx: RailFogContext) => Promise<Response>`
 
-Functions are the primary compute primitive of RailFog. They are stateless, isolated TypeScript execution units invoked by triggers.
+Functions are the primary compute primitive of RailFog. They are stateless,
+isolated TypeScript execution units invoked by triggers.
 
 ---
 
 ## 1. Handler Signatures
 
 ### 1.1 HTTP Function Handler (`FN-1`)
-HTTP-triggered functions accept standard Web API `Request` objects and return standard Web API `Response` objects:
+
+HTTP-triggered functions accept standard Web API `Request` objects and return
+standard Web API `Response` objects:
 
 ```typescript
 import type { FunctionHandler } from "@railfog/sdk";
@@ -30,6 +34,7 @@ export default handler;
 ```
 
 ### 1.2 Queue Consumer Handler (`FN-2`, `Q-2`)
+
 Queue-triggered functions receive typed `QueueMessage` objects:
 
 ```typescript
@@ -64,12 +69,12 @@ schedule = "*/15 * * * *"
 webhook = true
 ```
 
-| Trigger | Description | Payload Delivery |
-|---|---|---|
-| `http` | Invoked on matching HTTP requests (`[[routes]]`). | Web API `Request` instance. |
-| `queue` | Invoked for messages delivered by the queue. | `QueueMessage<T>` instance with `body`, `id`, `attempts`. |
-| `schedule` | Invoked on standard cron ticks. | Synthetic `Request` with cron execution timestamp. |
-| `webhook` | Invoked by authenticated external webhook callers. | Web API `Request` with signature validation headers. |
+| Trigger    | Description                                        | Payload Delivery                                          |
+| ---------- | -------------------------------------------------- | --------------------------------------------------------- |
+| `http`     | Invoked on matching HTTP requests (`[[routes]]`).  | Web API `Request` instance.                               |
+| `queue`    | Invoked for messages delivered by the queue.       | `QueueMessage<T>` instance with `body`, `id`, `attempts`. |
+| `schedule` | Invoked on standard cron ticks.                    | Synthetic `Request` with cron execution timestamp.        |
+| `webhook`  | Invoked by authenticated external webhook callers. | Web API `Request` with signature validation headers.      |
 
 ---
 

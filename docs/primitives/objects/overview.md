@@ -2,10 +2,11 @@
 
 > [!NOTE]
 > **Documentation**: [Docs Home](../../README.md) &nbsp;|&nbsp;
-> **Specification**: [OBJ-1, OBJ-2, OBJ-4](../../contracts/objects.contract.md) &nbsp;|&nbsp;
-> **Compatibility**: Standard S3 / R2 API
+> **Specification**: [OBJ-1, OBJ-2, OBJ-4](../../contracts/objects.contract.md)
+> &nbsp;|&nbsp; **Compatibility**: Standard S3 / R2 API
 
-The Objects primitive (`ctx.objects` / `ObjectBinding`) provides durable binary asset storage for files, media, build artifacts, and database backups.
+The Objects primitive (`ctx.objects` / `ObjectBinding`) provides durable binary
+asset storage for files, media, build artifacts, and database backups.
 
 ---
 
@@ -14,7 +15,9 @@ The Objects primitive (`ctx.objects` / `ObjectBinding`) provides durable binary 
 ```typescript
 import type { ObjectBinding } from "@railfog/sdk";
 
-export async function demonstrateObjects(objects: ObjectBinding): Promise<void> {
+export async function demonstrateObjects(
+  objects: ObjectBinding,
+): Promise<void> {
   // 1. Write binary payload
   const data = new TextEncoder().encode("Hello Object Storage");
   await objects.put("reports/summary.txt", data, {
@@ -44,7 +47,9 @@ export async function demonstrateObjects(objects: ObjectBinding): Promise<void> 
 
 ## 2. The Direct-Transfer Philosophy (`OBJ-3`)
 
-Unlike legacy backends that proxy multi-megabyte file uploads through compute containers, RailFog enforces direct client-to-storage transfer via SigV4 presigned URLs. Functions never proxy raw binary streams.
+Unlike legacy backends that proxy multi-megabyte file uploads through compute
+containers, RailFog enforces direct client-to-storage transfer via SigV4
+presigned URLs. Functions never proxy raw binary streams.
 
 ---
 

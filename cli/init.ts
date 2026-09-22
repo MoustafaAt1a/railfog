@@ -266,11 +266,7 @@ function = "api"
 import { handle } from "@railfog/sdk";
 
 export default handle(async function handler(c) {
-  return {
-    message: "Hello from RailFog!",
-    project: c.project,
-    timestamp: Date.now(),
-  };
+  return c.text("Hello from RailFog!");
 });
 `;
 
@@ -635,10 +631,6 @@ function = "api"
 export const STARTER_FUNCTION = `import { handle } from "@railfog/sdk";
 
 export default handle(async function handler(c) {
-  return {
-    message: "Hello from RailFog!",
-    project: c.project,
-    timestamp: Date.now(),
-  };
+  return c.text("Hello from RailFog!");
 });
 `;

@@ -2,16 +2,21 @@
 
 > [!NOTE]
 > **Documentation**: [Docs Home](../../README.md) &nbsp;|&nbsp;
-> **Specification**: [OBJ-3 (Direct Client Transfers)](../../contracts/objects.contract.md#OBJ-3) &nbsp;|&nbsp;
-> **Invariant**: Functions never act as bandwidth proxies
+> **Specification**:
+> [OBJ-3 (Direct Client Transfers)](../../contracts/objects.contract.md#OBJ-3)
+> &nbsp;|&nbsp; **Invariant**: Functions never act as bandwidth proxies
 
-RailFog strictly enforces the **Zero-Bandwidth-Proxy Principle** (`OBJ-3`). Streaming multi-megabyte payloads through compute functions wastes isolate memory, CPU cycles, and network bandwidth while degrading concurrency.
+RailFog strictly enforces the **Zero-Bandwidth-Proxy Principle** (`OBJ-3`).
+Streaming multi-megabyte payloads through compute functions wastes isolate
+memory, CPU cycles, and network bandwidth while degrading concurrency.
 
 ---
 
 ## 1. Direct Transfer Architecture
 
-Functions generate time-limited SigV4 presigned URLs via `ctx.objects.presign`, allowing web and mobile clients to upload and download directly to durable storage:
+Functions generate time-limited SigV4 presigned URLs via `ctx.objects.presign`,
+allowing web and mobile clients to upload and download directly to durable
+storage:
 
 ```
 Direct Client-to-Storage Transfer Sequence (OBJ-3):
@@ -74,4 +79,5 @@ async function uploadFile(uploadUrl, fileBlob) {
 ## Next Steps
 
 - Explore the [Queues Primitive](../queues/overview.md).
-- Learn about [Idempotency & Dead-Letter Queues](../queues/dead-letter-queues.md).
+- Learn about
+  [Idempotency & Dead-Letter Queues](../queues/dead-letter-queues.md).

@@ -2,10 +2,12 @@
 
 > [!NOTE]
 > **Documentation**: [Docs Home](../../README.md) &nbsp;|&nbsp;
-> **Specification**: [KV-3 (Atomic CAS), KV-5 (Consistency Tiers)](../../contracts/kv.contract.md) &nbsp;|&nbsp;
-> **Enforcement**: Deploy-time validation (Zero silent downgrades)
+> **Specification**:
+> [KV-3 (Atomic CAS), KV-5 (Consistency Tiers)](../../contracts/kv.contract.md)
+> &nbsp;|&nbsp; **Enforcement**: Deploy-time validation (Zero silent downgrades)
 
-RailFog KV provides two explicit consistency tiers: **`strong`** and **`eventual`** (`KV-5`).
+RailFog KV provides two explicit consistency tiers: **`strong`** and
+**`eventual`** (`KV-5`).
 
 ---
 
@@ -21,24 +23,29 @@ consistency = "strong"
 consistency = "eventual"
 ```
 
-| Tier | Guarantees | Atomic CAS (`KV-3`) | Typical Use Cases | Backing Providers |
-|---|---|---|---|---|
-| **`strong`** | Linearizable per-key consistency. Guaranteed read-your-writes. | **Supported** | Sessions, financial balances, locks, deduplication markers. | SQLite (Local), Deno Deploy KV, Postgres. |
-| **`eventual`** | Replicated convergence within seconds. No ordering guarantees. | Not Supported | Feature flags, cached configurations, read-heavy catalogs. | Edge KV, Cloudflare Workers KV. |
+| Tier           | Guarantees                                                     | Atomic CAS (`KV-3`) | Typical Use Cases                                           | Backing Providers                         |
+| -------------- | -------------------------------------------------------------- | ------------------- | ----------------------------------------------------------- | ----------------------------------------- |
+| **`strong`**   | Linearizable per-key consistency. Guaranteed read-your-writes. | **Supported**       | Sessions, financial balances, locks, deduplication markers. | SQLite (Local), Deno Deploy KV, Postgres. |
+| **`eventual`** | Replicated convergence within seconds. No ordering guarantees. | Not Supported       | Feature flags, cached configurations, read-heavy catalogs.  | Edge KV, Cloudflare Workers KV.           |
 
 > [!WARNING]
-> Requesting `strong` consistency on an eventual-backed provider is a deploy-time validation error, never a silent downgrade (`KV-5`).
+> Requesting `strong` consistency on an eventual-backed provider is a
+> deploy-time validation error, never a silent downgrade (`KV-5`).
 
 ---
 
 ## 2. Atomic Check-And-Set (`CAS`) Transactions (`KV-3`)
 
-Under `strong` consistency, callers perform atomic optimistic concurrency mutations:
+Under `strong` consistency, callers perform atomic optimistic concurrency
+mutations:
 
 ```typescript
 import type { KVBinding } from "@railfog/sdk";
 
-export async function incrementCounter(kv: KVBinding, key: string[]): Promise<number> {
+export async function incrementCounter(
+  kv: KVBinding,
+  key: string[],
+): Promise<number> {
   while (true) {
     const entry = await kv.get<number>(key);
     const currentValue = entry ?? 0;

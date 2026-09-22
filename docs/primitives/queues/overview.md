@@ -2,10 +2,12 @@
 
 > [!NOTE]
 > **Documentation**: [Docs Home](../../README.md) &nbsp;|&nbsp;
-> **Specification**: [Q-1, Q-2, Q-3](../../contracts/queues.contract.md) &nbsp;|&nbsp;
-> **Delivery Model**: At-least-once delivery
+> **Specification**: [Q-1, Q-2, Q-3](../../contracts/queues.contract.md)
+> &nbsp;|&nbsp; **Delivery Model**: At-least-once delivery
 
-The Queues primitive (`ctx.queues` / `QueueBinding`) enables decoupled asynchronous message passing between functions, with at-least-once delivery guarantees and automatic dead-letter routing.
+The Queues primitive (`ctx.queues` / `QueueBinding`) enables decoupled
+asynchronous message passing between functions, with at-least-once delivery
+guarantees and automatic dead-letter routing.
 
 ---
 
@@ -33,13 +35,15 @@ export async function dispatchTasks(queues: QueueBinding): Promise<void> {
 ```
 
 > [!NOTE]
-> Queue message bodies are capped at 128 KB (`Q-2`). For larger datasets, store the file in Object storage and pass the object key in the message body.
+> Queue message bodies are capped at 128 KB (`Q-2`). For larger datasets, store
+> the file in Object storage and pass the object key in the message body.
 
 ---
 
 ## 2. Consumer Architecture (`QueueConsumerHandler`)
 
-A function declares a queue trigger in `railfog.toml` to automatically receive delivered messages:
+A function declares a queue trigger in `railfog.toml` to automatically receive
+delivered messages:
 
 ```toml
 [functions.processor]

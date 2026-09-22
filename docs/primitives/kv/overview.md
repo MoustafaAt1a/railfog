@@ -2,19 +2,26 @@
 
 > [!NOTE]
 > **Documentation**: [Docs Home](../../README.md) &nbsp;|&nbsp;
-> **Specification**: [KV-1, KV-2, KV-3](../../contracts/kv.contract.md) &nbsp;|&nbsp;
-> **Payload Limit**: 256 KB per value
+> **Specification**: [KV-1, KV-2, KV-3](../../contracts/kv.contract.md)
+> &nbsp;|&nbsp; **Payload Limit**: 256 KB per value
 
-The Key-Value primitive (`ctx.kv` / `KVBinding`) provides ultra-low-latency structured state storage using hierarchical string tuple keys and atomic Check-And-Set (`CAS`) transactions.
+The Key-Value primitive (`ctx.kv` / `KVBinding`) provides ultra-low-latency
+structured state storage using hierarchical string tuple keys and atomic
+Check-And-Set (`CAS`) transactions.
 
 ---
 
 ## 1. Key Concepts
 
-- **Hierarchical Tuple Keys**: Keys are arrays of strings (e.g. `["users", "123", "settings"]`), enabling structured prefix queries.
-- **Atomic Operations (`KV-3`)**: Atomic mutation pipelines (`atomic().check().set().commit()`) allow safe concurrent updates without locks.
-- **TTL Expiration**: Keys support time-to-live expiration in seconds, required for deduplication markers and ephemeral sessions.
-- **Size Ceilings (`KV-1`)**: Values are capped at 256 KB. For multi-megabyte payloads, use the [Objects Primitive](../objects/overview.md).
+- **Hierarchical Tuple Keys**: Keys are arrays of strings (e.g.
+  `["users", "123", "settings"]`), enabling structured prefix queries.
+- **Atomic Operations (`KV-3`)**: Atomic mutation pipelines
+  (`atomic().check().set().commit()`) allow safe concurrent updates without
+  locks.
+- **TTL Expiration**: Keys support time-to-live expiration in seconds, required
+  for deduplication markers and ephemeral sessions.
+- **Size Ceilings (`KV-1`)**: Values are capped at 256 KB. For multi-megabyte
+  payloads, use the [Objects Primitive](../objects/overview.md).
 
 ---
 

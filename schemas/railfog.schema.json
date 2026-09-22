@@ -4,7 +4,7 @@
   "title": "RailFog Project Configuration",
   "description": "Deterministic configuration schema for RailFog minimal application infrastructure platform (railfog.toml and railfog.json). Governed by docs/contracts/platform.contract.md and docs/contracts/functions.contract.md.",
   "type": "object",
-  "required": ["name"],
+  "required": ["name", "functions", "routes"],
   "properties": {
     "$schema": {
       "type": "string",
@@ -135,6 +135,18 @@
         },
         "additionalProperties": false
       }
+    },
+    "kv": {
+      "type": "object",
+      "description": "Optional top-level configuration for project-wide KV namespaces (KV-2)."
+    },
+    "objects": {
+      "type": "object",
+      "description": "Optional top-level configuration for project-wide Object storage buckets (OBJ-2)."
+    },
+    "queues": {
+      "type": "object",
+      "description": "Optional top-level configuration for project-wide Queues (Q-2)."
     }
   },
   "additionalProperties": false

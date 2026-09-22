@@ -17,7 +17,8 @@
     "jsr:@std/toml@0.224.0": "0.224.0",
     "jsr:@std/yaml@0.224.0": "0.224.0",
     "npm:ioredis@5.4.1": "5.4.1",
-    "npm:postgres@3.4.4": "3.4.4"
+    "npm:postgres@3.4.4": "3.4.4",
+    "npm:zod@*": "4.4.3"
   },
   "jsr": {
     "@std/assert@0.224.0": {
@@ -124,6 +125,9 @@
     },
     "standard-as-callback@2.1.0": {
       "integrity": "sha512-qoRRSyROncaz1z0mvYqIE4lCd9p2R90i6GxW3uZv5ucSu8tU7B5HXUP1gG8pVZsYNVaXjk8ClXHPttLyxAL48A=="
+    },
+    "zod@4.4.3": {
+      "integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="
     }
   },
   "remote": {

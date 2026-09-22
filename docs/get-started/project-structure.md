@@ -1,16 +1,18 @@
 # Project Structure
 
 > [!NOTE]
-> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp;
-> **Specification**: [PLAT-18, PLAT-19](../contracts/platform.contract.md)
+> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp; **Specification**:
+> [PLAT-18, PLAT-19](../contracts/platform.contract.md)
 
-This guide documents the layout, conventions, and configuration files of a RailFog application.
+This guide documents the layout, conventions, and configuration files of a
+RailFog application.
 
 ---
 
 ## Standard Directory Layout
 
-When you initialize a project using `rail init`, the following directory structure is created:
+When you initialize a project using `rail init`, the following directory
+structure is created:
 
 ```text
 my-project/
@@ -28,11 +30,15 @@ my-project/
 ## File Breakdown
 
 ### 1. `railfog.toml`
+
 The single source of truth for your application's deployment configuration:
+
 - Declares functions and their corresponding TypeScript source paths (`entry`).
 - Defines triggers (`http`, `queue`, `schedule`, `webhook`).
-- Injects capability-scoped permissions (`kv`, `objects`, `queues`, `network`, `secrets`).
-- Configures hard resource limits (`cpu_ms`, `timeout_ms`, `memory_mb`, `concurrency`).
+- Injects capability-scoped permissions (`kv`, `objects`, `queues`, `network`,
+  `secrets`).
+- Configures hard resource limits (`cpu_ms`, `timeout_ms`, `memory_mb`,
+  `concurrency`).
 - Maps URL routing rules (`[[routes]]`) to target functions.
 
 ```toml
@@ -58,6 +64,7 @@ consistency = "strong"
 ---
 
 ### 2. `deno.json`
+
 Manages the TypeScript toolchain and dependency imports map:
 
 ```json
@@ -76,7 +83,9 @@ Manages the TypeScript toolchain and dependency imports map:
 ---
 
 ### 3. `functions/` Directory
-Contains the executable handler modules. Each function module must export a default handler conforming to `FN-1` or `FN-2`:
+
+Contains the executable handler modules. Each function module must export a
+default handler conforming to `FN-1` or `FN-2`:
 
 ```typescript
 import type { FunctionHandler } from "@railfog/sdk";
@@ -89,11 +98,14 @@ export default handler;
 ```
 
 > [!IMPORTANT]
-> Entrypoint paths specified in `railfog.toml` must reside within the project directory. Directory traversal attempts (`../`) escaping the project boundary are rejected at deploy time (`PLAT-3`).
+> Entrypoint paths specified in `railfog.toml` must reside within the project
+> directory. Directory traversal attempts (`../`) escaping the project boundary
+> are rejected at deploy time (`PLAT-3`).
 
 ---
 
 ## Next Steps
 
-- Explore the complete [`railfog.toml` Configuration Reference](../configuration/manifest.md).
+- Explore the complete
+  [`railfog.toml` Configuration Reference](../configuration/manifest.md).
 - Learn about the [Functions Primitive](../primitives/functions/overview.md).

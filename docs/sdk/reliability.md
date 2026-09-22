@@ -1,17 +1,20 @@
 # SDK — Reliability Helpers
 
 > [!NOTE]
-> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp;
-> **Specification**: [Q-4 (Idempotency), Q-5 (Backoff Jitter)](../contracts/queues.contract.md) &nbsp;|&nbsp;
-> **Philosophy**: Built over KV as zero-overhead library code
+> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp; **Specification**:
+> [Q-4 (Idempotency), Q-5 (Backoff Jitter)](../contracts/queues.contract.md)
+> &nbsp;|&nbsp; **Philosophy**: Built over KV as zero-overhead library code
 
-RailFog provides reliability helpers as standard library utilities built over KV storage, avoiding redundant platform primitives.
+RailFog provides reliability helpers as standard library utilities built over KV
+storage, avoiding redundant platform primitives.
 
 ---
 
 ## 1. Idempotent Execution (`withIdempotency`)
 
-Under at-least-once message delivery (`Q-1`), duplicate deliveries can occur due to network retries. `withIdempotency` ensures business operations execute exactly once within the retention window:
+Under at-least-once message delivery (`Q-1`), duplicate deliveries can occur due
+to network retries. `withIdempotency` ensures business operations execute
+exactly once within the retention window:
 
 ```typescript
 import { withIdempotency } from "@railfog/sdk";
@@ -38,13 +41,16 @@ export async function processPayment(
 ```
 
 > [!IMPORTANT]
-> The TTL parameter is mandatory and matches the 14-day queue retention period (`Q-4`). Omission of TTL is strictly prohibited to prevent permanent database growth.
+> The TTL parameter is mandatory and matches the 14-day queue retention period
+> (`Q-4`). Omission of TTL is strictly prohibited to prevent permanent database
+> growth.
 
 ---
 
 ## 2. Exponential Backoff with Decorrelated Jitter (`withRetry`)
 
-When calling external APIs or microservices, naive linear retries can trigger the "thundering herd" problem and collapse downstream services.
+When calling external APIs or microservices, naive linear retries can trigger
+the "thundering herd" problem and collapse downstream services.
 
 `withRetry` implements exponential backoff with decorrelated jitter (`Q-5`):
 
@@ -72,7 +78,8 @@ export async function callExternalService(): Promise<Response> {
 ```
 
 - **Parameters**: `maxAttempts = 5`, `baseMs = 100`, `capMs = 20000`.
-- **Error Propagation**: When retry attempts are exhausted, the original error is preserved and rethrown unchanged (`PLAT-12`).
+- **Error Propagation**: When retry attempts are exhausted, the original error
+  is preserved and rethrown unchanged (`PLAT-12`).
 
 ---
 

@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno 2.x
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      - name: Compile Linux x86_64 Binary
+        run: |
+          deno compile --allow-read --allow-write --allow-net --allow-run --allow-env \
+            --target x86_64-unknown-linux-gnu \
+            --output dist/rail-linux-x86_64 \
+            cli/main.ts
+
+      - name: Compile Linux aarch64 Binary
+        run: |
+          deno compile --allow-read --allow-write --allow-net --allow-run --allow-env \
+            --target aarch64-unknown-linux-gnu \
+            --output dist/rail-linux-aarch64 \
+            cli/main.ts
+
+      - name: Compile macOS Apple Silicon (aarch64) Binary
+        run: |
+          deno compile --allow-read --allow-write --allow-net --allow-run --allow-env \
+            --target aarch64-apple-darwin \
+            --output dist/rail-darwin-aarch64 \
+            cli/main.ts
+
+      - name: Compile macOS Intel (x86_64) Binary
+        run: |
+          deno compile --allow-read --allow-write --allow-net --allow-run --allow-env \
+            --target x86_64-apple-darwin \
+            --output dist/rail-darwin-x86_64 \
+            cli/main.ts
+
+      - name: Compile Windows x86_64 Binary
+        run: |
+          deno compile --allow-read --allow-write --allow-net --allow-run --allow-env \
+            --target x86_64-pc-windows-msvc \
+            --output dist/rail-windows-x86_64.exe \
+            cli/main.ts
+
+      - name: Generate SHA-256 Checksums
+        run: |
+          cd dist
+          sha256sum rail-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/rail-linux-x86_64
+            dist/rail-linux-aarch64
+            dist/rail-darwin-aarch64
+            dist/rail-darwin-x86_64
+            dist/rail-windows-x86_64.exe
+            dist/SHA256SUMS.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-rc') || contains(github.ref, '-alpha') }}

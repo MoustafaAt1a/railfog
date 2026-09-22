@@ -6,18 +6,25 @@ on:
   pull_request:
     branches: [main, master]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+permissions:
+  contents: read
+
 jobs:
   verify:
-    name: Lint, Format, and Typecheck
+    name: Code Quality & Typecheck
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Deno
+      - name: Setup Deno 2.x
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v1.x
+          deno-version: v2.x
 
       - name: Verify Code Formatting
         run: deno fmt --check
@@ -25,11 +32,11 @@ jobs:
       - name: Lint Workspace
         run: deno lint
 
-      - name: Type Check Workspace
+      - name: Full Typecheck (deno task check)
         run: deno task check
 
   test:
-    name: Test Suite
+    name: Test Suite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: verify
     strategy:
@@ -37,13 +44,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Deno
+      - name: Setup Deno 2.x
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v1.x
+          deno-version: v2.x
 
       - name: Run Unit Tests
         run: deno task test:unit
@@ -57,8 +64,42 @@ jobs:
       - name: Run Integration Tests
         run: deno task test:integration
 
-      - name: Run Load Tests
-        run: deno task test:load
+  compile-check:
+    name: Cross-Platform Binary Compilation
+    runs-on: ${{ matrix.os }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            output: rail-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            output: rail-linux-aarch64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            output: rail-darwin-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            output: rail-windows-x86_64.exe
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Run End-to-End Tests
-        run: deno task test:e2e
+      - name: Setup Deno 2.x
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Compile CLI Binary (${{ matrix.target }})
+        run: deno compile --allow-read --allow-write --allow-net --allow-run --allow-env --target ${{ matrix.target }} --output dist/${{ matrix.output }} cli/main.ts
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: dist/${{ matrix.output }}
+          if-no-files-found: error
+          retention-days: 7

@@ -1,12 +1,12 @@
 # TypeScript SDK Overview (`@railfog/sdk`)
 
 > [!NOTE]
-> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp;
-> **Package**: `@railfog/sdk` &nbsp;|&nbsp;
-> **Runtime**: Deno v2.0+ &nbsp;|&nbsp;
+> **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp; **Package**:
+> `@railfog/sdk` &nbsp;|&nbsp; **Runtime**: Deno v2.0+ &nbsp;|&nbsp;
 > **Dependencies**: Zero External (Native Web Standards)
 
-`@railfog/sdk` is the official TypeScript SDK for building functions, consumers, and services on the RailFog edge platform.
+`@railfog/sdk` is the official TypeScript SDK for building functions, consumers,
+and services on the RailFog edge platform.
 
 ---
 
@@ -50,9 +50,19 @@ import type {
 // Value & utility imports
 import {
   api,
+  consumer,
+  createMockContext,
+  createRpcClient,
   handle,
+  mutate,
   normalizeError,
   RailFogError,
+  readBytes,
+  readJson,
+  readText,
+  router,
+  scopedKV,
+  withCircuitBreaker,
   withIdempotency,
   withRetry,
 } from "@railfog/sdk";
@@ -63,7 +73,9 @@ import {
 ## 3. Ergonomic Handlers (`handle` and `api`)
 
 ### 3.1 Minimal HTTP Handler (`handle`)
-Eliminates repetitive boilerplate. Automatically destructures context and serializes return values into JSON with HTTP status 200:
+
+Eliminates repetitive boilerplate. Automatically destructures context and
+serializes return values into JSON with HTTP status 200:
 
 ```typescript
 import { handle } from "@railfog/sdk";
@@ -76,6 +88,7 @@ export default handle(async ({ kv }) => {
 ```
 
 ### 3.2 Micro-Router (`api`)
+
 Handles multiple HTTP methods and paths in a single function file:
 
 ```typescript
