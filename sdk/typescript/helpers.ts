@@ -6,7 +6,12 @@
 // spec: contracts/platform.contract.md#PLAT-12 — Error model: typed error preservation on retry exhaustion
 
 import type { KVAtomicOperation, KVBinding, ListOptions } from "./types.ts";
-import { ConflictError, UnavailableError } from "../../packages/errors/mod.ts";
+import {
+  ConflictError,
+  ResourceNotFoundError,
+  UnavailableError,
+  ValidationFailedError,
+} from "../../packages/errors/mod.ts";
 
 // spec: contracts/queues.contract.md#Q-3, Q-4 — Default retention window for idempotency dedupe keys (14 days = 1,209,600s)
 // spec: contracts/kv.contract.md#KV-2 — Mandatory TTL prevents unbounded dedupe key growth (Audit Finding #5)
@@ -391,4 +396,76 @@ export async function mutate<T>(
   }
 
   throw new ConflictError(`Mutation failed for key '${key.join("/")}'`);
+}
+
+/**
+ * Reads an entire ReadableStream of Uint8Array into a single contiguous Uint8Array.
+ * Throws ResourceNotFoundError if the stream is null or undefined.
+ *
+ * @spec contracts/objects.contract.md#OBJ-2 — Object data stream reading
+ * @spec contracts/platform.contract.md#PLAT-12 — Canonical ResourceNotFoundError
+ */
+export async function readBytes(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+): Promise<Uint8Array> {
+  if (!stream) {
+    throw new ResourceNotFoundError(
+      "Cannot read bytes from null or undefined object stream",
+    );
+  }
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      totalLength += value.byteLength;
+    }
+  }
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
+}
+
+/**
+ * Decodes an entire ReadableStream of Uint8Array into a UTF-8 string.
+ * Throws ResourceNotFoundError if the stream is null or undefined.
+ *
+ * @spec contracts/objects.contract.md#OBJ-2 — Object data stream reading
+ * @spec contracts/platform.contract.md#PLAT-12 — Canonical ResourceNotFoundError
+ */
+export async function readText(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+): Promise<string> {
+  const bytes = await readBytes(stream);
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Decodes and parses an entire ReadableStream of Uint8Array as JSON.
+ * Throws ResourceNotFoundError if the stream is null or undefined.
+ * Throws ValidationFailedError if the JSON body is malformed.
+ *
+ * @spec contracts/objects.contract.md#OBJ-2 — Object data stream reading
+ * @spec contracts/platform.contract.md#PLAT-12 — ValidationFailedError on malformed JSON
+ */
+export async function readJson<T = unknown>(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+): Promise<T> {
+  const text = await readText(stream);
+  try {
+    return JSON.parse(text) as T;
+  } catch (err) {
+    throw new ValidationFailedError(
+      `Malformed JSON in object stream: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
 }

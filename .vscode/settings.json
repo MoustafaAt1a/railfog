@@ -17,5 +17,11 @@
     "**/.deno": true,
     "**/coverage": true,
     "**/*.db": true
-  }
+  },
+  "json.schemas": [
+    {
+      "fileMatch": ["railfog.json", "**/railfog.json"],
+      "url": "./schemas/railfog.schema.json"
+    }
+  ]
 }

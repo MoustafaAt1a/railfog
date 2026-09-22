@@ -8,10 +8,18 @@ import { colors, renderCard, renderStatusBar } from "./ui.ts";
 export const CANONICAL_SDK_URL =
   "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts";
 
-export const SUPPORTED_PACKAGES = ["sdk", "@railfog/sdk"] as const;
+export const CANONICAL_TESTING_URL =
+  "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/packages/testing/mod.ts";
+
+export const SUPPORTED_PACKAGES = [
+  "sdk",
+  "@railfog/sdk",
+  "testing",
+  "@railfog/testing",
+] as const;
 
 export interface AddOptions {
-  packageOrPrimitive: string; // e.g. "sdk"
+  packageOrPrimitive: string; // e.g. "sdk", "testing"
   cwd?: string;
 }
 
@@ -33,11 +41,18 @@ export async function runAdd(options: AddOptions): Promise<AddResult> {
   const trimmedPkg = typeof rawPkg === "string" ? rawPkg.trim() : "";
 
   // spec: tasks/milestone-0.8-developer-experience-ux/T-0811-project-dependency-add.md#AC4 — Reject unknown packages
-  if (trimmedPkg !== "sdk" && trimmedPkg !== "@railfog/sdk") {
+  const isSdk = trimmedPkg === "sdk" || trimmedPkg === "@railfog/sdk";
+  const isTesting = trimmedPkg === "testing" ||
+    trimmedPkg === "@railfog/testing";
+
+  if (!isSdk && !isTesting) {
     throw new Error(
-      `Unsupported package or primitive "${rawPkg}". Supported additions: sdk (or @railfog/sdk).`,
+      `Unsupported package or primitive "${rawPkg}". Supported additions: sdk (or @railfog/sdk), testing (or @railfog/testing).`,
     );
   }
+
+  const targetImportKey = isSdk ? "@railfog/sdk" : "@railfog/testing";
+  const targetImportUrl = isSdk ? CANONICAL_SDK_URL : CANONICAL_TESTING_URL;
 
   // spec: contracts/platform.contract.md#PLAT-19 — Discovers deno.json in options.cwd or current dir
   const cwd = resolve(options.cwd ?? Deno.cwd());
@@ -66,7 +81,7 @@ export async function runAdd(options: AddOptions): Promise<AddResult> {
         test: "deno test -A",
       },
       imports: {
-        "@railfog/sdk": CANONICAL_SDK_URL,
+        [targetImportKey]: targetImportUrl,
       },
     };
 
@@ -79,7 +94,7 @@ export async function runAdd(options: AddOptions): Promise<AddResult> {
     return {
       ok: true,
       targetFile: denoJsonPath,
-      addedImport: "@railfog/sdk",
+      addedImport: targetImportKey,
       createdNewFile: true,
     };
   }
@@ -112,10 +127,10 @@ export async function runAdd(options: AddOptions): Promise<AddResult> {
     parsed.imports = {};
   }
 
-  // spec: contracts/platform.contract.md#PLAT-19 — Map @railfog/sdk to canonical URL
+  // spec: contracts/platform.contract.md#PLAT-19 — Map import to canonical URL
   // spec: tasks/milestone-0.8-developer-experience-ux/T-0811-project-dependency-add.md#AC3 — Idempotent mapping
   const imports = parsed.imports as Record<string, string>;
-  imports["@railfog/sdk"] = CANONICAL_SDK_URL;
+  imports[targetImportKey] = targetImportUrl;
 
   const formatted = JSON.stringify(parsed, null, 2) + "\n";
   await Deno.writeTextFile(denoJsonPath, formatted);
@@ -123,7 +138,7 @@ export async function runAdd(options: AddOptions): Promise<AddResult> {
   return {
     ok: true,
     targetFile: denoJsonPath,
-    addedImport: "@railfog/sdk",
+    addedImport: targetImportKey,
     createdNewFile: false,
   };
 }
@@ -135,7 +150,7 @@ Usage:
   rail add <package> [options]
 
 Arguments:
-  <package>          Package or primitive to add (supported: sdk)
+  <package>          Package or primitive to add (supported: sdk, testing)
 
 Options:
   -C, --dir <path>   Target project directory (alias: --project-dir, --cwd, default: current directory)

@@ -8,6 +8,7 @@
 import type {
   ConsumerOptions,
   ContextLogger,
+  CookieOptions,
   FunctionHandler,
   QueueConsumerHandler,
   QueueMessage,
@@ -63,6 +64,11 @@ export interface HandlerContext extends RailFogContext {
   query: Record<string, string | undefined>;
   params?: Record<string, string | undefined>;
   log: ContextLogger;
+  cookies: Readonly<Record<string, string>>;
+  cookie(name: string): string | undefined;
+  setCookie(name: string, value: string, options?: CookieOptions): void;
+  clearCookie(name: string, options?: CookieOptions): void;
+  header(name: string): string | null;
   body<T = unknown>(validator?: SchemaValidator<T>): Promise<T>;
   json(data: unknown, status?: number): Response;
   text(str: string, status?: number): Response;
@@ -213,6 +219,27 @@ export function handle(fn: HandlerFn): FunctionHandler {
       error: (msg, meta) => console.error(formatLog(msg, meta)),
     };
 
+    const outgoingCookies: string[] = [];
+    const cookieHeader = req.headers.get("cookie");
+    const parsedCookies: Record<string, string> = {};
+    if (cookieHeader) {
+      const parts = cookieHeader.split(";");
+      for (const part of parts) {
+        const eqIdx = part.indexOf("=");
+        if (eqIdx !== -1) {
+          const name = part.slice(0, eqIdx).trim();
+          const val = part.slice(eqIdx + 1).trim();
+          if (name) {
+            try {
+              parsedCookies[name] = decodeURIComponent(val);
+            } catch {
+              parsedCookies[name] = val;
+            }
+          }
+        }
+      }
+    }
+
     // spec: contracts/functions.contract.md#FN-4 — Capability and context injection
     const c: HandlerContext = {
       ...ctx,
@@ -221,6 +248,47 @@ export function handle(fn: HandlerFn): FunctionHandler {
       url: parsedUrl,
       query: queryParams,
       log,
+      cookies: parsedCookies,
+      cookie(name: string): string | undefined {
+        return parsedCookies[name];
+      },
+      header(name: string): string | null {
+        return req.headers.get(name);
+      },
+      setCookie(name: string, value: string, options?: CookieOptions): void {
+        let cookieStr = `${encodeURIComponent(name)}=${
+          encodeURIComponent(value)
+        }`;
+        if (options?.maxAge !== undefined) {
+          cookieStr += `; Max-Age=${Math.floor(options.maxAge)}`;
+        }
+        if (options?.expires) {
+          cookieStr += `; Expires=${options.expires.toUTCString()}`;
+        }
+        if (options?.domain) {
+          cookieStr += `; Domain=${options.domain}`;
+        }
+        cookieStr += `; Path=${options?.path ?? "/"}`;
+        if (options?.secure) {
+          cookieStr += `; Secure`;
+        }
+        if (options?.httpOnly) {
+          cookieStr += `; HttpOnly`;
+        }
+        if (options?.sameSite) {
+          const s = options.sameSite.charAt(0).toUpperCase() +
+            options.sameSite.slice(1).toLowerCase();
+          cookieStr += `; SameSite=${s}`;
+        }
+        outgoingCookies.push(cookieStr);
+      },
+      clearCookie(name: string, options?: CookieOptions): void {
+        this.setCookie(name, "", {
+          ...options,
+          maxAge: 0,
+          expires: new Date(0),
+        });
+      },
       async body<T = unknown>(validator?: SchemaValidator<T>): Promise<T> {
         if (!bodyParsed) {
           try {
@@ -487,22 +555,28 @@ export function handle(fn: HandlerFn): FunctionHandler {
 
     try {
       const result = await fn(c);
-
+      let finalResponse: Response;
       // spec: contracts/functions.contract.md#FN-1 — Verbatim Web API Response passthrough
       if (result instanceof Response) {
-        return result;
+        finalResponse = result;
+      } else if (result === undefined) {
+        // Empty/void returns yield 204 No Content
+        finalResponse = new Response(null, { status: 204 });
+      } else {
+        // spec: contracts/functions.contract.md#FN-1 — Auto-serialize plain returned values to JSON
+        finalResponse = Response.json(result, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
 
-      // Empty/void returns yield 204 No Content
-      if (result === undefined) {
-        return new Response(null, { status: 204 });
+      if (outgoingCookies.length > 0) {
+        for (const cookieHeader of outgoingCookies) {
+          finalResponse.headers.append("set-cookie", cookieHeader);
+        }
       }
 
-      // spec: contracts/functions.contract.md#FN-1 — Auto-serialize plain returned values to JSON
-      return Response.json(result, {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      return finalResponse;
     } catch (err) {
       // spec: contracts/platform.contract.md#PLAT-12 — Canonical error normalization
       return normalizeToErrorResponse(err, ctx.requestId);

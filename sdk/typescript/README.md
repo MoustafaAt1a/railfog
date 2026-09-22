@@ -430,6 +430,90 @@ const safeCtx = wrapContext(rawCtx);
 
 ---
 
+## Zero-Config Unit Testing: `createMockContext()`
+
+Test any RailFog function in microseconds with zero Docker containers, zero mock
+servers, and zero external dependencies:
+
+```typescript
+import { assertEquals } from "@std/assert";
+import { createMockContext } from "@railfog/sdk";
+import handler from "./functions/api.ts";
+
+Deno.test("creates user and stores in KV", async () => {
+  const ctx = createMockContext({
+    env: { STRIPE_KEY: "sk_test_123" },
+    initialKv: [
+      [["users", "u_1"], { name: "Alice" }],
+    ],
+  });
+
+  const req = new Request("https://app.railfog.net/users", {
+    method: "POST",
+    body: JSON.stringify({ name: "Bob" }),
+  });
+
+  const res = await handler(req, ctx);
+  assertEquals(res.status, 200);
+
+  // Inspect storage directly via ctx.storage
+  assertEquals(ctx.storage.queue.length, 0);
+  assertEquals(await ctx.kv.get(["users", "u_2"]), { name: "Bob" });
+});
+```
+
+---
+
+## Zero-Boilerplate Object Stream Readers: `readText()`, `readJson()`, `readBytes()`
+
+Safely consume binary and text object streams returned from
+`c.objects.get(key)`:
+
+```typescript
+import { readBytes, readJson, readText } from "@railfog/sdk";
+
+// Read and decode UTF-8 text
+const stream = await c.objects.get("notes.txt");
+const text = await readText(stream);
+
+// Read and parse typed JSON with automatic ValidationFailedError on corrupt data
+const config = await readJson<AppConfig>(await c.objects.get("config.json"));
+
+// Read raw binary Uint8Array
+const bytes = await readBytes(await c.objects.get("avatar.png"));
+```
+
+---
+
+## Cookie & Header Helpers on `HandlerContext`
+
+Handle session cookies and request headers with zero external packages:
+
+```typescript
+import { handle } from "@railfog/sdk";
+
+export default handle((c) => {
+  // Read request headers and cookies easily
+  const token = c.header("authorization");
+  const sessionId = c.cookie("session_id");
+
+  // Format and set response cookies (RFC 6265 compliant)
+  c.setCookie("session_id", "new_session_token", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
+    maxAge: 86400, // 24 hours
+  });
+
+  // Clear a cookie on logout
+  c.clearCookie("remember_me");
+
+  return { ok: true, session: sessionId };
+});
+```
+
+---
+
 ## Security & Safety Guarantees
 
 1. **Zero Ambient Authority (`PLAT-6`)**: The SDK contains no ambient tokens,

@@ -140,6 +140,18 @@ export async function runDoctor(
     e.message?.toLowerCase().includes("railfog.toml")
   );
   const signal5Warn = hasShadowWarnings || isMissingToml;
+
+  let hasSdkImport = false;
+  try {
+    const rawDeno = await Deno.readTextFile(join(cwd, "deno.json"));
+    const parsed = JSON.parse(rawDeno);
+    if (parsed.imports && parsed.imports["@railfog/sdk"]) {
+      hasSdkImport = true;
+    }
+  } catch {
+    // ignore
+  }
+
   signals.push({
     id: 5,
     name: "SIGNAL 5: Route Timetable",
@@ -153,7 +165,9 @@ export async function runDoctor(
       ? "No railfog.toml in current directory; run 'rail init' to scaffold a project"
       : (hasShadowWarnings
         ? "Duplicate or shadowed route pattern detected; verify route order in railfog.toml"
-        : `${routeCount} routes scored and deterministically ordered via PLAT-11 algorithm`),
+        : `${routeCount} routes scored and deterministically ordered via PLAT-11 algorithm${
+          hasSdkImport ? " • @railfog/sdk linked" : ""
+        }`),
   });
 
   const overallHealthy = checkRes.valid && !hasCapabilityErrors &&

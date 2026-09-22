@@ -274,3 +274,16 @@ export interface ConsumerOptions {
    */
   dedupeKey?: (message: QueueMessage) => string[];
 }
+
+/**
+ * Options for formatting Set-Cookie response headers per RFC 6265.
+ */
+export interface CookieOptions {
+  domain?: string;
+  expires?: Date;
+  httpOnly?: boolean;
+  maxAge?: number;
+  path?: string;
+  sameSite?: "Strict" | "Lax" | "None" | "strict" | "lax" | "none";
+  secure?: boolean;
+}

@@ -263,15 +263,15 @@ function = "api"
 
     const apiContent =
       `// spec: docs/contracts/functions.contract.md#FN-1 — Default exported fetch handler
-import type { RailFogContext } from "@railfog/sdk";
+import { handle } from "@railfog/sdk";
 
-export default async function handler(
-  _req: Request,
-  _ctx?: RailFogContext,
-): Promise<Response> {
-  await Promise.resolve();
-  return new Response("Hello from RailFog!");
-}
+export default handle(async function handler(c) {
+  return {
+    message: "Hello from RailFog!",
+    project: c.project,
+    timestamp: Date.now(),
+  };
+});
 `;
 
     const tomlFile = join(targetDir, "railfog.toml");
@@ -632,11 +632,13 @@ function = "api"
 `;
 
 // spec: docs/contracts/functions.contract.md#FN-1 — default exported fetch handler
-export const STARTER_FUNCTION = `export default async function handler(
-  _req: Request,
-  _ctx?: unknown,
-): Promise<Response> {
-  await Promise.resolve();
-  return new Response("Hello from RailFog!");
-}
+export const STARTER_FUNCTION = `import { handle } from "@railfog/sdk";
+
+export default handle(async function handler(c) {
+  return {
+    message: "Hello from RailFog!",
+    project: c.project,
+    timestamp: Date.now(),
+  };
+});
 `;

@@ -1,142 +1,141 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://railfog.dev/schemas/railfog.schema.json",
+  "$id": "https://railfog.dev/schemas/v1/railfog.schema.json",
   "title": "RailFog Project Configuration",
-  "description": "Configuration schema for railfog.toml projects defining Functions, Routes, and Capability Permissions",
+  "description": "Deterministic configuration schema for RailFog minimal application infrastructure platform (railfog.toml and railfog.json). Governed by docs/contracts/platform.contract.md and docs/contracts/functions.contract.md.",
   "type": "object",
-  "required": ["name", "functions", "routes"],
-  "additionalProperties": false,
+  "required": ["name"],
   "properties": {
     "$schema": {
       "type": "string",
-      "description": "URI pointing to this JSON Schema for IDE validation and autocomplete"
+      "description": "URI of the JSON Schema for editor autocomplete and validation."
     },
     "name": {
       "type": "string",
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
-      "description": "Project identifier. Must start with an alphanumeric character and contain only alphanumeric, underscore, dot, or hyphen characters (PLAT-18)."
+      "description": "Unique project identifier. Must start with an alphanumeric character and contain only [a-zA-Z0-9_.-] (PLAT-18).",
+      "examples": ["my-service", "railfog-app", "api-gateway"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version string for the project.",
+      "default": "1.0.0"
+    },
+    "runtime": {
+      "type": "string",
+      "description": "Target runtime engine. RailFog runs on standard Deno LTS with V8 Isolates.",
+      "enum": ["deno-lts", "deno-2"],
+      "default": "deno-lts"
     },
     "functions": {
       "type": "object",
-      "description": "Map of function identifiers to their code entry points, capability permissions, triggers, and resource limits (FN-1, PLAT-6, PLAT-18).",
+      "description": "Dictionary of declared serverless functions in the project.",
       "additionalProperties": {
         "type": "object",
         "required": ["entry"],
-        "additionalProperties": false,
         "properties": {
           "entry": {
             "type": "string",
-            "description": "Relative path to the TypeScript handler module (e.g. functions/api.ts) within the project root (FN-1, PLAT-6)."
+            "description": "Relative file path to the function entrypoint module exporting a default handler (FN-1).",
+            "examples": ["functions/api.ts", "functions/consumer.ts"]
           },
           "permissions": {
             "type": "object",
-            "description": "Strict capability scopes injected into the function's context (PLAT-6, PLAT-15).",
-            "additionalProperties": false,
+            "description": "Strictly scoped capabilities injected at deployment time (PLAT-6). Functions have zero ambient access beyond declared permissions.",
             "properties": {
               "kv": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "Array of KV namespace identifiers accessible via c.kv (KV-2, PLAT-6)."
+                "description": "List of scoped KV namespace identifiers accessible to this function (KV-2)."
               },
               "objects": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "Array of Object bucket identifiers accessible via c.objects (OBJ-2, PLAT-6)."
+                "description": "List of object storage buckets accessible to this function (OBJ-2)."
               },
               "queues": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "Array of Queue identifiers accessible via c.queues (Q-2, PLAT-6)."
+                "description": "List of message queues this function can publish messages to (Q-2)."
               },
               "network": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "Outbound network allowlist patterns (host:port or domain). SSRF-blocked IP ranges are strictly prohibited (PLAT-5)."
+                "description": "Egress hostname allowlist. Edge SSRF firewall automatically blocks RFC1918, link-local, and cloud metadata IPs (PLAT-5)."
               },
               "secrets": {
                 "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                },
-                "description": "Encrypted secret identifiers accessible via c.env (PLAT-15)."
+                "items": { "type": "string" },
+                "description": "List of encrypted environment secrets injected via ctx.env (PLAT-15)."
               }
-            }
+            },
+            "additionalProperties": false
           },
           "triggers": {
             "type": "object",
-            "description": "Background triggers activating this function (FN-2).",
-            "additionalProperties": false,
+            "description": "Event triggers driving asynchronous function invocations (FN-2).",
             "properties": {
               "queue": {
                 "type": "string",
-                "description": "Queue identifier this function consumes messages from (FN-2, Q-2)."
+                "description": "Queue identifier that triggers this consumer function on message arrival (FN-2, Q-1)."
               },
               "schedule": {
                 "type": "string",
-                "description": "Standard 5-field cron expression for recurring scheduled invocations (FN-2)."
+                "description": "Cron expression defining scheduled periodic execution (e.g. '0 * * * *')."
               }
-            }
+            },
+            "additionalProperties": false
           },
           "limits": {
             "type": "object",
-            "description": "Per-invocation resource limit ceilings (FN-5).",
-            "additionalProperties": false,
+            "description": "Per-invocation resource ceilings enforced by the isolation runner (FN-5).",
             "properties": {
-              "memory_mb": {
+              "memoryMb": {
                 "type": "integer",
-                "minimum": 1,
-                "maximum": 1024,
+                "minimum": 16,
+                "maximum": 128,
                 "default": 128,
-                "description": "Memory ceiling in megabytes (1 to 1024 MB, default: 128 MB) (FN-5)."
+                "description": "Isolate memory ceiling in megabytes (maximum 128 MB per FN-5)."
               },
-              "timeout_ms": {
+              "timeoutSeconds": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 900000,
-                "default": 10000,
-                "description": "Wall-clock timeout in milliseconds. Max 30,000ms for HTTP triggers, 900,000ms for background triggers (FN-5)."
+                "maximum": 30,
+                "default": 30,
+                "description": "Wall-clock invocation deadline in seconds (maximum 30s per FN-5)."
               },
-              "cpu_ms": {
+              "maxConcurrency": {
                 "type": "integer",
                 "minimum": 1,
-                "description": "CPU time limit in milliseconds (FN-5)."
+                "description": "Maximum concurrent isolate executions permitted for this function."
               }
-            }
+            },
+            "additionalProperties": false
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "routes": {
       "type": "array",
-      "description": "HTTP route declarations mapping URL patterns to function names (PLAT-11). Evaluated by specificity score.",
+      "description": "Deterministic HTTP route table resolved via PLAT-11 mathematical specificity scoring.",
       "items": {
         "type": "object",
         "required": ["pattern", "function"],
-        "additionalProperties": false,
         "properties": {
           "pattern": {
             "type": "string",
-            "description": "URL pattern matching incoming request paths (e.g. '/api/*', '/users/:id') (PLAT-11)."
+            "description": "URLPattern path and optional method prefix (e.g. '/api/*', 'GET /items/:id') (PLAT-11).",
+            "examples": ["/api/*", "GET /users/:id", "POST /webhooks/stripe"]
           },
           "function": {
             "type": "string",
-            "description": "Target function name defined in [functions] (PLAT-11)."
+            "description": "Name of the target function declared in the functions block."
           }
-        }
-      }
-    },
-    "kv": {
-      "type": "object",
-      "description": "Global KV configuration options (KV-5).",
-      "additionalProperties": false,
-      "properties": {
-        "tier": {
-          "type": "string",
-          "enum": ["strong", "eventual"],
-          "description": "Required consistency tier. Strong tier requires CAS-capable backing provider (KV-5)."
-        }
+        },
+        "additionalProperties": false
       }
     }
-  }
+  },
+  "additionalProperties": false
 }
