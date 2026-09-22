@@ -225,6 +225,12 @@ Deno.test("PLAT-19: workspace import map in deno.json covers all packages and pr
       config.imports[alias] !== undefined,
       `Workspace alias ${alias} must be defined in deno.json imports`,
     );
+    const targetFile = join(Deno.cwd(), config.imports[alias]);
+    const fileStat = await Deno.stat(targetFile);
+    assert(
+      fileStat.isFile,
+      `Target file for ${alias} (${config.imports[alias]}) must exist on disk`,
+    );
   }
 
   // Verify all primitives
@@ -233,6 +239,12 @@ Deno.test("PLAT-19: workspace import map in deno.json covers all packages and pr
     assert(
       config.imports[alias] !== undefined,
       `Primitive alias ${alias} must be defined in deno.json imports`,
+    );
+    const targetFile = join(Deno.cwd(), config.imports[alias]);
+    const fileStat = await Deno.stat(targetFile);
+    assert(
+      fileStat.isFile,
+      `Target file for ${alias} (${config.imports[alias]}) must exist on disk`,
     );
   }
 });
