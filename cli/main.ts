@@ -76,6 +76,7 @@ import {
 import type { PricingRates } from "../packages/metrics/cost-calculator.ts";
 import { runDoctor } from "./doctor.ts";
 import { runSimulate } from "./simulate.ts";
+import { runUninstall, type UninstallResult } from "./uninstall.ts";
 import {
   animateSignalLantern,
   animateSteamTrain,
@@ -156,6 +157,7 @@ export {
   runLogs,
   runSecrets,
   runSimulate,
+  runUninstall,
   runUpgrade,
   runUsage,
   runWhoami,
@@ -183,6 +185,7 @@ export type {
   SupportedShell,
   UndeployCommandOptions,
   UndeployCommandResult,
+  UninstallResult,
   UpgradeOptions,
   UpgradeResult,
   UsageCliOptions,
@@ -433,6 +436,7 @@ ${colors.bold(colors.accent("== [System & Maintenance] =="))}
   upgrade      Upgrade the RailFog CLI to the latest version
   update       Alias for upgrade subcommand
   sync         Sync CLI with the latest git updates (alias for update)
+  uninstall    Remove the RailFog CLI binary and metadata
   completions  Generate shell auto-completion scripts (pwsh, bash, zsh, fish)
 
 ${colors.bold("Options:")}
@@ -676,6 +680,7 @@ const KNOWN_COMMANDS = [
   "upgrade",
   "update",
   "sync",
+  "uninstall",
   "completions",
   "completion",
 ];
@@ -1735,6 +1740,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
       break;
     }
+    case "uninstall": {
+      await runUninstall();
+      break;
+    }
     case "completions":
     case "completion": {
       let shellArg: string | undefined;
@@ -1822,7 +1831,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           renderErrorCard({
             code: "UNKNOWN_COMMAND",
             message:
-              `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, completions`,
+              `Error: Unknown command "${command}". Available commands: init, add, status, check, dev, deploy, undeploy, rollback, export, import, secrets, logs, usage, cost, login, logout, whoami, upgrade, update, sync, uninstall, completions`,
             solution: suggestion
               ? `Did you mean "rail ${suggestion}"?\nRun 'rail --help' to see all available commands.`
               : "Run 'rail --help' to browse all available commands and flags.",

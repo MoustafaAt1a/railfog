@@ -64,6 +64,7 @@ export const SUBCOMMANDS = [
   { name: "upgrade", desc: "Upgrade the RailFog CLI to the latest version" },
   { name: "update", desc: "Alias for upgrade subcommand" },
   { name: "sync", desc: "Sync CLI with latest git updates (alias for update)" },
+  { name: "uninstall", desc: "Remove the RailFog CLI binary and metadata" },
   { name: "completions", desc: "Generate shell auto-completion script" },
 ];
 
