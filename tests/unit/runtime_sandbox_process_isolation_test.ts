@@ -842,7 +842,8 @@ Deno.test("Security Adversarial (PLAT-4): Attempt to spawn child processes via D
     const code = `
       export default async function handler(req, ctx) {
         try {
-          const cmd = new Deno.Command("sh", { args: ["-c", "whoami"] });
+          const bin = Deno.execPath();
+          const cmd = new Deno.Command(bin, { args: ["eval", "1"] });
           await cmd.output();
           return new Response("run_success", { status: 200 });
         } catch (err) {

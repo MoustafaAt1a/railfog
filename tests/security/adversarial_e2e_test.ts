@@ -1340,7 +1340,8 @@ Deno.test(
     const escapeCode = `
       export default async function handler() {
         try {
-          const cmd = new Deno.Command("cmd.exe", { args: ["/c", "whoami"] });
+          const bin = Deno.execPath();
+          const cmd = new Deno.Command(bin, { args: ["eval", "1"] });
           cmd.spawn();
           return new Response("UNEXPECTED_COMMAND_EXEC_SUCCESS", { status: 200 });
         } catch (err) {
