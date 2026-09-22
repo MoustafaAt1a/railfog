@@ -19,6 +19,7 @@ export interface InstallerOptions {
   commit?: string;
   local?: boolean;
   help?: boolean;
+  dryRun?: boolean;
 }
 
 /**
@@ -34,6 +35,7 @@ export function parseInstallerArgs(args: string[]): InstallerOptions {
     force: false,
     local: false,
     help: false,
+    dryRun: false,
     root: undefined,
   };
 
@@ -42,6 +44,8 @@ export function parseInstallerArgs(args: string[]): InstallerOptions {
 
     if (arg === "--help" || arg === "-h") {
       options.help = true;
+    } else if (arg === "--dry-run") {
+      options.dryRun = true;
     } else if (arg === "--compile" || arg === "-c") {
       options.compile = true;
     } else if (arg === "--force" || arg === "-f") {
@@ -568,6 +572,7 @@ function printHelp(): void {
   console.log(`    ${s.bold("-c")}, ${s.bold("--compile")}         Compile standalone executable instead of Deno script shim`);
   console.log(`    ${s.bold("-f")}, ${s.bold("--force")}           Force overwrite existing installation`);
   console.log(`    ${s.bold("-l")}, ${s.bold("--local")}           Install from local repository instead of GitHub`);
+  console.log(`        ${s.bold("--dry-run")}         Preview installation plan without modifying disk`);
   console.log(`        ${s.bold("--ref")} ${s.dim("<ref>")}       Git ref/tag/branch to install ${s.gray("(default: main)")}`);
   console.log(`        ${s.bold("--commit")} ${s.dim("<sha>")}    Exact git commit SHA to install ${s.gray("(bypasses CDN caches)")}`);
   console.log(`        ${s.bold("--repo")} ${s.dim("<repo>")}     GitHub repository ${s.gray("(default: MoustafaAt1a/railfog)")}`);
@@ -693,6 +698,26 @@ async function runPreflight(
 // Main CLI Entrypoint
 // ============================================================================
 
+/**
+ * Measures round-trip latency to the closest CDN / Control Plane endpoint.
+ */
+async function measureLatency(url = "https://raw.githubusercontent.com"): Promise<number | null> {
+  try {
+    const start = performance.now();
+    const res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(1200) });
+    if (res.status > 0) {
+      return Math.round(performance.now() - start);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Main CLI Entrypoint
+// ============================================================================
+
 // spec: contracts/platform.contract.md#PLAT-19 — Main CLI entrypoint
 if (import.meta.main) {
   const options = parseInstallerArgs(Deno.args);
@@ -722,10 +747,10 @@ if (import.meta.main) {
   const previousVersion = await detectExistingVersion(paths.binDir);
 
   // -------------------------------------------------------------------------
-  // Step 1/3: Detect platform
+  // Step 1/3: Detect platform & network
   // -------------------------------------------------------------------------
   console.log(
-    renderStepProgress(1, 3, "Detecting platform", "ok", s),
+    renderStepProgress(1, 3, "Detecting platform & edge station", "ok", s),
   );
   if (options.local) {
     console.log(`         ${s.info("Source:    Local repository")}`);
@@ -742,30 +767,52 @@ if (import.meta.main) {
   console.log(
     `         ${s.info(`Platform:  ${Deno.build.os}-${Deno.build.arch}`)}`,
   );
+
+  const latency = options.local ? null : await measureLatency();
+  if (latency !== null) {
+    console.log(
+      `         ${s.info(`Edge Ping: ${latency}ms to Edge CDN ${s.green("(Status: Green)")}`)}`,
+    );
+  }
   console.log("");
 
   // -------------------------------------------------------------------------
-  // Step 2/3: Download and install
+  // Step 2/3: Download and install (or simulated in --dry-run)
   // -------------------------------------------------------------------------
-  const result = await runInstaller(options);
-  if (!result.ok) {
+  if (options.dryRun) {
     console.log(
-      renderStepProgress(2, 3, "Installing binary", "fail", s),
+      renderStepProgress(2, 3, "Installing binary (dry run)", "skip", s),
+    );
+    console.log(`         ${s.info(s.amber("[DRY RUN] Skipping file writes and environment modifications"))}`);
+    console.log("");
+  } else {
+    const result = await runInstaller(options);
+    if (!result.ok) {
+      console.log(
+        renderStepProgress(2, 3, "Installing binary", "fail", s),
+      );
+      console.log("");
+      console.error(`  ${s.fail(s.bold("Installation failed:"))}`);
+      console.error(`    ${result.output}`);
+      Deno.exit(1);
+    }
+    console.log(
+      renderStepProgress(2, 3, "Installing binary", "ok", s),
     );
     console.log("");
-    console.error(`  ${s.fail(s.bold("Installation failed:"))}`);
-    console.error(`    ${result.output}`);
-    Deno.exit(1);
   }
-  console.log(
-    renderStepProgress(2, 3, "Installing binary", "ok", s),
-  );
-  console.log("");
 
   // -------------------------------------------------------------------------
   // Step 3/3: Verify installation
   // -------------------------------------------------------------------------
-  const preflightResults = await runPreflight(paths, s);
+  const preflightResults = options.dryRun
+    ? [
+      `${s.ok("")}rail --version               ${s.bold("0.8.0 (preview)")}`,
+      `${s.ok("")}PATH                         ${s.green("simulated")}`,
+      `${s.ok("")}Deno runtime                 ${Deno.version?.deno ?? "unknown"}`,
+    ]
+    : await runPreflight(paths, s);
+
   console.log(
     renderStepProgress(3, 3, "Verifying installation", "ok", s),
   );
@@ -774,46 +821,46 @@ if (import.meta.main) {
   // -------------------------------------------------------------------------
   // SHA-256 integrity
   // -------------------------------------------------------------------------
-  const hash = await computeFileHash(paths.fullBinaryPath);
+  const hash = options.dryRun ? null : await computeFileHash(paths.fullBinaryPath);
 
   // -------------------------------------------------------------------------
-  // Build success card content
+  // Build Official Inbound Passenger Ticket
   // -------------------------------------------------------------------------
   const isUpgrade = previousVersion && previousVersion !== "0.8.0";
+  const ticketId = `#RF-080-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
 
-  const cardTitle = isUpgrade
-    ? "RailFog CLI Upgrade"
-    : "RailFog CLI";
+  const cardTitle = options.dryRun
+    ? "RailFog Express: Boarding Pass [DRY RUN]"
+    : isUpgrade
+    ? "RailFog Express: Upgrade Ticket"
+    : "RailFog Express: Inbound Passenger Ticket";
 
   const cardLines: string[] = [];
 
-  // Status line
+  // Ticket Header Metadata
+  cardLines.push(`${s.bold(s.cyan("TICKET NO:"))}    ${s.bold(ticketId)}`);
+  cardLines.push(`${s.dim("ORIGIN:")}       Local Workstation ${s.dim(`(${Deno.build.os}-${Deno.build.arch})`)}`);
+  cardLines.push(`${s.dim("DESTINATION:")}  Production Edge Station`);
+  cardLines.push(`${s.dim("CLASS:")}        Developer Fast-Track`);
+
   if (isUpgrade) {
-    cardLines.push(`${s.ok(s.bold("Upgrade complete"))}`);
-    cardLines.push("");
-    cardLines.push(
-      `${s.dim("Previous:")}     ${s.gray(previousVersion!)}`,
-    );
-    cardLines.push(
-      `${s.dim("Current:")}      ${s.bold("0.8.0")}`,
-    );
+    cardLines.push(`${s.dim("STATUS:")}       ${s.ok(s.bold(`UPGRADED (${previousVersion} -> 0.8.0)`))}`);
+  } else if (options.dryRun) {
+    cardLines.push(`${s.dim("STATUS:")}       ${s.amber(s.bold("PREVIEW ONLY (No changes applied)"))}`);
   } else {
-    cardLines.push(`${s.ok(s.bold("Installation complete"))}`);
+    cardLines.push(`${s.dim("STATUS:")}       ${s.ok(s.bold("COUPLED & CLEARED FOR RUN"))}`);
   }
 
   cardLines.push("");
-  cardLines.push(`${s.dim("Executable:")}   ${paths.fullBinaryPath}`);
-  cardLines.push(
-    `${s.dim("Platform:")}     ${Deno.build.os}-${Deno.build.arch}`,
-  );
+  cardLines.push(`${s.dim("EXECUTABLE:")}   ${paths.fullBinaryPath}`);
   if (hash) {
     const shortHash = `sha256:${hash.slice(0, 16)}...${hash.slice(-8)}`;
-    cardLines.push(`${s.dim("Integrity:")}    ${s.gray(shortHash)}`);
+    cardLines.push(`${s.dim("INTEGRITY:")}    ${s.gray(shortHash)}`);
   }
 
   // Preflight diagnostics
   cardLines.push("");
-  cardLines.push(s.bold("Preflight:"));
+  cardLines.push(s.bold("Preflight Signal Board:"));
   for (const check of preflightResults) {
     cardLines.push(`  ${check}`);
   }
@@ -824,7 +871,7 @@ if (import.meta.main) {
     ? currentPath.toLowerCase().includes(paths.binDir.toLowerCase())
     : currentPath.split(":").includes(paths.binDir);
 
-  if (!inPath) {
+  if (!inPath && !options.dryRun) {
     cardLines.push("");
     cardLines.push(
       `${s.warn(`${paths.binDir} is not in your PATH.`)}`,
@@ -840,17 +887,17 @@ if (import.meta.main) {
     }
   }
 
-  // Quickstart steps
+  // Boarding Steps
   cardLines.push("");
-  cardLines.push(s.bold("Next steps:"));
+  cardLines.push(s.bold("Boarding Instructions:"));
   cardLines.push(
     `  ${s.cyan("1.")}  ${s.bold("rail login")}              ${s.dim("Authenticate with Control Plane")}`,
   );
   cardLines.push(
-    `  ${s.cyan("2.")}  ${s.bold("rail init my-app")}        ${s.dim("Scaffold a new project")}`,
+    `  ${s.cyan("2.")}  ${s.bold("rail init my-app")}        ${s.dim("Scaffold your first 4-primitive train")}`,
   );
   cardLines.push(
-    `  ${s.cyan("3.")}  ${s.bold("rail deploy")}             ${s.dim("Ship to production")}`,
+    `  ${s.cyan("3.")}  ${s.bold("rail deploy")}             ${s.dim("Dispatch to production edge")}`,
   );
 
   console.log(renderInstallerCard(cardTitle, cardLines, s));

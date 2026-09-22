@@ -3,11 +3,13 @@
 
 import { join } from "@std/path";
 import { resolveInstallPaths } from "../scripts/install.ts";
+import { getDefaultConfigPath } from "./auth-config.ts";
 import {
+  animateSignalLantern,
+  animateSteamTrain,
   colors,
   getTerminalWidth,
   glyphs,
-  renderBrandHeader,
   renderCard,
   renderTrainLogo,
   visibleWidth,
@@ -27,19 +29,20 @@ export interface UninstallResult {
  * Removes the RailFog CLI binary and associated metadata.
  * Automatically resolves the installation directory — zero flags or configuration required.
  *
- * Visual layout and typography faithfully match the JetBrains Darcula CLI design system.
+ * Uses the official animated locomotive and signal lantern from cli/ui.ts,
+ * provides a transparent clean-room hygiene audit, and offers shell PATH pruning guidance.
  *
  * @spec contracts/platform.contract.md#PLAT-19
  */
 export async function runUninstall(): Promise<UninstallResult> {
-  // Branded locomotive header
-  console.log(renderBrandHeader(CLI_VERSION));
+  // 1. Live animation of the locomotive header from ui.ts
+  await animateSteamTrain({ durationMs: 400, version: CLI_VERSION });
   console.log("");
 
   const paths = resolveInstallPaths({});
   const removedFiles: string[] = [];
 
-  // Step 1: Locate installation
+  // 2. Step: Locate installation
   const locateSpinner = createTrackSpinner();
   locateSpinner.start("Locating RailFog installation...");
   await delay(120);
@@ -71,7 +74,7 @@ export async function runUninstall(): Promise<UninstallResult> {
   }
   console.log("");
 
-  // Step 2: Remove files automatically
+  // 3. Step: Remove files automatically
   const removeSpinner = createTrackSpinner();
   removeSpinner.start("Removing CLI binary and metadata...");
 
@@ -122,7 +125,35 @@ export async function runUninstall(): Promise<UninstallResult> {
   }
   console.log("");
 
-  // Step 3: JetBrains Darcula Departure Card with locomotive art
+  // 4. Live animation of the signal lantern aspect transition from ui.ts
+  await animateSignalLantern({
+    steps: [
+      "Switching track to departure siding...",
+      "Uncoupling binary executables & shims...",
+      "All signals clear • RailFog CLI uninstalled.",
+    ],
+    delayMs: 130,
+  });
+  console.log("");
+
+  // 5. Clean-Room Hygiene Audit (check local auth credentials)
+  let hasLocalAuth = false;
+  const authConfigPath = getDefaultConfigPath();
+  try {
+    const stat = await Deno.stat(authConfigPath);
+    hasLocalAuth = stat.isFile;
+  } catch {
+    hasLocalAuth = false;
+  }
+
+  // 6. PATH check
+  const currentPath = Deno.env.get("PATH") ?? "";
+  const isWindows = Deno.build.os === "windows";
+  const inPath = isWindows
+    ? currentPath.toLowerCase().includes(paths.binDir.toLowerCase())
+    : currentPath.split(":").includes(paths.binDir);
+
+  // 7. JetBrains Darcula Departure Card with locomotive art
   const trainLines = renderTrainLogo({ includeTrack: true });
   const logoWidth = 24;
 
@@ -153,9 +184,48 @@ export async function runUninstall(): Promise<UninstallResult> {
       }`,
     ];
 
+  // Hygiene audit section
+  rightLines.push("");
+  rightLines.push(colors.bold("Hygiene & Clean-Room Audit:"));
+  rightLines.push(
+    `  ${glyphs.success} ${colors.dim("Binary Executables:")}  Removed cleanly`,
+  );
+  rightLines.push(
+    `  ${glyphs.success} ${colors.dim("Version Metadata:")}    Removed (.rail-version.json)`,
+  );
+  if (hasLocalAuth) {
+    rightLines.push(
+      `  ${glyphs.info} ${colors.dim("Local Auth Session:")}   ${colors.emerald("Preserved in ~/.railfog/config.json")}`,
+    );
+    rightLines.push(
+      `    ${colors.dim("(Your cloud project tokens are safe if you reinstall)")}`,
+    );
+  } else {
+    rightLines.push(
+      `  ${glyphs.success} ${colors.dim("Local Auth Session:")}   Zero stored tokens found`,
+    );
+  }
+
+  // PATH reminder
+  if (inPath) {
+    rightLines.push("");
+    rightLines.push(
+      `${colors.amber("[!]")} ${colors.dim("PATH Notice:")} ${paths.binDir} is still in your PATH.`,
+    );
+    if (isWindows) {
+      rightLines.push(
+        `    ${colors.dim("To prune User PATH:")} [Environment]::SetEnvironmentVariable("Path", ($env:Path -replace [regex]::Escape(";${paths.binDir}"), ""), "User")`,
+      );
+    } else {
+      rightLines.push(
+        `    ${colors.dim("Remove the export line from your ~/.bashrc or ~/.zshrc")}`,
+      );
+    }
+  }
+
   const termWidth = getTerminalWidth();
   const contentLines: string[] = [];
-  if (termWidth >= 70) {
+  if (termWidth >= 74) {
     const maxRows = Math.max(trainLines.length, rightLines.length);
     for (let i = 0; i < maxRows; i++) {
       const left = trainLines[i] ?? " ".repeat(logoWidth);
