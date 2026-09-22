@@ -71,7 +71,7 @@ making the same mistake or re-deriving the same checklist — is a skill.
    the bar to match.
 4. Write the body as a concrete checklist or rule set, not narrative
    philosophy. Cite `docs/contracts/` clause IDs wherever the rule is
-   RailFog-specific (`docs/ANTIHALLUCINATION.md` Rule 1 applies to skills
+   RailFog-specific (`.agents/docs/ANTIHALLUCINATION.md` Rule 1 applies to skills
    too — a skill is code that shapes code, and it's wrong just as easily).
 5. State explicit non-goals — what this skill does *not* cover — so it
    doesn't quietly grow into overlapping neighboring skills over time.
@@ -85,8 +85,8 @@ triggers it — the same reason design decisions route through `architect`
 rather than getting made inline. Hand the draft to `architect`, which checks:
 
 - No overlap with an existing skill (merge instead, if there is).
-- No contradiction with `docs/CONSTITUTION.md`, `docs/ANTI-SLOP.md`,
-  `docs/ANTIHALLUCINATION.md`, or any `docs/contracts/*.md` file.
+- No contradiction with `docs/CONSTITUTION.md`, `.agents/docs/ANTI-SLOP.md`,
+  `.agents/docs/ANTIHALLUCINATION.md`, or any `docs/contracts/*.md` file.
 - The description is specific enough to trigger correctly.
 - The body is a concrete checklist, not restated philosophy.
 

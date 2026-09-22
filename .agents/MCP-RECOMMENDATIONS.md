@@ -21,7 +21,7 @@ install actually uses.
 ### Context7 (Upstash) — the one that matters most for this harness specifically
 
 This harness spends a lot of its weight on one failure mode: agents
-confidently generating an API that doesn't exist. `docs/ANTIHALLUCINATION.md`
+confidently generating an API that doesn't exist. `.agents/docs/ANTIHALLUCINATION.md`
 covers that for RailFog's *own* spec — but `implementer` and `test-writer`
 are also going to be writing against Deno's standard library, SQLite driver
 APIs, and (from Milestone 0.2 on) Cloudflare's Workers/R2/Queues SDKs and a
@@ -45,7 +45,7 @@ lookup instead of memory.
 
 The harness already assumes GitHub: `.github/workflows/ci.yml` exists,
 `docs/adr/` is the kind of thing teams often mirror as GitHub Discussions or
-Issues, and `docs/ANTIHALLUCINATION.md` Rule 5 (verification over belief)
+Issues, and `.agents/docs/ANTIHALLUCINATION.md` Rule 5 (verification over belief)
 is only as strong as what a model can actually check. Right now, `reviewer`
 and `security-auditor` can run `deno check`/`deno test` locally, but they
 have no way to confirm the *actual* CI run on a pushed commit passed —
@@ -67,7 +67,7 @@ irreversible action — confirm before it happens, don't let it run unattended.
 
 `docs/contracts/platform.contract.md` PLAT-16/17 names Cloudflare
 Workers/KV/R2/Queues as the initial production provider substrate. The exact
-mistake that produced Audit Finding #1 (`docs/00-deep-analysis.md` §1) — a
+mistake that produced Audit Finding #1 (`.agents/docs/00-deep-analysis.md` §1) — a
 false claim about Workers KV's consistency guarantee — is precisely the kind
 of error a live Cloudflare MCP connection prevents, by letting `architect`
 and `implementer` check real API behavior and real free-tier limits instead

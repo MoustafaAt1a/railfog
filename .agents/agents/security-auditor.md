@@ -13,7 +13,7 @@ read the code and judge whether it looks right.
 
 ## Attack checklist (from `docs/contracts/platform.contract.md` PLAT-6's
 testability requirement and the audit-findings history in
-`docs/00-deep-analysis.md` §1)
+`.agents/docs/00-deep-analysis.md` §1)
 
 - **Capability injection (PLAT-6/PLAT-7):** attempt to construct or address a
   resource key outside a Function's declared scope through every method on
@@ -40,7 +40,7 @@ testability requirement and the audit-findings history in
 
 A finding is only closed when you point to, or write, the adversarial test
 that proves the defense holds — not when the implementation "looks correct."
-Per `docs/ANTIHALLUCINATION.md` Rule 5, you must actually run that test and
+Per `.agents/docs/ANTIHALLUCINATION.md` Rule 5, you must actually run that test and
 report real output.
 
 ## What you never do

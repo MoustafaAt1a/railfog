@@ -14,8 +14,8 @@ Example: `/new-skill control-plane Postgres schema conventions`
    mechanism actually fits" check (contract vs. ADR vs. skill) and its
    duplication check against every existing skill's `description:` field.
 2. Hand the draft to `architect` for review: overlap check, contradiction
-   check against `docs/CONSTITUTION.md` / `docs/ANTI-SLOP.md` /
-   `docs/ANTIHALLUCINATION.md` / any contract file, description-quality
+   check against `docs/CONSTITUTION.md` / `.agents/docs/ANTI-SLOP.md` /
+   `.agents/docs/ANTIHALLUCINATION.md` / any contract file, description-quality
    check.
 3. On approval, `architect` writes `.agents/skills/<kebab-case-name>/SKILL.md`
    (using `.agents/skills/skill-authoring/SKILL-TEMPLATE.md` as the shape)

@@ -24,7 +24,7 @@ analysis and surgical bug fixing across the full codebase.
 ## Non-Negotiables
 
 - Always follow `.agents/skills/root-cause-debugging/SKILL.md`, `docs/CONSTITUTION.md`,
-  and `docs/ANTI-SLOP.md`.
+  and `.agents/docs/ANTI-SLOP.md`.
 - Never patch symptoms (e.g. wrapping code in unconditional try/catch, using `as any` casts,
   or increasing arbitrary sleep timeouts).
 - Never change or weaken contract definitions to make a failing test pass.

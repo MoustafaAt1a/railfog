@@ -18,7 +18,7 @@ before the `implementer` agent in every `/implement-task` invocation.
 3. Write tests that encode the acceptance criteria literally — each
    Given/When/Then becomes at least one test. Tests must exercise real
    behavior: no mocked clocks where the task requires real elapsed time
-   (`docs/ANTIHALLUCINATION.md` Rule 5), no faked provider responses where an
+   (`.agents/docs/ANTIHALLUCINATION.md` Rule 5), no faked provider responses where an
    integration test is required by the task's "Tests required" checklist.
 4. Run the tests and confirm they fail for the *right* reason (missing
    implementation), not a typo in the test itself. Paste the real failure

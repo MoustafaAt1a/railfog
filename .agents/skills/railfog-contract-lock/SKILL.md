@@ -11,7 +11,7 @@ because the spec's own history proves the failure mode is real: the original
 draft named mechanisms ("permissions," "rate limiting," "idempotent
 consumer") without algorithms behind them, and an audited revision
 (`railfog-v1_0_0-lts.md`) found 15 concrete bugs as a result — see
-`docs/00-deep-analysis.md` §1 for the full list. An LLM filling in an
+`.agents/docs/00-deep-analysis.md` §1 for the full list. An LLM filling in an
 underspecified mechanism from plausibility defaults to the exact same
 failure mode.
 
@@ -44,4 +44,4 @@ current list always lives there, not duplicated stale here. Check:
 - Am I stating a third-party provider's guarantee I haven't verified against
   `platform.contract.md` PLAT-16?
 
-Full protocol: `docs/ANTIHALLUCINATION.md`.
+Full protocol: `.agents/docs/ANTIHALLUCINATION.md`.

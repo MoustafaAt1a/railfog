@@ -72,3 +72,7 @@ artifacts/
 .agents/artifacts/
 .agents/tmp/
 .agents/logs/
+.agents/docs/
+graphify-out/
+.graphify/
+

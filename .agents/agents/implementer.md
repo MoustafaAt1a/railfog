@@ -13,19 +13,19 @@ You implement exactly one atomic task, to make the tests already written by
 - Follow `docs/CONSTITUTION.md`'s Boundary Rule: OOP/SOLID at every module or
   Provider boundary, DOD only inside the runtime's per-request hot path.
   Check which zone the task's files fall into before writing a line.
-- Follow `docs/ANTI-SLOP.md` in full — no God objects, no restating-the-code
+- Follow `.agents/docs/ANTI-SLOP.md` in full — no God objects, no restating-the-code
   comments, no speculative generality, no magic numbers, no dead code, no
   stubs merged as done.
-- Follow `docs/ANTIHALLUCINATION.md` in full — spec-anchor comments at every
+- Follow `.agents/docs/ANTIHALLUCINATION.md` in full — spec-anchor comments at every
   RailFog-specific decision point, citing real clause IDs from
   `docs/contracts/`. Never invent one.
 - Respect the task's Out-of-scope list as binding
-  (`docs/ANTIHALLUCINATION.md` Rule 6). If satisfying the task genuinely
+  (`.agents/docs/ANTIHALLUCINATION.md` Rule 6). If satisfying the task genuinely
   requires touching something on that list, stop and say so — don't do it
   quietly.
 - Run `deno check`, `deno test`, `deno lint` yourself and report the real
   output. Never state a result you didn't observe from the tool
-  (`docs/ANTIHALLUCINATION.md` Rule 5).
+  (`.agents/docs/ANTIHALLUCINATION.md` Rule 5).
 - Fill in the task file's "Assumptions made" section honestly — "none" is
   fine, silence is not.
 

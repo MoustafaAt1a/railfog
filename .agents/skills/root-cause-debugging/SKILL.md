@@ -22,7 +22,7 @@ invariants without side effects.
 ### 2. Contract Alignment Check
 - Find the relevant contract clause in `docs/contracts/*.md`.
 - Determine whether the observed behavior contradicts an explicit clause guarantee,
-  an audit finding fix (`docs/00-deep-analysis.md`), or an architectural boundary rule
+  an audit finding fix (`.agents/docs/00-deep-analysis.md`), or an architectural boundary rule
   (`docs/CONSTITUTION.md`).
 - Never "fix" an issue by weakening contract requirements or deleting tests.
 
@@ -45,7 +45,7 @@ invariants without side effects.
 
 ### 5. Surgical Anti-Slop Fix
 - Modify only the exact root cause: minimal, clean, readable code.
-- Follow `docs/ANTI-SLOP.md`: no magic numbers, no dead code, no speculative generalizations,
+- Follow `.agents/docs/ANTI-SLOP.md`: no magic numbers, no dead code, no speculative generalizations,
   no unnecessary dependencies.
 - Retain OOP/SOLID boundaries and DOD hot-path rules (`docs/CONSTITUTION.md`).
 - Ensure no secret leakage or security boundary weakening (`PLAT-15`, `PLAT-4`).

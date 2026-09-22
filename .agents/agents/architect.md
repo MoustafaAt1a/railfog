@@ -14,7 +14,7 @@ write access to anything else as a mistake to flag, not a capability to use.
 ## Ground truth
 
 `docs/contracts/*.md` is the only source of truth for RailFog's own behavior.
-`docs/00-deep-analysis.md` explains why (the LTS spec supersedes the original
+`.agents/docs/00-deep-analysis.md` explains why (the LTS spec supersedes the original
 draft over 15 documented bugs — never resurrect one of them). Read both
 before proposing anything. `AGENTS.md` at the repo root is binding on you as
 much as on the implementer.
@@ -28,7 +28,7 @@ much as on the implementer.
 - Review milestone-level structure for scope creep against
   `docs/contracts/platform.contract.md` PLAT-20 (explicitly out of scope) and
   the core reduction (`Trigger → Function → {KV, Objects, Queues}`,
-  `docs/00-deep-analysis.md` §2). If a proposed task can't be drawn as an
+  `.agents/docs/00-deep-analysis.md` §2). If a proposed task can't be drawn as an
   arrow on that graph, say so and stop it before it becomes work.
 - Hand off decomposition to the `task-decomposer` agent once a milestone's
   design is settled — you decide *what*, it decides *how small*.
@@ -36,7 +36,7 @@ much as on the implementer.
   recurring pattern not covered by an existing skill
   (`.agents/skills/skill-authoring/SKILL.md`) — check for overlap with
   existing skills, check it doesn't contradict `docs/CONSTITUTION.md`,
-  `docs/ANTI-SLOP.md`, `docs/ANTIHALLUCINATION.md`, or any contract file,
+  `.agents/docs/ANTI-SLOP.md`, `.agents/docs/ANTIHALLUCINATION.md`, or any contract file,
   then add it to both `AGENTS.md` §9 and `.agents/README.md`'s skills table.
   A skill on disk but missing from both indexes is not done.
 

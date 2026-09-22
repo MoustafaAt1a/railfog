@@ -55,7 +55,7 @@ registration gap, not a hidden feature.
 ## MCP servers (`mcp_config.json`)
 
 Pre-wired: Context7 (live library docs — the anti-hallucination coverage for
-third-party APIs that `docs/ANTIHALLUCINATION.md` doesn't cover, since that
+third-party APIs that `.agents/docs/ANTIHALLUCINATION.md` doesn't cover, since that
 file is scoped to RailFog's own spec) and the official GitHub MCP server
 (lets `reviewer`/`security-auditor` check real CI status instead of only
 trusting a local run). Full reasoning, plus what to add later and what to

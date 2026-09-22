@@ -13,7 +13,7 @@ after a contract file changed and you want to re-check compliance).
 
 1. Load the task file and the current diff/files it produced.
 2. Invoke `reviewer` fresh — it re-reads `docs/contracts/` directly per
-   `docs/ANTIHALLUCINATION.md` Rule 4, it does not read the previous review's
+   `.agents/docs/ANTIHALLUCINATION.md` Rule 4, it does not read the previous review's
    notes as a shortcut.
 3. If the task's Spec references touch `PLAT-4`, `PLAT-5`, `PLAT-6`,
    `PLAT-7`, `PLAT-15`, `FN-6`, or `FN-7`, also invoke `security-auditor`

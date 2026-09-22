@@ -41,7 +41,7 @@ grep -rl 'claude-opus-4-6-thinking' .agents/agents/ | xargs sed -i 's/claude-opu
 
 The role separation (plan vs. implement vs. review) is still worth keeping
 even on one model — set every `model:` field to the same string. You lose
-the cross-model check (`docs/ANTIHALLUCINATION.md` Rule 4 is weaker with one
+the cross-model check (`.agents/docs/ANTIHALLUCINATION.md` Rule 4 is weaker with one
 model reviewing its own family's work), but every other rule in this harness
 (spec-lock, atomic tasks, DoD gates, verification-over-belief) still holds
 and still helps.

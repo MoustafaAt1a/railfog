@@ -5,12 +5,12 @@ description: Use when writing or reviewing any code in this repository. Enforces
 
 # Anti-Slop Checklist
 
-Full rules and rationale: `docs/ANTI-SLOP.md`. Condensed for active use:
+Full rules and rationale: `.agents/docs/ANTI-SLOP.md`. Condensed for active use:
 
 - [ ] Names come from `docs/glossary.md` only — no invented synonyms, no
       `Manager`/`Helper`/`Utils` catch-alls.
 - [ ] Every comment explains *why*, not *what* — cite a clause ID
-      (`docs/ANTIHALLUCINATION.md` Rule 1) when the "why" is spec-driven.
+      (`.agents/docs/ANTIHALLUCINATION.md` Rule 1) when the "why" is spec-driven.
 - [ ] No commented-out code.
 - [ ] No speculative generality — nothing built for a feature marked out of
       scope in `docs/contracts/platform.contract.md` PLAT-20.

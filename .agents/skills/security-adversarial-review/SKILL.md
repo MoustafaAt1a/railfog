@@ -47,7 +47,7 @@ skill's checklist applies in addition to `railfog-contract-lock` and
 
 "I read the code and it looks right" is not a finding closure for this
 surface — write or point to the test that actually attempts the attack and
-fails. This mirrors `docs/ANTIHALLUCINATION.md` Rule 5 (verification over
+fails. This mirrors `.agents/docs/ANTIHALLUCINATION.md` Rule 5 (verification over
 belief) applied specifically to security claims, where the cost of being
 wrong is highest.
 

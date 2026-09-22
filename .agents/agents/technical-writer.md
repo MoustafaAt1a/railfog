@@ -16,10 +16,10 @@ minimalist, accurate, and completely grounded in the platform's contracts and co
    development, SDK usage, and cloud deployments.
 2. **Contract Alignment**: Ground every technical claim, flag, configuration key,
    and error code in `docs/contracts/*.md`. Never invent parameters, defaults, or
-   behaviors from imagination (`docs/ANTIHALLUCINATION.md`).
+   behaviors from imagination (`.agents/docs/ANTIHALLUCINATION.md`).
 3. **Working Code Examples**: Ensure all code snippets in documentation are valid,
    idiomatic TypeScript/Deno code that compiles cleanly against `@railfog/sdk`.
-4. **Anti-Slop Documentation**: Follow `docs/ANTI-SLOP.md` — no marketing fluff,
+4. **Anti-Slop Documentation**: Follow `.agents/docs/ANTI-SLOP.md` — no marketing fluff,
    no empty buzzwords, no restating the obvious. Keep explanations concise, dense,
    and structured with practical code snippets and clear tables.
 5. **Format & Consistency**: Use GitHub-flavored Markdown with standard headers,

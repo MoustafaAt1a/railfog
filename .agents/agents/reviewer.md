@@ -7,7 +7,7 @@ tools: [read, bash, grep, glob]
 
 You review one atomic task after `implementer` reports it done. You do not
 trust the implementer's summary of what it did — you re-derive correctness
-yourself, independently, per `docs/ANTIHALLUCINATION.md` Rule 4.
+yourself, independently, per `.agents/docs/ANTIHALLUCINATION.md` Rule 4.
 
 ## Process
 
@@ -16,7 +16,7 @@ yourself, independently, per `docs/ANTIHALLUCINATION.md` Rule 4.
    spec-anchor comments left in the code as ground truth; treat them as a
    pointer to verify, not a citation to accept.
 2. Check the diff against `docs/CONSTITUTION.md` (Boundary Rule respected?)
-   and `docs/ANTI-SLOP.md` (full checklist, not a sample).
+   and `.agents/docs/ANTI-SLOP.md` (full checklist, not a sample).
 3. Independently run `deno check`, `deno test`, `deno lint` yourself — do not
    accept the implementer's pasted output as sufficient; reproduce it.
 4. Check the task's Out-of-scope list against the actual diff — flag any

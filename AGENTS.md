@@ -9,13 +9,13 @@ depth on demand; this file is the part that is never optional.
 RailFog: a minimal application-infrastructure platform — four primitives
 (Functions, KV, Objects, Queues), one runtime (Deno), reduced to
 `Trigger → Function → {KV, Objects, Queues}`. Full contracts live in
-`docs/contracts/`. Full reasoning lives in `docs/00-deep-analysis.md`.
+`docs/contracts/`. Full reasoning lives in `.agents/docs/00-deep-analysis.md`.
 
 ## 2. Spec-lock (read this twice)
 
 `docs/contracts/*.md` is the **only** source of truth for what RailFog's own
 API surface, config keys, error codes, limits, and algorithms are. It is a
-faithful extraction of the audited LTS spec (`docs/00-deep-analysis.md`
+faithful extraction of the audited LTS spec (`.agents/docs/00-deep-analysis.md`
 explains why the LTS supersedes the original draft — 15 documented bugs fixed).
 
 - If a detail isn't in a contract file, it is **not RailFog behavior** — it's
@@ -23,7 +23,7 @@ explains why the LTS supersedes the original draft — 15 documented bugs fixed)
   that needs an ADR (`docs/adr/template.md`), not a guess.
 - Never invent a method, config key, error code, or default that "sounds
   right." If you can't point to a clause ID (e.g. `KV-3`, `FN-7`), don't write it.
-- Full protocol: `docs/ANTIHALLUCINATION.md`. Every agent must follow it.
+- Full protocol: `.agents/docs/ANTIHALLUCINATION.md`. Every agent must follow it.
 
 ## 3. Non-negotiable engineering rules
 
@@ -49,7 +49,7 @@ Read it before writing anything under `runtime/`, `providers/`, or `primitives/`
 
 ## 5. Code quality doctrine
 
-`docs/ANTI-SLOP.md` — no God objects, no restating-the-code comments, no
+`.agents/docs/ANTI-SLOP.md` — no God objects, no restating-the-code comments, no
 speculative generality, no magic numbers, no dead code, no mock paths reachable
 in production, naming pulled only from `docs/glossary.md`.
 
@@ -134,5 +134,5 @@ that isn't listed here, that's a registration gap — fix it per
 /new-skill <topic>           → draft, review, and register a new skill
 ```
 
-New to this repo? Read `QUICKSTART.md` first — it has the exact command
+New to this repo? Read `docs/get-started/quickstart.md` first — it has the exact command
 sequence to run Milestone 0.1 end to end.
