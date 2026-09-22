@@ -7,12 +7,12 @@
 
 import type { FunctionHandler, RailFogContext } from "./types.ts";
 import {
-  InternalError,
-  RailFogError,
   type RailFogErrorCode,
   ResourceNotFoundError,
   toErrorResponseBody,
+  ValidationFailedError,
 } from "../../packages/errors/mod.ts";
+import { normalizeError } from "./client.ts";
 
 /**
  * Stream writer interface for chunked and streaming HTTP responses.
@@ -49,6 +49,8 @@ export interface SseWriter {
  */
 export interface HandlerContext extends RailFogContext {
   req: Request;
+  url: URL;
+  query: Record<string, string | undefined>;
   params?: Record<string, string | undefined>;
   body<T = unknown>(): Promise<T>;
   json(data: unknown, status?: number): Response;
@@ -136,18 +138,8 @@ function normalizeToErrorResponse(
   err: unknown,
   defaultRequestId: string,
 ): Response {
-  let railFogError: RailFogError;
-  let requestId: string;
-
-  if (err instanceof RailFogError) {
-    requestId = err.requestId ?? defaultRequestId;
-    railFogError = err;
-  } else {
-    requestId = defaultRequestId;
-    const message = err instanceof Error ? err.message : String(err);
-    railFogError = new InternalError(message, requestId);
-  }
-
+  const railFogError = normalizeError(err, defaultRequestId);
+  const requestId = railFogError.requestId ?? defaultRequestId;
   const status = statusFromErrorCode(railFogError.code);
   const body = toErrorResponseBody(railFogError);
   if (!body.error.request_id && requestId) {
@@ -178,14 +170,31 @@ export function handle(fn: HandlerFn): FunctionHandler {
     let parsedBody: unknown;
     let bodyParsed = false;
 
+    const parsedUrl = new URL(req.url, "http://railfog.internal");
+    const queryParams: Record<string, string | undefined> = {};
+    for (const [k, v] of parsedUrl.searchParams.entries()) {
+      queryParams[k] = v;
+    }
+
     // spec: contracts/functions.contract.md#FN-4 — Capability and context injection
     const c: HandlerContext = {
       ...ctx,
       timeRemaining: () => ctx.timeRemaining(),
       req,
+      url: parsedUrl,
+      query: queryParams,
       async body<T = unknown>(): Promise<T> {
         if (!bodyParsed) {
-          parsedBody = await req.json();
+          try {
+            parsedBody = await req.json();
+          } catch (err) {
+            throw new ValidationFailedError(
+              `Malformed JSON request body: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+              ctx.requestId,
+            );
+          }
           bodyParsed = true;
         }
         return parsedBody as T;
@@ -230,7 +239,10 @@ export function handle(fn: HandlerFn): FunctionHandler {
           try {
             await fn(writer);
           } catch (err) {
-            console.error("Stream producer error:", err);
+            const isAbort = (err as Error)?.name === "AbortError";
+            if (!isAbort) {
+              console.error("Stream producer error:", err);
+            }
             try {
               await sink.abort(err);
             } catch {
@@ -268,10 +280,12 @@ export function handle(fn: HandlerFn): FunctionHandler {
             if (event.id !== undefined) payload += `id: ${event.id}\n`;
             if (event.event !== undefined) payload += `event: ${event.event}\n`;
             if (event.retry !== undefined) payload += `retry: ${event.retry}\n`;
-            const dataStr = typeof event.data === "string"
+            const dataStr = event.data === undefined
+              ? ""
+              : typeof event.data === "string"
               ? event.data
               : JSON.stringify(event.data);
-            for (const line of dataStr.split("\n")) {
+            for (const line of dataStr.split(/\r?\n/)) {
               payload += `data: ${line}\n`;
             }
             payload += "\n";
@@ -290,7 +304,10 @@ export function handle(fn: HandlerFn): FunctionHandler {
           try {
             await fn(sseWriter);
           } catch (err) {
-            console.error("SSE producer error:", err);
+            const isAbort = (err as Error)?.name === "AbortError";
+            if (!isAbort) {
+              console.error("SSE producer error:", err);
+            }
             try {
               await sink.abort(err);
             } catch {
@@ -425,8 +442,7 @@ export function api(routes: ApiRouteMap): FunctionHandler {
   );
 
   return handle(async (c: HandlerContext): Promise<HandlerResult> => {
-    const url = new URL(c.req.url, "http://railfog.internal");
-    const pathname = url.pathname;
+    const pathname = c.url.pathname;
     const reqMethod = c.req.method.toUpperCase();
 
     let winningRoute: CompiledRoute | null = null;

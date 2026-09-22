@@ -170,3 +170,21 @@ export type QueueConsumerHandler<T = unknown> = (
   message: QueueMessage<T>,
   ctx: RailFogContext,
 ) => Promise<void> | void;
+
+/**
+ * Scheduled cron trigger payload delivered to scheduled functions.
+ * @spec contracts/functions.contract.md#FN-2
+ */
+export interface ScheduleEvent {
+  cron: string;
+  timestamp: number;
+}
+
+/**
+ * Entrypoint handler signature for Schedule-triggered functions.
+ * @spec contracts/functions.contract.md#FN-2
+ */
+export type ScheduleHandler = (
+  event: ScheduleEvent,
+  ctx: RailFogContext,
+) => Promise<void> | void;

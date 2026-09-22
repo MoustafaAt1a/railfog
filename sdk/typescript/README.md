@@ -1,9 +1,10 @@
 # @railfog/sdk — RailFog TypeScript SDK
 
 > [!NOTE]
-> **Package**: `@railfog/sdk` &nbsp;|&nbsp;
-> **Specification**: [LTS 1.0 (PLAT-19, FN-4)](../../docs/contracts/platform.contract.md) &nbsp;|&nbsp;
-> **Documentation**: [SDK Developer Guide](../../docs/sdk-guide.md)
+> **Package**: `@railfog/sdk` &nbsp;|&nbsp; **Specification**:
+> [LTS 1.0 (PLAT-19, FN-4)](../../docs/contracts/platform.contract.md)
+> &nbsp;|&nbsp; **Documentation**:
+> [SDK Developer Guide](../../docs/sdk-guide.md)
 
 The official TypeScript SDK for developing functions and consumers on the
 RailFog edge compute platform (`PLAT-19`).
@@ -28,7 +29,10 @@ Write minimal functions with zero boilerplate.
 
 ### Ultra-Minimalist HTTP Handler: `handle()`
 
-`handle()` automatically provides destructured context (`req`, `body()`, `json()`, `text()`, `kv`, `objects`, `queues`, `env`) and automatically serializes returned plain objects, arrays, and primitives into JSON responses with HTTP status 200:
+`handle()` automatically provides destructured context (`req`, `body()`,
+`json()`, `text()`, `kv`, `objects`, `queues`, `env`) and automatically
+serializes returned plain objects, arrays, and primitives into JSON responses
+with HTTP status 200:
 
 ```typescript
 import { handle } from "@railfog/sdk";
@@ -51,7 +55,8 @@ export default handle(async ({ req, env }) => {
 
 ### Micro-Router: `api()`
 
-Map multiple HTTP methods and parameterized routes in a single function with automatic `404 RESOURCE_NOT_FOUND` handling and `PLAT-11` specificity matching:
+Map multiple HTTP methods and parameterized routes in a single function with
+automatic `404 RESOURCE_NOT_FOUND` handling and `PLAT-11` specificity matching:
 
 ```typescript
 import { api } from "@railfog/sdk";
@@ -170,6 +175,22 @@ const consume: QueueConsumerHandler<OrderTask> = async (message, ctx) => {
 export default consume;
 ```
 
+### `ScheduleHandler` (`FN-2`)
+
+Entrypoint signature for scheduled cron-triggered functions accepting a typed
+`ScheduleEvent`:
+
+```typescript
+import type { ScheduleHandler } from "@railfog/sdk";
+
+const schedule: ScheduleHandler = async (event, ctx) => {
+  console.log(`Cron [${event.cron}] triggered at ${event.timestamp}`);
+  await ctx.kv.set(["last_cron_run"], event.timestamp);
+};
+
+export default schedule;
+```
+
 ---
 
 ## Reliability Helpers
@@ -216,6 +237,26 @@ const response = await withRetry(
 );
 ```
 
+### `withCircuitBreaker` (`Q-6`, `KV-2`)
+
+Composed circuit breaker pattern over KV with mandatory TTL. Fails fast with
+`UnavailableError` (503) when consecutive failures reach `failureThreshold`
+(default: 5) during the `cooldownMs` window (default: 30,000ms / 30s).
+Automatically resets failure count upon successful recovery:
+
+```typescript
+import { withCircuitBreaker } from "@railfog/sdk";
+
+const result = await withCircuitBreaker(
+  ctx.kv,
+  ["circuits", "payment_api"],
+  async () => {
+    return await chargePaymentGateway();
+  },
+  { failureThreshold: 5, cooldownMs: 30_000 },
+);
+```
+
 ---
 
 ## Error Model (`PLAT-12`)
@@ -255,6 +296,37 @@ try {
   const normalized = normalizeError(err, ctx.requestId);
   console.error(`Operation failed [${normalized.code}]: ${normalized.message}`);
 }
+```
+
+---
+
+## Type-Safe RPC Client: `createRpcClient()`
+
+Call deployed RailFog microservices or local dev servers with automatic JSON
+serialization, query parameter formatting, AbortSignal timeout/cancellation, and
+`PLAT-12` typed error normalization:
+
+```typescript
+import { createRpcClient } from "@railfog/sdk";
+
+const client = createRpcClient("https://api.myproject.railfog.app", {
+  headers: { "Authorization": "Bearer tok_123" },
+});
+
+// GET with typed return and query parameters
+const user = await client.get<{ id: string; name: string }>("/users/usr_1", {
+  query: { details: "full" },
+  signal: AbortSignal.timeout(5000),
+});
+
+// POST, PUT, PATCH, DELETE
+await client.post("/items", { name: "New Item" });
+await client.patch("/items/itm_1", { status: "active" });
+await client.delete("/items/itm_1");
+
+// HEAD returns Response Headers directly
+const headers = await client.head("/health");
+console.log(headers.get("x-request-id"));
 ```
 
 ---

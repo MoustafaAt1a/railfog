@@ -1051,3 +1051,88 @@ Deno.test("T-0810 / Ergonomics: c.sse() emits formatted text/event-stream events
   assert(bodyText.includes('data: {"text":"hello"}\n'));
   assert(bodyText.includes("data: world\n"));
 });
+
+Deno.test("T-0810 / Ergonomics: c.url and c.query are correctly extracted and available in handler", async () => {
+  const handler = handle((c) => {
+    return {
+      pathname: c.url.pathname,
+      search: c.url.search,
+      filter: c.query.filter,
+      limit: c.query.limit,
+    };
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request(
+    "https://example.railfog.internal/api/v1/search?filter=active&limit=10",
+  );
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 200);
+  const data = await res.json();
+  assertEquals(data, {
+    pathname: "/api/v1/search",
+    search: "?filter=active&limit=10",
+    filter: "active",
+    limit: "10",
+  });
+});
+
+Deno.test("T-0810 / PLAT-12: c.body() throws ValidationFailedError on malformed JSON", async () => {
+  const handler = handle(async (c) => {
+    const body = await c.body();
+    return { body };
+  });
+
+  const ctx = createMockRailFogContext({ requestId: "01TESTVALIDATIONFAIL" });
+  const req = new Request("https://example.railfog.internal/api/items", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{ malformed json",
+  });
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 400);
+  assertEquals(res.headers.get("x-request-id"), "01TESTVALIDATIONFAIL");
+  const data = await res.json();
+  assertEquals(data.error.code, "VALIDATION_FAILED");
+  assert(data.error.message.includes("Malformed JSON request body"));
+});
+
+Deno.test("T-0810 / PLAT-12: caught error objects with PLAT-12 code are normalized to specific RailFogError", async () => {
+  const handler = handle(() => {
+    throw {
+      code: "RESOURCE_NOT_FOUND",
+      message: "Customer usr_999 does not exist",
+    };
+  });
+
+  const ctx = createMockRailFogContext({ requestId: "01TESTRFNOTFOUND" });
+  const req = new Request("https://example.railfog.internal/api/customers/999");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 404);
+  const data = await res.json();
+  assertEquals(data.error.code, "RESOURCE_NOT_FOUND");
+  assertEquals(data.error.message, "Customer usr_999 does not exist");
+  assertEquals(data.error.request_id, "01TESTRFNOTFOUND");
+});
+
+Deno.test("T-0810 / Ergonomics: c.sse() handles undefined data and multiline CRLF payload", async () => {
+  const handler = handle((c) => {
+    return c.sse(async (sse) => {
+      await sse.send({ event: "ping", data: undefined });
+      await sse.send({ data: "line1\r\nline2\nline3" });
+      await sse.close();
+    });
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/sse");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 200);
+  const bodyText = await res.text();
+  assert(bodyText.includes("event: ping\ndata: \n\n"));
+  assert(bodyText.includes("data: line1\ndata: line2\ndata: line3\n\n"));
+});

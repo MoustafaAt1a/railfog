@@ -45,7 +45,11 @@ import type {
 } from "../../sdk/typescript/types.ts";
 
 import {
+  type CircuitBreakerOptions,
+  DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS,
+  DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
   type IdempotencyOptions,
+  withCircuitBreaker,
   withIdempotency,
   withRetry,
 } from "../../sdk/typescript/helpers.ts";
@@ -1716,4 +1720,182 @@ Deno.test("RPC Client: createRpcClient handles GET, POST, and typed error normal
     ResourceNotFoundError,
     "Item missing",
   );
+});
+
+// ============================================================================
+// Group 10: RpcClient Extended Methods & AbortSignal (Audit Finding #6, #7)
+// ============================================================================
+
+Deno.test("T-0502 / RpcClient: patch, head, and signal handling", async () => {
+  let capturedMethod = "";
+  let capturedBody: unknown = null;
+  let capturedSignal: AbortSignal | undefined = undefined;
+
+  const mockFetch = (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    capturedMethod = init?.method ?? "GET";
+    capturedSignal = init?.signal ?? undefined;
+    const urlStr = String(input);
+
+    if (capturedMethod === "PATCH") {
+      capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+      return Promise.resolve(
+        Response.json({ patched: true, received: capturedBody }),
+      );
+    }
+
+    if (capturedMethod === "HEAD") {
+      if (urlStr.includes("/api/missing")) {
+        return Promise.resolve(
+          new Response(null, {
+            status: 404,
+            statusText: "Not Found",
+            headers: { "x-request-id": "01HEADNOTFOUND" },
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(null, {
+          status: 200,
+          headers: { "x-custom-header": "test-val", "content-length": "42" },
+        }),
+      );
+    }
+
+    return Promise.resolve(Response.json({ ok: true }));
+  };
+
+  const client = createRpcClient("https://example.railfog.internal", {
+    fetch: mockFetch as unknown as typeof fetch,
+  });
+
+  // 1. Test PATCH
+  const patchRes = await client.patch<
+    { patched: boolean; received: { status: string } }
+  >(
+    "/api/resource",
+    { status: "archived" },
+  );
+  assertEquals(capturedMethod, "PATCH");
+  assertEquals(patchRes.patched, true);
+  assertEquals(patchRes.received.status, "archived");
+
+  // 2. Test HEAD success
+  const headHeaders = await client.head("/api/ping");
+  assertEquals(capturedMethod, "HEAD");
+  assertEquals(headHeaders.get("x-custom-header"), "test-val");
+  assertEquals(headHeaders.get("content-length"), "42");
+
+  // 3. Test HEAD error normalization
+  await assertRejects(
+    () => client.head("/api/missing"),
+    ResourceNotFoundError,
+  );
+
+  // 4. Test AbortSignal forwarding
+  const controller = new AbortController();
+  await client.get("/api/test", { signal: controller.signal });
+  assertEquals(capturedSignal, controller.signal);
+});
+
+// ============================================================================
+// Group 11: Reliability Helper: withCircuitBreaker (Q-6, KV-2, PLAT-12)
+// ============================================================================
+
+Deno.test("T-0502 / Q-6: withCircuitBreaker executes action when circuit is closed", async () => {
+  const kv = new MockKVBinding();
+  const circuitKey = ["circuit", "service-a"];
+
+  let callCount = 0;
+  const result = await withCircuitBreaker(kv, circuitKey, () => {
+    callCount++;
+    return "success-payload";
+  });
+
+  assertEquals(result, "success-payload");
+  assertEquals(callCount, 1);
+});
+
+Deno.test("T-0502 / Q-6: withCircuitBreaker trips to open after failure threshold is reached", async () => {
+  const kv = new MockKVBinding();
+  const circuitKey = ["circuit", "flaky-service"];
+  const threshold = 3;
+
+  for (let i = 1; i <= threshold; i++) {
+    await assertRejects(
+      () =>
+        withCircuitBreaker(
+          kv,
+          circuitKey,
+          () => {
+            throw new Error(`Simulated failure ${i}`);
+          },
+          { failureThreshold: threshold, cooldownMs: 10_000 },
+        ),
+      Error,
+      `Simulated failure ${i}`,
+    );
+  }
+
+  // Next call must fail immediately with UnavailableError without executing the action
+  let executedWhenOpen = false;
+  await assertRejects(
+    () =>
+      withCircuitBreaker(
+        kv,
+        circuitKey,
+        () => {
+          executedWhenOpen = true;
+          return "should-not-run";
+        },
+        { failureThreshold: threshold, cooldownMs: 10_000 },
+      ),
+    UnavailableError,
+    "Circuit breaker 'circuit/flaky-service' is open",
+  );
+
+  assertEquals(executedWhenOpen, false);
+});
+
+Deno.test("T-0502 / Q-6: withCircuitBreaker recovers after cooldown and resets failures on success", async () => {
+  const kv = new MockKVBinding();
+  const circuitKey = ["circuit", "recovering-service"];
+
+  // Pre-seed an expired open circuit
+  await kv.set(circuitKey, {
+    failures: 5,
+    openUntil: Date.now() - 1000, // expired 1s ago
+  });
+
+  let actionExecuted = false;
+  const result = await withCircuitBreaker(
+    kv,
+    circuitKey,
+    () => {
+      actionExecuted = true;
+      return "recovered";
+    },
+    { failureThreshold: 3, cooldownMs: 1000 },
+  );
+
+  assertEquals(actionExecuted, true);
+  assertEquals(result, "recovered");
+
+  // Verify failure state was cleared from KV on success
+  const storedState = await kv.get(circuitKey);
+  assertEquals(storedState, null);
+});
+
+Deno.test("T-0502 / Q-6: withCircuitBreaker default thresholds and options type checking", () => {
+  assertEquals(DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD, 5);
+  assertEquals(DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS, 30_000);
+
+  const opts: CircuitBreakerOptions = {
+    failureThreshold: DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+    cooldownMs: DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS,
+  };
+  assertEquals(opts.failureThreshold, 5);
+  assertEquals(opts.cooldownMs, 30_000);
 });

@@ -372,22 +372,32 @@ export interface RpcClient {
     options?: {
       headers?: Record<string, string>;
       query?: Record<string, string>;
+      signal?: AbortSignal;
     },
   ): Promise<T>;
   post<T = unknown>(
     path: string,
     body?: unknown,
-    options?: { headers?: Record<string, string> },
+    options?: { headers?: Record<string, string>; signal?: AbortSignal },
   ): Promise<T>;
   put<T = unknown>(
     path: string,
     body?: unknown,
-    options?: { headers?: Record<string, string> },
+    options?: { headers?: Record<string, string>; signal?: AbortSignal },
+  ): Promise<T>;
+  patch<T = unknown>(
+    path: string,
+    body?: unknown,
+    options?: { headers?: Record<string, string>; signal?: AbortSignal },
   ): Promise<T>;
   delete<T = unknown>(
     path: string,
-    options?: { headers?: Record<string, string> },
+    options?: { headers?: Record<string, string>; signal?: AbortSignal },
   ): Promise<T>;
+  head(
+    path: string,
+    options?: { headers?: Record<string, string>; signal?: AbortSignal },
+  ): Promise<Headers>;
 }
 
 /**
@@ -409,6 +419,7 @@ export function createRpcClient(
     body?: unknown,
     extraHeaders?: Record<string, string>,
     query?: Record<string, string>,
+    signal?: AbortSignal,
   ): Promise<T> {
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
     let targetUrl = `${url}${cleanPath}`;
@@ -445,6 +456,7 @@ export function createRpcClient(
       method,
       headers,
       body: bodyPayload,
+      signal,
     });
 
     if (!res.ok) {
@@ -494,29 +506,108 @@ export function createRpcClient(
       opts?: {
         headers?: Record<string, string>;
         query?: Record<string, string>;
+        signal?: AbortSignal;
       },
     ): Promise<T> {
-      return request<T>("GET", path, undefined, opts?.headers, opts?.query);
+      return request<T>(
+        "GET",
+        path,
+        undefined,
+        opts?.headers,
+        opts?.query,
+        opts?.signal,
+      );
     },
     post<T = unknown>(
       path: string,
       body?: unknown,
-      opts?: { headers?: Record<string, string> },
+      opts?: { headers?: Record<string, string>; signal?: AbortSignal },
     ): Promise<T> {
-      return request<T>("POST", path, body, opts?.headers);
+      return request<T>(
+        "POST",
+        path,
+        body,
+        opts?.headers,
+        undefined,
+        opts?.signal,
+      );
     },
     put<T = unknown>(
       path: string,
       body?: unknown,
-      opts?: { headers?: Record<string, string> },
+      opts?: { headers?: Record<string, string>; signal?: AbortSignal },
     ): Promise<T> {
-      return request<T>("PUT", path, body, opts?.headers);
+      return request<T>(
+        "PUT",
+        path,
+        body,
+        opts?.headers,
+        undefined,
+        opts?.signal,
+      );
+    },
+    patch<T = unknown>(
+      path: string,
+      body?: unknown,
+      opts?: { headers?: Record<string, string>; signal?: AbortSignal },
+    ): Promise<T> {
+      return request<T>(
+        "PATCH",
+        path,
+        body,
+        opts?.headers,
+        undefined,
+        opts?.signal,
+      );
     },
     delete<T = unknown>(
       path: string,
-      opts?: { headers?: Record<string, string> },
+      opts?: { headers?: Record<string, string>; signal?: AbortSignal },
     ): Promise<T> {
-      return request<T>("DELETE", path, undefined, opts?.headers);
+      return request<T>(
+        "DELETE",
+        path,
+        undefined,
+        opts?.headers,
+        undefined,
+        opts?.signal,
+      );
+    },
+    async head(
+      path: string,
+      opts?: { headers?: Record<string, string>; signal?: AbortSignal },
+    ): Promise<Headers> {
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      const targetUrl = `${url}${cleanPath}`;
+      const headers = new Headers(options?.headers);
+      if (opts?.headers) {
+        for (const [k, v] of Object.entries(opts.headers)) {
+          headers.set(k, v);
+        }
+      }
+      const res = await customFetch(targetUrl, {
+        method: "HEAD",
+        headers,
+        signal: opts?.signal,
+      });
+
+      if (!res.ok) {
+        const reqId = res.headers.get("x-request-id") ?? undefined;
+        let code = "INTERNAL";
+        if (res.status === 404) code = "RESOURCE_NOT_FOUND";
+        else if (res.status === 403) code = "PERMISSION_DENIED";
+        else if (res.status === 400) code = "VALIDATION_FAILED";
+        else if (res.status === 409) code = "CONFLICT";
+        else if (res.status === 429) code = "RATE_LIMITED";
+        else if (res.status === 503) code = "UNAVAILABLE";
+        else if (res.status === 504) code = "TIMEOUT";
+        throw normalizeError(
+          { code, message: res.statusText || `HTTP ${res.status}` },
+          reqId,
+        );
+      }
+
+      return res.headers;
     },
   };
 }
