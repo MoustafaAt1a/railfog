@@ -1,5 +1,10 @@
 # @railfog/sdk — RailFog TypeScript SDK
 
+> [!NOTE]
+> **Package**: `@railfog/sdk` &nbsp;|&nbsp;
+> **Specification**: [LTS 1.0 (PLAT-19, FN-4)](../../docs/contracts/platform.contract.md) &nbsp;|&nbsp;
+> **Documentation**: [SDK Developer Guide](../../docs/sdk-guide.md)
+
 The official TypeScript SDK for developing functions and consumers on the
 RailFog edge compute platform (`PLAT-19`).
 

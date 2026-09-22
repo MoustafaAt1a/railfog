@@ -1,29 +1,60 @@
-# Infrastructure (`infra/`)
+# Infrastructure & Packaging (`infra/`)
 
-Production container packaging, orchestration, and process specs per [`PLAT-1`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L11).
+> [!NOTE]
+> **Packaging**: Standalone Deno Container Images &nbsp;|&nbsp;
+> **Specification**: [PLAT-1 (Modular Monolith)](../docs/contracts/platform.contract.md#PLAT-1), [PLAT-8 (Fail-Static)](../docs/contracts/platform.contract.md#PLAT-8) &nbsp;|&nbsp;
+> **Deployment Targets**: Docker, Railway, Fly.io, Kubernetes
 
-## Deployment Topology
+Production container packaging, orchestration manifests, and deployment specifications for RailFog.
 
-RailFog maintains a strict two-process deployment model regardless of the number of internal packages:
+---
 
-1. **`railfog-control`** (`Dockerfile.control`): Runs the control-plane server (`apps/api`), handling manifests, deployments, snapshot publishing, and usage metrics.
-2. **`railfog-runtime`** (`Dockerfile.runtime`): Runs the data-plane server (`apps/runtime`), handling incoming function requests and serving from cached routing snapshots.
+## 1. Two-Process Deployment Model (`PLAT-1`)
 
-## Files
+Regardless of the number of internal packages or modules, RailFog packages and deploys into two independent container images:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        PHYSICAL DEPLOYMENT TOPOLOGY                    │
+│                                                                        │
+│   ┌───────────────────────────────┐   ┌──────────────────────────────┐ │
+│   │        railfog-runtime        │   │        railfog-control       │ │
+│   │    (infra/Dockerfile.runtime) │   │    (infra/Dockerfile.control)│ │
+│   ├───────────────────────────────┤   ├──────────────────────────────┤ │
+│   │ • Data Plane Daemon           │   │ • Control Plane Daemon       │ │
+│   │ • Sandboxed Isolates (PLAT-4) │   │ • Revisions & Snapshots      │ │
+│   │ • Fail-Static Cache (PLAT-8)  │   │ • Capability Resolver (PLAT-6│ │
+│   │ • Port: 8080 (or UDS socket)  │   │ • Port: 8081                 │ │
+│   └───────────────────────────────┘   └──────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Infrastructure Files
 
 | File | Purpose |
 |---|---|
-| [`Dockerfile.control`](file:///C:/FM/railfog/infra/Dockerfile.control) | Standalone Deno container build for the control plane daemon |
-| [`Dockerfile.runtime`](file:///C:/FM/railfog/infra/Dockerfile.runtime) | Standalone Deno container build for the data plane daemon |
-| [`docker-compose.yaml`](file:///C:/FM/railfog/infra/docker-compose.yaml) | Local multi-container orchestration demonstrating fail-static operation |
+| [`Dockerfile.control`](Dockerfile.control) | Minimal standalone Deno container build for `railfog-control` (`apps/api`). |
+| [`Dockerfile.runtime`](Dockerfile.runtime) | Minimal standalone Deno container build for `railfog-runtime` (`apps/runtime`). |
+| [`docker-compose.yaml`](docker-compose.yaml) | Local multi-container orchestration demonstrating fail-static operation during control plane outages. |
+| [`fly.toml`](fly.toml) | Fly.io deployment manifest for edge hosting. |
+| [`railway/`](railway/) | Complete Infrastructure as Code (IaC) packaging for Railway, including Terraform and TypeScript IaC. |
 
-## Running with Docker Compose
+---
+
+## 3. Running Locally with Docker Compose
 
 ```bash
-# Start control and runtime daemons
+# Start both control plane and runtime daemons
 docker compose -f infra/docker-compose.yaml up -d
 
-# Verify health
-curl -f http://localhost:8080/healthz # Runtime
-curl -f http://localhost:8081/healthz # Control Plane
+# Verify health probes
+curl -f http://localhost:8080/healthz  # Data Plane Runtime
+curl -f http://localhost:8081/healthz  # Control Plane API
+
+# Test fail-static resilience (PLAT-8):
+docker compose -f infra/docker-compose.yaml stop control
+# Runtime continues serving traffic without degradation from cached snapshots
+curl -f http://localhost:8080/healthz
 ```

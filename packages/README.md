@@ -1,26 +1,71 @@
-# `@railfog/*` Packages
+# Modular Packages (`packages/`)
 
-Foundational, domain-neutral modules used across RailFog's applications, runtime, and CLI.
+> [!NOTE]
+> **Scope**: Foundational, Domain-Neutral Modules &nbsp;|&nbsp;
+> **Workspace**: Mapped via `deno.json` import map (`@railfog/*`) &nbsp;|&nbsp;
+> **Architecture Doctrine**: [CONSTITUTION.md](../docs/reference/constitution.md)
 
-## Packages Overview
+This directory contains the foundational, domain-neutral modular packages that power RailFog's applications, runtime engine, providers, and developer CLI.
 
-All packages are mapped into the workspace import map in [`deno.json`](file:///C:/FM/railfog/deno.json) and exported via standardized entry points (`mod.ts`).
+---
 
-| Package | Workspace Alias | Description | Clause References |
+## 1. Package Dependency Hierarchy
+
+Packages maintain strict downward-only dependencies. Cross-boundary upward coupling is strictly prohibited:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ Upper Layers: apps/ · cli/ · runtime/ · providers/ · primitives/       │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ (Depends on @railfog/*)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Domain Packages: @railfog/auth · @railfog/config · @railfog/policy ... │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ (Depends on foundational packages)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Foundational Packages: @railfog/core · @railfog/errors                 │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Dependency Rules:
+1. Packages may depend on `@railfog/core`, `@railfog/errors`, and `@std/*`.
+2. Packages must **never** depend on `primitives/`, `providers/`, `runtime/`, `apps/`, or `cli/`.
+3. Circular dependencies between packages are rejected by `deno task check`.
+
+---
+
+## 2. Packages Directory
+
+All packages export standardized entrypoints via `mod.ts` and are aliased in `deno.json`:
+
+| Package | Workspace Alias | Responsibilities | Spec Anchors |
 |---|---|---|---|
-| [`core`](file:///C:/FM/railfog/packages/core/mod.ts) | `@railfog/core` | Universal platform constants, Crockford Base32 ULID generation, and core data structures | [`PLAT-14`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L248) |
-| [`api`](file:///C:/FM/railfog/packages/api/mod.ts) | `@railfog/api` | REST API request/response DTOs, endpoint routes, and serialization contracts | [`PLAT-12`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L210) |
-| [`auth`](file:///C:/FM/railfog/packages/auth/mod.ts) | `@railfog/auth` | Tenant context extraction, API key verification, role-based authorization | [`PLAT-7`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L104) |
-| [`config`](file:///C:/FM/railfog/packages/config/mod.ts) | `@railfog/config` | Manifest parsing, `railfog.toml` validation, environment override resolution | [`PLAT-2`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L25) |
-| [`errors`](file:///C:/FM/railfog/packages/errors/mod.ts) | `@railfog/errors` | Canonical typed `RailFogError` hierarchy (10 standard error codes) | [`PLAT-12`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L210) |
-| [`logging`](file:///C:/FM/railfog/packages/logging/mod.ts) | `@railfog/logging` | Structured JSON logging with automatic secret value redaction | [`PLAT-15`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L258) |
-| [`metrics`](file:///C:/FM/railfog/packages/metrics/mod.ts) | `@railfog/metrics` | In-memory metric accumulation, Prometheus text formatting, OTLP payload generation | [`PLAT-13`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L236) |
-| [`policy`](file:///C:/FM/railfog/packages/policy/mod.ts) | `@railfog/policy` | Network egress allowlisting, SSRF prevention, mandatory IP-range blocks | [`PLAT-5`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L62) |
-| [`protocol`](file:///C:/FM/railfog/packages/protocol/mod.ts) | `@railfog/protocol` | Wire formats, binary framing, snapshot serialization | [`PLAT-8`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L129) |
-| [`testing`](file:///C:/FM/railfog/packages/testing/mod.ts) | `@railfog/testing` | Shared test harness, mock providers, deterministic fixtures | [`PLAT-16`](file:///C:/FM/railfog/docs/contracts/platform.contract.md#L268) |
+| [`packages/core`](core/) | `@railfog/core` | Universal platform constants, Crockford Base32 ULID generation, lexer analyzers, base types. | [`PLAT-14`](../docs/contracts/platform.contract.md#PLAT-14) |
+| [`packages/api`](api/) | `@railfog/api` | REST API request/response DTOs, endpoint routes, serialization contracts, and schema definitions. | [`PLAT-12`](../docs/contracts/platform.contract.md#PLAT-12) |
+| [`packages/auth`](auth/) | `@railfog/auth` | Tenant identity context, API key verification, role-based access control, session tokens. | [`PLAT-7`](../docs/contracts/platform.contract.md#PLAT-7) |
+| [`packages/config`](config/) | `@railfog/config` | Declarative manifest parsing, `railfog.toml` schema validation, route specificity scoring. | [`PLAT-2`](../docs/contracts/platform.contract.md#PLAT-2), [`PLAT-11`](../docs/contracts/platform.contract.md#PLAT-11) |
+| [`packages/errors`](errors/) | `@railfog/errors` | Canonical typed `RailFogError` class hierarchy and 10 machine-readable error codes. | [`PLAT-12`](../docs/contracts/platform.contract.md#PLAT-12) |
+| [`packages/logging`](logging/) | `@railfog/logging` | High-throughput structured JSON logging with automatic secret redaction. | [`PLAT-13`](../docs/contracts/platform.contract.md#PLAT-13), [`PLAT-15`](../docs/contracts/platform.contract.md#PLAT-15) |
+| [`packages/metrics`](metrics/) | `@railfog/metrics` | In-memory usage metric accumulation, Prometheus text formatting, and OpenTelemetry OTLP export. | [`PLAT-13`](../docs/contracts/platform.contract.md#PLAT-13) |
+| [`packages/policy`](policy/) | `@railfog/policy` | Network egress allowlisting, SSRF prevention firewall, mandatory link-local and cloud metadata blocks. | [`PLAT-5`](../docs/contracts/platform.contract.md#PLAT-5) |
+| [`packages/protocol`](protocol/) | `@railfog/protocol` | Wire formats, binary framing, immutable routing snapshot serialization. | [`PLAT-8`](../docs/contracts/platform.contract.md#PLAT-8) |
+| [`packages/testing`](testing/) | `@railfog/testing` | Shared test fixtures, mock providers, deterministic time harnesses, and assertions. | [`PLAT-16`](../docs/contracts/platform.contract.md#PLAT-16) |
 
-## Dependency Rules
+---
 
-1. Packages may depend on `@railfog/core` and `@railfog/errors`.
-2. Packages must **never** depend on `primitives/`, `providers/`, `runtime/`, or `apps/`.
-3. Circular dependencies between packages are forbidden.
+## 3. Developing Packages
+
+All packages are type-checked and linted simultaneously across the workspace:
+
+```bash
+# Type-check all packages
+deno task check
+
+# Lint package source files
+deno lint packages/
+
+# Run unit tests for packages
+deno test --allow-all tests/unit/packages_*_test.ts
+```
