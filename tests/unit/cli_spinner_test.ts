@@ -132,194 +132,223 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function withInteractiveEnv(fn: () => Promise<void> | void): Promise<void> {
+  return withTerminalEnv({
+    isTerminal: true,
+    env: { CI: undefined, NO_COLOR: undefined },
+  }, fn);
+}
+
 // ============================================================================
 // Group 1: Spinner Lifecycle Transitions (AC1, AC2, AC3, PLAT-19)
 // ============================================================================
 
-Deno.test("AC1 (PLAT-19): start() sets initial message, returns spinner instance for method chaining, and writes initial frame", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 100 };
-  const spinner: Spinner = createSpinner(options);
+Deno.test("AC1 (PLAT-19): start() sets initial message, returns spinner instance for method chaining, and writes initial frame", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 100 };
+    const spinner: Spinner = createSpinner(options);
 
-  const returned = spinner.start("Packaging functions...");
-  try {
-    assertEquals(
-      returned,
-      spinner,
-      "start() must return the spinner instance for chaining",
+    const returned = spinner.start("Packaging functions...");
+    try {
+      assertEquals(
+        returned,
+        spinner,
+        "start() must return the spinner instance for chaining",
+      );
+      assertStringIncludes(
+        stream.text,
+        "Packaging functions...",
+        "Initial render must include start message",
+      );
+    } finally {
+      spinner.stop();
+    }
+  });
+});
+
+Deno.test("AC1 (PLAT-19): setText() updates current message dynamically and returns spinner instance for method chaining", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 100 };
+    const spinner: Spinner = createSpinner(options);
+
+    spinner.start("Packaging functions...");
+    const returned = spinner.setText("Optimizing bundle assets...");
+    try {
+      assertEquals(
+        returned,
+        spinner,
+        "setText() must return the spinner instance for chaining",
+      );
+      assertStringIncludes(
+        stream.text,
+        "Optimizing bundle assets...",
+        "Render after setText must include updated message",
+      );
+    } finally {
+      spinner.stop();
+    }
+  });
+});
+
+Deno.test("AC2 (PLAT-19): succeed() with message halts the spinner, restores cursor, and prints persistent green checkmark with message", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 50 };
+    const spinner: Spinner = createSpinner(options);
+
+    spinner.start("Packaging functions...");
+    spinner.succeed("Packaged successfully");
+
+    const output = stream.text;
+    assertStringIncludes(
+      output,
+      "Packaged successfully",
+      "succeed() must print the provided message",
     );
     assertStringIncludes(
-      stream.text,
-      "Packaging functions...",
-      "Initial render must include start message",
+      output,
+      "\x1b[?25h",
+      "succeed() must write cursor restore sequence (\\x1b[?25h)",
     );
-  } finally {
-    spinner.stop();
-  }
+    assertStringIncludes(output, "\n", "succeed() must end with a newline");
+    assertEquals(
+      hasGreenOrCheckmark(output),
+      true,
+      "succeed() must include green ANSI styling or checkmark symbol",
+    );
+  });
 });
 
-Deno.test("AC1 (PLAT-19): setText() updates current message dynamically and returns spinner instance for method chaining", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 100 };
-  const spinner: Spinner = createSpinner(options);
+Deno.test("AC2 (PLAT-19): succeed() without argument uses previously set message from start or setText", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 50 };
+    const spinner: Spinner = createSpinner(options);
 
-  spinner.start("Packaging functions...");
-  const returned = spinner.setText("Optimizing bundle assets...");
-  try {
-    assertEquals(
-      returned,
-      spinner,
-      "setText() must return the spinner instance for chaining",
+    spinner.start("Deploying revision...");
+    spinner.succeed();
+
+    const output = stream.text;
+    assertStringIncludes(
+      output,
+      "Deploying revision...",
+      "succeed() without arguments must retain existing message",
+    );
+    assertStringIncludes(output, "\x1b[?25h", "succeed() must restore cursor");
+    assertStringIncludes(
+      output,
+      "\n",
+      "succeed() must terminate line with newline",
+    );
+  });
+});
+
+Deno.test("AC3 (PLAT-19): fail() with message halts the spinner, restores cursor, and prints persistent red cross with message", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 50 };
+    const spinner: Spinner = createSpinner(options);
+
+    spinner.start("Building snapshot...");
+    spinner.fail("Build failed");
+
+    const output = stream.text;
+    assertStringIncludes(
+      output,
+      "Build failed",
+      "fail() must print the provided failure message",
     );
     assertStringIncludes(
-      stream.text,
-      "Optimizing bundle assets...",
-      "Render after setText must include updated message",
+      output,
+      "\x1b[?25h",
+      "fail() must write cursor restore sequence (\\x1b[?25h)",
     );
-  } finally {
+    assertStringIncludes(output, "\n", "fail() must end with a newline");
+    assertEquals(
+      hasRedOrCross(output),
+      true,
+      "fail() must include red ANSI styling or error cross symbol",
+    );
+  });
+});
+
+Deno.test("AC3 (PLAT-19): fail() without argument uses previously set message", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 50 };
+    const spinner: Spinner = createSpinner(options);
+
+    spinner.start("Validating permissions...");
+    spinner.fail();
+
+    const output = stream.text;
+    assertStringIncludes(
+      output,
+      "Validating permissions...",
+      "fail() without arguments must retain existing message",
+    );
+    assertStringIncludes(output, "\x1b[?25h", "fail() must restore cursor");
+    assertStringIncludes(
+      output,
+      "\n",
+      "fail() must terminate line with newline",
+    );
+  });
+});
+
+Deno.test("PLAT-19: stop() halts animation and restores cursor without printing status mark", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 50 };
+    const spinner: Spinner = createSpinner(options);
+
+    spinner.start("Compiling handler...");
     spinner.stop();
-  }
+
+    const output = stream.text;
+    assertStringIncludes(output, "\x1b[?25h", "stop() must restore cursor");
+    assertFalse(
+      output.includes("✔") || output.includes("[+]"),
+      "stop() must not print success indicator",
+    );
+    assertFalse(
+      output.includes("✖") || output.includes("[-]"),
+      "stop() must not print failure indicator",
+    );
+  });
 });
 
-Deno.test("AC2 (PLAT-19): succeed() with message halts the spinner, restores cursor, and prints persistent green checkmark with message", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 50 };
-  const spinner: Spinner = createSpinner(options);
+Deno.test("PLAT-19: calling stop(), succeed(), or fail() multiple times is idempotent", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 50 };
+    const spinner: Spinner = createSpinner(options);
 
-  spinner.start("Packaging functions...");
-  spinner.succeed("Packaged successfully");
+    spinner.start("Idempotent test");
+    spinner.succeed("First completion");
+    // Redundant terminal calls should not throw or leak
+    spinner.succeed("Second completion");
+    spinner.stop();
+    spinner.fail("Late failure");
 
-  const output = stream.text;
-  assertStringIncludes(
-    output,
-    "Packaged successfully",
-    "succeed() must print the provided message",
-  );
-  assertStringIncludes(
-    output,
-    "\x1b[?25h",
-    "succeed() must write cursor restore sequence (\\x1b[?25h)",
-  );
-  assertStringIncludes(output, "\n", "succeed() must end with a newline");
-  assertEquals(
-    hasGreenOrCheckmark(output),
-    true,
-    "succeed() must include green ANSI styling or checkmark symbol",
-  );
+    assertStringIncludes(stream.text, "First completion");
+  });
 });
 
-Deno.test("AC2 (PLAT-19): succeed() without argument uses previously set message from start or setText", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 50 };
-  const spinner: Spinner = createSpinner(options);
+Deno.test("PLAT-19: calling start() while already running resets/restarts cleanly without leaking timers", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const options: SpinnerOptions = { stream, intervalMs: 50 };
+    const spinner: Spinner = createSpinner(options);
 
-  spinner.start("Deploying revision...");
-  spinner.succeed();
+    spinner.start("Initial task");
+    spinner.start("Restarted task");
+    spinner.stop();
 
-  const output = stream.text;
-  assertStringIncludes(
-    output,
-    "Deploying revision...",
-    "succeed() without arguments must retain existing message",
-  );
-  assertStringIncludes(output, "\x1b[?25h", "succeed() must restore cursor");
-  assertStringIncludes(
-    output,
-    "\n",
-    "succeed() must terminate line with newline",
-  );
-});
-
-Deno.test("AC3 (PLAT-19): fail() with message halts the spinner, restores cursor, and prints persistent red cross with message", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 50 };
-  const spinner: Spinner = createSpinner(options);
-
-  spinner.start("Building snapshot...");
-  spinner.fail("Build failed");
-
-  const output = stream.text;
-  assertStringIncludes(
-    output,
-    "Build failed",
-    "fail() must print the provided failure message",
-  );
-  assertStringIncludes(
-    output,
-    "\x1b[?25h",
-    "fail() must write cursor restore sequence (\\x1b[?25h)",
-  );
-  assertStringIncludes(output, "\n", "fail() must end with a newline");
-  assertEquals(
-    hasRedOrCross(output),
-    true,
-    "fail() must include red ANSI styling or error cross symbol",
-  );
-});
-
-Deno.test("AC3 (PLAT-19): fail() without argument uses previously set message", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 50 };
-  const spinner: Spinner = createSpinner(options);
-
-  spinner.start("Validating permissions...");
-  spinner.fail();
-
-  const output = stream.text;
-  assertStringIncludes(
-    output,
-    "Validating permissions...",
-    "fail() without arguments must retain existing message",
-  );
-  assertStringIncludes(output, "\x1b[?25h", "fail() must restore cursor");
-  assertStringIncludes(output, "\n", "fail() must terminate line with newline");
-});
-
-Deno.test("PLAT-19: stop() halts animation and restores cursor without printing status mark", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 50 };
-  const spinner: Spinner = createSpinner(options);
-
-  spinner.start("Compiling handler...");
-  spinner.stop();
-
-  const output = stream.text;
-  assertStringIncludes(output, "\x1b[?25h", "stop() must restore cursor");
-  assertFalse(
-    output.includes("✔") || output.includes("[+]"),
-    "stop() must not print success indicator",
-  );
-  assertFalse(
-    output.includes("✖") || output.includes("[-]"),
-    "stop() must not print failure indicator",
-  );
-});
-
-Deno.test("PLAT-19: calling stop(), succeed(), or fail() multiple times is idempotent", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 50 };
-  const spinner: Spinner = createSpinner(options);
-
-  spinner.start("Idempotent test");
-  spinner.succeed("First completion");
-  // Redundant terminal calls should not throw or leak
-  spinner.succeed("Second completion");
-  spinner.stop();
-  spinner.fail("Late failure");
-
-  assertStringIncludes(stream.text, "First completion");
-});
-
-Deno.test("PLAT-19: calling start() while already running resets/restarts cleanly without leaking timers", () => {
-  const stream = new MockTerminalStream(true);
-  const options: SpinnerOptions = { stream, intervalMs: 50 };
-  const spinner: Spinner = createSpinner(options);
-
-  spinner.start("Initial task");
-  spinner.start("Restarted task");
-  spinner.stop();
-
-  assertStringIncludes(stream.text, "Restarted task");
+    assertStringIncludes(stream.text, "Restarted task");
+  });
 });
 
 // ============================================================================
@@ -654,16 +683,18 @@ Deno.test("PLAT-19: custom intervalMs option dictates animation frequency", asyn
   });
 });
 
-Deno.test("PLAT-19: message containing format specifiers or special characters is handled safely without interpolation errors", () => {
-  const stream = new MockTerminalStream(true);
-  const spinner = createSpinner({ stream });
+Deno.test("PLAT-19: message containing format specifiers or special characters is handled safely without interpolation errors", async () => {
+  await withInteractiveEnv(() => {
+    const stream = new MockTerminalStream(true);
+    const spinner = createSpinner({ stream });
 
-  const trickyMessage = "Uploading 100% complete (%s, %d, ${env}) [test]";
-  spinner.start(trickyMessage);
-  spinner.succeed("Completed 100% (%s, %x)");
+    const trickyMessage = "Uploading 100% complete (%s, %d, ${env}) [test]";
+    spinner.start(trickyMessage);
+    spinner.succeed("Completed 100% (%s, %x)");
 
-  assertStringIncludes(stream.text, trickyMessage);
-  assertStringIncludes(stream.text, "Completed 100% (%s, %x)");
+    assertStringIncludes(stream.text, trickyMessage);
+    assertStringIncludes(stream.text, "Completed 100% (%s, %x)");
+  });
 });
 
 Deno.test("Railway DX: createWheelSpinner cycles through locomotive wheel rotation frames", async () => {

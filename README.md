@@ -336,4 +336,4 @@ architecture:
 
 ## License
 
-MIT License. Copyright (c) 2026 Moustafa Atia.
+MIT License. Copyright (c) 2026 Moustafa At1a.
