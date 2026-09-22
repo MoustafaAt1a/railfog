@@ -24,6 +24,7 @@ import {
 } from "../packages/metrics/cost-calculator.ts";
 import {
   colors,
+  renderCard,
   renderDistributionBar,
   renderHorizontalBarChart,
   renderStatusBar,
@@ -92,37 +93,6 @@ export function formatUsageReport(
   const startDate = new Date(pStart).toISOString().slice(0, 10);
   const endDate = new Date(pEnd).toISOString().slice(0, 10);
 
-  const lines: string[] = [
-    "==================================================",
-    "              RailFog Usage & Cost Report         ",
-    "==================================================",
-    `Project:  ${cost.projectId ?? "default-project"}`,
-    `Org:      ${cost.orgId ?? "default-org"}`,
-    `Period:   ${pStart} (${startDate}) to ${pEnd} (${endDate})`,
-    "--------------------------------------------------",
-    "Itemized Breakdown:",
-    "",
-    "  Compute:",
-    `    CPU:                ${formatUsd(cost.itemized?.cpuCostUsd)}`,
-    `    Memory:             ${formatUsd(cost.itemized?.memoryCostUsd)}`,
-    `    Subtotal Compute:   ${formatUsd(cost.computeCostUsd)}`,
-    "",
-    "  Operations:",
-    `    KV Operations:      ${formatUsd(cost.itemized?.kvOpsCostUsd)}`,
-    `    Object Operations:  ${formatUsd(cost.itemized?.objectOpsCostUsd)}`,
-    `    Queue Operations:   ${formatUsd(cost.itemized?.queueOpsCostUsd)}`,
-    `    Subtotal Operations:${formatUsd(cost.operationsCostUsd)}`,
-    "",
-    "  Storage:",
-    `    KV Storage:         ${formatUsd(cost.itemized?.kvStorageCostUsd)}`,
-    `    Object Storage:     ${formatUsd(cost.itemized?.objectStorageCostUsd)}`,
-    `    Subtotal Storage:   ${formatUsd(cost.storageCostUsd)}`,
-    "",
-    "--------------------------------------------------",
-    `Total Cost:             ${formatUsd(cost.totalCostUsd)}`,
-    "==================================================",
-  ];
-
   const chartItems = [
     {
       label: "Compute",
@@ -144,14 +114,81 @@ export function formatUsageReport(
     },
   ];
 
-  lines.push("");
-  lines.push(colors.bold(colors.accent("Allocation Distribution:")));
-  lines.push(`  ${renderDistributionBar(chartItems, 34)}`);
-  lines.push("");
-  lines.push(colors.bold(colors.accent("Resource Consumption:")));
-  lines.push(renderHorizontalBarChart(chartItems, { width: 20 }));
+  const barChartLines = renderHorizontalBarChart(chartItems, { width: 22 })
+    .split("\n")
+    .map((l) => "  " + l);
 
-  return lines.join("\n");
+  const cardLines: string[] = [
+    `${
+      colors.bold(
+        colors.emerald(
+          "[+] Financial Resource Metering & Cost Audit (PLAT-10)",
+        ),
+      )
+    }`,
+    "",
+    `  ${colors.dim("Project:")}     ${
+      colors.bold(colors.accent(cost.projectId ?? "default-project"))
+    }`,
+    `  ${colors.dim("Org:")}         ${
+      colors.bold(colors.white(cost.orgId ?? "default-org"))
+    }`,
+    `  ${colors.dim("Period:")}      ${
+      colors.slate(`${pStart} (${startDate}) to ${pEnd} (${endDate})`)
+    }`,
+    `  ${colors.dim("Status:")}      ${colors.emerald("[+] METERING ACTIVE")}`,
+    `  ${colors.dim("Currency:")}    ${
+      colors.slate("USD ($) • Micro-Cent Precision")
+    }`,
+    "",
+    colors.border(
+      "  ─────────────────────────────────────────────────────────────────",
+    ),
+    "",
+    `  ${colors.bold(colors.accent("Itemized Breakdown:"))}`,
+    "",
+    `    ${colors.bold(colors.emerald("Compute:"))}`,
+    `      CPU:                  ${formatUsd(cost.itemized?.cpuCostUsd)}`,
+    `      Memory:               ${formatUsd(cost.itemized?.memoryCostUsd)}`,
+    `      Subtotal Compute:     ${formatUsd(cost.computeCostUsd)}`,
+    "",
+    `    ${colors.bold(colors.cyan("Operations:"))}`,
+    `      KV Operations:        ${formatUsd(cost.itemized?.kvOpsCostUsd)}`,
+    `      Object Operations:    ${formatUsd(cost.itemized?.objectOpsCostUsd)}`,
+    `      Queue Operations:     ${formatUsd(cost.itemized?.queueOpsCostUsd)}`,
+    `      Subtotal Operations:  ${formatUsd(cost.operationsCostUsd)}`,
+    "",
+    `    ${colors.bold(colors.amber("Storage:"))}`,
+    `      KV Storage:           ${formatUsd(cost.itemized?.kvStorageCostUsd)}`,
+    `      Object Storage:       ${
+      formatUsd(cost.itemized?.objectStorageCostUsd)
+    }`,
+    `      Subtotal Storage:     ${formatUsd(cost.storageCostUsd)}`,
+    "",
+    colors.border(
+      "  ─────────────────────────────────────────────────────────────────",
+    ),
+    "",
+    `  ${colors.bold("Total Cost:")}               ${
+      colors.bold(colors.emerald(formatUsd(cost.totalCostUsd)))
+    }`,
+    "",
+    colors.border(
+      "  ─────────────────────────────────────────────────────────────────",
+    ),
+    "",
+    `  ${colors.bold(colors.accent("Allocation Distribution:"))}`,
+    `    ${renderDistributionBar(chartItems, 36)}`,
+    "",
+    `  ${colors.bold(colors.accent("Resource Consumption:"))}`,
+    ...barChartLines,
+  ];
+
+  return renderCard("RailFog Usage & Cost Report", cardLines, {
+    borderStyle: "unicode",
+    borderColor: colors.brand,
+    padding: true,
+  });
 }
 
 /**
