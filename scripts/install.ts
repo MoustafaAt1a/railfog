@@ -414,80 +414,139 @@ export async function runInstaller(options: InstallerOptions): Promise<{
 }
 
 /**
- * Prints styled help message.
+ * Prints styled help message matching cli/ui.ts JetBrains Darcula design system.
  */
 function printHelp(): void {
-  console.log(`RailFog CLI Installer
+  const noColor = Boolean(
+    Deno.env.get("NO_COLOR") || Deno.env.get("CI"),
+  );
+  const bold = (t: string) => noColor ? t : `\x1b[1m${t}\x1b[22m`;
+  const dim = (t: string) => noColor ? t : `\x1b[2m${t}\x1b[22m`;
+  const cyan = (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`;
+  const gray = (t: string) => noColor ? t : `\x1b[90m${t}\x1b[39m`;
+  const bdr = (t: string) => noColor ? t : `\x1b[38;2;85;85;85m${t}\x1b[39m`;
 
-Usage:
-  deno run -A scripts/install.ts [options]
-  deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts [options]
-
-Options:
-  -r, --root <dir>      Installation root directory (default: $DENO_INSTALL_ROOT, $RAILFOG_INSTALL_DIR, or ~/.deno)
-  -c, --compile         Compile standalone executable instead of Deno script shim
-  -f, --force           Force overwrite existing installation
-  -l, --local           Install from local repository instead of GitHub
-      --ref <ref>       Git ref/tag/branch to install (default: main)
-      --commit <sha>    Exact git commit SHA to install (bypasses CDN caches)
-      --repo <repo>     GitHub repository (default: MoustafaAt1a/railfog)
-  -h, --help            Show help information
-`);
+  console.log("");
+  console.log(bold(cyan("RailFog CLI Installer")));
+  console.log(dim("Trigger -> Function -> {KV, Objects, Queues}"));
+  console.log("");
+  console.log(`${bold("Usage:")}`);
+  console.log(`  deno run -A scripts/install.ts ${dim("[options]")}`);
+  console.log(`  deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts ${dim("[options]")}`);
+  console.log("");
+  console.log(`${bold("Options:")}`);
+  console.log(`  ${bold("-r")}, ${bold("--root")} ${dim("<dir>")}      Installation root directory`);
+  console.log(`                        ${gray("(default: $DENO_INSTALL_ROOT, $RAILFOG_INSTALL_DIR, or ~/.deno)")}`);
+  console.log(`  ${bold("-c")}, ${bold("--compile")}         Compile standalone executable instead of Deno script shim`);
+  console.log(`  ${bold("-f")}, ${bold("--force")}           Force overwrite existing installation`);
+  console.log(`  ${bold("-l")}, ${bold("--local")}           Install from local repository instead of GitHub`);
+  console.log(`      ${bold("--ref")} ${dim("<ref>")}       Git ref/tag/branch to install ${gray("(default: main)")}`);
+  console.log(`      ${bold("--commit")} ${dim("<sha>")}    Exact git commit SHA to install ${gray("(bypasses CDN caches)")}`);
+  console.log(`      ${bold("--repo")} ${dim("<repo>")}     GitHub repository ${gray("(default: MoustafaAt1a/railfog)")}`);
+  console.log(`  ${bold("-h")}, ${bold("--help")}            Show this help information`);
+  console.log("");
+  console.log(bdr("─".repeat(60)));
+  console.log(`  ${cyan("[i]")} Run ${bold("rail --help")} after installation for CLI commands.`);
+  console.log(bdr("─".repeat(60)));
+  console.log("");
 }
 
 /**
- * Prints styled completion box and PATH instructions.
+ * Prints styled completion card matching cli/ui.ts JetBrains Darcula design.
+ * Uses Unicode box-drawing, [+]/[!] indicators, and NO_COLOR compliance.
  */
 function printSuccessBox(binaryPath: string, binDir: string): void {
+  const noColor = Boolean(
+    Deno.env.get("NO_COLOR") || Deno.env.get("CI"),
+  );
+  const bold = (t: string) => noColor ? t : `\x1b[1m${t}\x1b[22m`;
+  const dim = (t: string) => noColor ? t : `\x1b[2m${t}\x1b[22m`;
+  const green = (t: string) => noColor ? t : `\x1b[32m${t}\x1b[39m`;
+  const cyan = (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`;
+  const amber = (t: string) =>
+    noColor ? t : `\x1b[38;2;229;168;75m${t}\x1b[39m`;
+  const bdr = (t: string) =>
+    noColor ? t : `\x1b[38;2;85;85;85m${t}\x1b[39m`;
+
   const currentPath = Deno.env.get("PATH") ?? "";
   const isWindows = Deno.build.os === "windows";
   const inPath = isWindows
     ? currentPath.toLowerCase().includes(binDir.toLowerCase())
     : currentPath.split(":").includes(binDir);
 
-  const lines = [
-    "RailFog CLI installed successfully!",
+  // Build content lines
+  const contentLines: string[] = [
+    `${green("[+]")} Installation complete`,
     "",
-    `Executable: ${binaryPath}`,
+    `${dim("Executable:")}  ${binaryPath}`,
   ];
 
   if (!inPath) {
-    lines.push("");
-    lines.push(`Notice: ${binDir} is not in your PATH.`);
+    contentLines.push("");
+    contentLines.push(`${amber("[!]")} ${binDir} is not in your PATH.`);
     if (isWindows) {
-      lines.push("Add it to your User PATH using PowerShell:");
-      lines.push(
-        `  [Environment]::SetEnvironmentVariable("Path", $env:Path + ";${binDir}", "User")`,
+      contentLines.push(
+        `    Add it to your User PATH using PowerShell:`,
+      );
+      contentLines.push(
+        `    ${bold(`[Environment]::SetEnvironmentVariable("Path", $env:Path + ";${binDir}", "User")`)}`,
       );
     } else {
-      lines.push(
-        "Add the following to your shell profile (~/.bashrc or ~/.zshrc):",
+      contentLines.push(
+        "    Add the following to your shell profile (~/.bashrc or ~/.zshrc):",
       );
-      lines.push(`  export PATH="${binDir}:$PATH"`);
+      contentLines.push(
+        `    ${bold(`export PATH="${binDir}:$PATH"`)}`,
+      );
     }
   }
 
-  lines.push("");
-  lines.push("Run 'rail --help' or 'rail login' to get started!");
+  contentLines.push("");
+  contentLines.push(
+    `Run ${bold("rail --help")} or ${bold("rail login")} to get started!`,
+  );
 
+  // Measure max visible width
   let maxLen = 40;
-  for (const line of lines) {
-    if (line.length > maxLen) {
-      maxLen = line.length;
+  for (const line of contentLines) {
+    const stripped = line.replace(
+      // deno-lint-ignore no-control-regex
+      /\x1b\[[0-9;?]*[a-zA-Z]/g,
+      "",
+    );
+    if (stripped.length > maxLen) {
+      maxLen = stripped.length;
     }
   }
   const innerWidth = maxLen + 4;
-  const top = "┌" + "─".repeat(innerWidth) + "┐";
-  const bottom = "└" + "─".repeat(innerWidth) + "┘";
+  const hBar = "─".repeat(innerWidth);
+
+  // Card title
+  const titleText = " RailFog CLI ";
+  const titleDashes = "─".repeat(
+    Math.max(0, innerWidth - titleText.length - 3),
+  );
 
   console.log("");
-  console.log(top);
-  for (const line of lines) {
-    const padded = "  " + line;
-    const padRight = " ".repeat(Math.max(0, innerWidth - padded.length));
-    console.log("│" + padded + padRight + "│");
+  console.log(
+    bdr("┌──") + bold(titleText) + bdr(titleDashes + "┐"),
+  );
+  console.log(bdr("│") + " ".repeat(innerWidth) + bdr("│"));
+
+  for (const line of contentLines) {
+    const stripped = line.replace(
+      // deno-lint-ignore no-control-regex
+      /\x1b\[[0-9;?]*[a-zA-Z]/g,
+      "",
+    );
+    const padRight = " ".repeat(
+      Math.max(0, innerWidth - stripped.length - 2),
+    );
+    console.log(bdr("│") + "  " + line + padRight + bdr("│"));
   }
-  console.log(bottom);
+
+  console.log(bdr("│") + " ".repeat(innerWidth) + bdr("│"));
+  console.log(bdr("└" + hBar + "┘"));
   console.log("");
 }
 
@@ -500,22 +559,37 @@ if (import.meta.main) {
     Deno.exit(0);
   }
 
+  const noColor = Boolean(
+    Deno.env.get("NO_COLOR") || Deno.env.get("CI"),
+  );
+  const bold = (t: string) => noColor ? t : `\x1b[1m${t}\x1b[22m`;
+  const dim = (t: string) => noColor ? t : `\x1b[2m${t}\x1b[22m`;
+  const cyan = (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`;
+  const red = (t: string) => noColor ? t : `\x1b[31m${t}\x1b[39m`;
+
   const paths = resolveInstallPaths(options);
-  console.log("=== Installing RailFog CLI (rail) ===");
+
+  console.log("");
+  console.log(bold(cyan("RailFog CLI Installer")));
+  console.log(dim("Trigger -> Function -> {KV, Objects, Queues}"));
+  console.log("");
+
   if (options.local) {
-    console.log("Source: Local repository");
+    console.log(`${cyan("[i]")} Source:  Local repository`);
   } else {
     console.log(
-      `Source: https://github.com/${
+      `${cyan("[i]")} Source:  https://github.com/${
         options.repo ?? "MoustafaAt1a/railfog"
-      } (ref: ${options.ref ?? "main"})`,
+      } ${dim(`(ref: ${options.ref ?? "main"})`)}`,
     );
   }
-  console.log(`Target: ${paths.binDir}`);
+  console.log(`${cyan("[i]")} Target:  ${paths.binDir}`);
+  console.log("");
 
   const result = await runInstaller(options);
   if (!result.ok) {
-    console.error(`\nError installing RailFog CLI:\n${result.output}`);
+    console.error(`\n${red("[-]")} ${bold("Installation failed:")}`);
+    console.error(`    ${result.output}`);
     Deno.exit(1);
   }
 
