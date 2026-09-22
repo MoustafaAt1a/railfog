@@ -5,8 +5,8 @@
 // spec: contracts/kv.contract.md#KV-2 — KV binding API, required TTL for dedupe keys (Audit Finding #5)
 // spec: contracts/platform.contract.md#PLAT-12 — Error model: typed error preservation on retry exhaustion
 
-import type { KVBinding } from "./types.ts";
-import { UnavailableError } from "../../packages/errors/mod.ts";
+import type { KVAtomicOperation, KVBinding, ListOptions } from "./types.ts";
+import { ConflictError, UnavailableError } from "../../packages/errors/mod.ts";
 
 // spec: contracts/queues.contract.md#Q-3, Q-4 — Default retention window for idempotency dedupe keys (14 days = 1,209,600s)
 // spec: contracts/kv.contract.md#KV-2 — Mandatory TTL prevents unbounded dedupe key growth (Audit Finding #5)
@@ -216,4 +216,179 @@ export async function withCircuitBreaker<T>(
     );
     throw err;
   }
+}
+
+/**
+ * Options for the mutate helper.
+ * @spec contracts/kv.contract.md#KV-3
+ * @spec contracts/queues.contract.md#Q-5
+ */
+export interface MutateOptions {
+  maxRetries?: number;
+  baseMs?: number;
+  capMs?: number;
+  ttl?: number;
+}
+
+/**
+ * Creates a scoped KVBinding that automatically prefixes all keys with the specified base prefix.
+ * Transparently strips the prefix when listing entries.
+ *
+ * @spec contracts/kv.contract.md#KV-2 — Key-Value storage capability binding
+ * @spec contracts/platform.contract.md#PLAT-6 — Capability-scoped storage
+ */
+export function scopedKV(kv: KVBinding, ...basePrefix: string[]): KVBinding {
+  const prefix = basePrefix.flat();
+  const qualifyKey = (key: string[]): string[] => [...prefix, ...key];
+  const stripKey = (fullKey: string[]): string[] => {
+    if (
+      prefix.length <= fullKey.length &&
+      prefix.every((seg, i) => fullKey[i] === seg)
+    ) {
+      return fullKey.slice(prefix.length);
+    }
+    return fullKey;
+  };
+
+  return {
+    get<T = unknown>(key: string[]): Promise<T | null> {
+      return kv.get<T>(qualifyKey(key));
+    },
+    set(
+      key: string[],
+      value: unknown,
+      options?: { ttl?: number },
+    ): Promise<void> {
+      return kv.set(qualifyKey(key), value, options);
+    },
+    delete(key: string[]): Promise<void> {
+      return kv.delete(qualifyKey(key));
+    },
+    async list<T = unknown>(
+      subPrefix: string[],
+      options?: ListOptions,
+    ): Promise<{
+      entries: Array<{ key: string[]; value: T; version: number }>;
+      cursor?: string;
+    }> {
+      const res = await kv.list<T>(qualifyKey(subPrefix), options);
+      return {
+        entries: res.entries.map((entry) => ({
+          ...entry,
+          key: stripKey(entry.key),
+        })),
+        cursor: res.cursor,
+      };
+    },
+    atomic(): KVAtomicOperation {
+      const op = kv.atomic();
+      const scopedOp: KVAtomicOperation = {
+        check(key: string[], expectedVersion: number): KVAtomicOperation {
+          op.check(qualifyKey(key), expectedVersion);
+          return scopedOp;
+        },
+        set(
+          key: string[],
+          value: unknown,
+          options?: { ttl?: number },
+        ): KVAtomicOperation {
+          op.set(qualifyKey(key), value, options);
+          return scopedOp;
+        },
+        delete(key: string[]): KVAtomicOperation {
+          op.delete(qualifyKey(key));
+          return scopedOp;
+        },
+        commit(): Promise<{ ok: boolean; version?: number }> {
+          return op.commit();
+        },
+      };
+      return scopedOp;
+    },
+  };
+}
+
+/**
+ * Atomically mutates a KV key's value using optimistic concurrency (CAS).
+ * Handles conflicts by executing an exponential backoff retry loop with decorrelated jitter.
+ *
+ * @spec contracts/kv.contract.md#KV-3 — Optimistic concurrency CAS formula
+ * @spec contracts/queues.contract.md#Q-5 — Decorrelated jitter retry loop
+ * @spec contracts/platform.contract.md#PLAT-12 — ConflictError upon retry exhaustion
+ */
+export async function mutate<T>(
+  kv: KVBinding,
+  key: string[],
+  updater: (current: T | null) => Promise<T> | T,
+  options?: MutateOptions,
+): Promise<T> {
+  const maxRetries = (typeof options?.maxRetries === "number" &&
+      Number.isFinite(options.maxRetries) && options.maxRetries >= 0)
+    ? Math.floor(options.maxRetries)
+    : 5;
+  const baseMs = (typeof options?.baseMs === "number" &&
+      Number.isFinite(options.baseMs) && options.baseMs > 0)
+    ? Math.floor(options.baseMs)
+    : DEFAULT_RETRY_BASE_MS;
+  const capMs = (typeof options?.capMs === "number" &&
+      Number.isFinite(options.capMs) && options.capMs > 0)
+    ? Math.floor(options.capMs)
+    : DEFAULT_RETRY_CAP_MS;
+
+  let attempt = 0;
+  let prevSleep = baseMs;
+
+  while (attempt <= maxRetries) {
+    let currentVal: T | null = null;
+    let currentVersion = 0;
+
+    const listRes = await kv.list<T>(key, { limit: 1 });
+    const exact = listRes.entries.find((e) =>
+      e.key.length === key.length && e.key.every((seg, i) => seg === key[i])
+    );
+
+    if (exact) {
+      currentVal = exact.value;
+      currentVersion = exact.version ?? 1;
+    } else {
+      currentVal = await kv.get<T>(key);
+      currentVersion = currentVal === null ? 0 : 1;
+    }
+
+    const newVal = await updater(currentVal);
+
+    const atomicOp = kv.atomic().check(key, currentVersion);
+    if (options?.ttl !== undefined) {
+      atomicOp.set(key, newVal, { ttl: options.ttl });
+    } else {
+      atomicOp.set(key, newVal);
+    }
+
+    const commitRes = await atomicOp.commit();
+    if (commitRes.ok) {
+      return newVal;
+    }
+
+    attempt++;
+    if (attempt > maxRetries) {
+      throw new ConflictError(
+        `Optimistic concurrency mutation conflict for key '${
+          key.join("/")
+        }': retries exhausted (${maxRetries})`,
+      );
+    }
+
+    // Decorrelated jitter backoff per Q-5
+    const sleep = Math.min(
+      capMs,
+      Math.max(
+        baseMs,
+        Math.floor(baseMs + Math.random() * (prevSleep * 3 - baseMs)),
+      ),
+    );
+    prevSleep = sleep;
+    await new Promise((resolve) => setTimeout(resolve, sleep));
+  }
+
+  throw new ConflictError(`Mutation failed for key '${key.join("/")}'`);
 }

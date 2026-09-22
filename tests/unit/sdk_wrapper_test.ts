@@ -16,10 +16,12 @@ import {
 import {
   api,
   type ApiRouteMap,
+  consumer,
   handle,
   type HandlerContext,
   type HandlerFn,
   type HandlerResult,
+  router,
 } from "../../sdk/typescript/wrapper.ts";
 import type {
   EnvBinding,
@@ -28,7 +30,9 @@ import type {
   KVBinding,
   ObjectBinding,
   QueueBinding,
+  QueueMessage,
   RailFogContext,
+  StandardSchemaV1,
 } from "../../sdk/typescript/types.ts";
 import {
   CallDepthExceededError,
@@ -1135,4 +1139,354 @@ Deno.test("T-0810 / Ergonomics: c.sse() handles undefined data and multiline CRL
   const bodyText = await res.text();
   assert(bodyText.includes("event: ping\ndata: \n\n"));
   assert(bodyText.includes("data: line1\ndata: line2\ndata: line3\n\n"));
+});
+
+// ===========================================================================
+// Group 6: Standard Schema & Universal Schema Validation (c.body(schema))
+// ===========================================================================
+
+Deno.test("T-0810 / StandardSchema: c.body(schema) successfully parses valid payload using StandardSchemaV1", async () => {
+  interface UserDto {
+    name: string;
+    age: number;
+  }
+
+  const userSchema: StandardSchemaV1<unknown, UserDto> = {
+    "~standard": {
+      version: 1,
+      vendor: "custom-test-validator",
+      validate(value: unknown) {
+        if (
+          typeof value === "object" && value !== null && "name" in value &&
+          "age" in value
+        ) {
+          const v = value as Record<string, unknown>;
+          if (typeof v.name === "string" && typeof v.age === "number") {
+            return { value: { name: v.name, age: v.age } };
+          }
+        }
+        return {
+          issues: [{
+            message: "Expected name (string) and age (number)",
+            path: ["user"],
+          }],
+        };
+      },
+    },
+  };
+
+  const handler = handle(async (c) => {
+    const user = await c.body(userSchema);
+    return { user };
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/users", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Alice", age: 30 }),
+  });
+
+  const res = await handler(req, ctx);
+  assertEquals(res.status, 200);
+  const data = await res.json();
+  assertEquals(data, { user: { name: "Alice", age: 30 } });
+});
+
+Deno.test("T-0810 / StandardSchema: c.body(schema) throws ValidationFailedError on schema validation failure", async () => {
+  const failingSchema: StandardSchemaV1<unknown, { email: string }> = {
+    "~standard": {
+      version: 1,
+      vendor: "test-validator",
+      validate(_value: unknown) {
+        return {
+          issues: [
+            { message: "Invalid email address", path: ["user", "email"] },
+            { message: "Must be at least 18", path: ["age"] },
+          ],
+        };
+      },
+    },
+  };
+
+  const handler = handle(async (c) => {
+    return await c.body(failingSchema);
+  });
+
+  const ctx = createMockRailFogContext({
+    requestId: "01TESTSCHEMAVALIDATIONFAIL",
+  });
+  const req = new Request("https://example.railfog.internal/signup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "invalid", age: 12 }),
+  });
+
+  const res = await handler(req, ctx);
+  assertEquals(res.status, 400);
+  assertEquals(res.headers.get("x-request-id"), "01TESTSCHEMAVALIDATIONFAIL");
+  const data = await res.json();
+  assertEquals(data.error.code, "VALIDATION_FAILED");
+  assert(data.error.message.includes("user.email: Invalid email address"));
+  assert(data.error.message.includes("age: Must be at least 18"));
+});
+
+Deno.test("T-0810 / Schema: c.body(schema) supports Zod/Valibot safeParse duck-typing", async () => {
+  const zodLikeSchema = {
+    safeParse(input: unknown) {
+      if (typeof input === "object" && input !== null && "title" in input) {
+        return { success: true as const, data: input as { title: string } };
+      }
+      return {
+        success: false as const,
+        error: { message: "title is required" },
+      };
+    },
+  };
+
+  const handler = handle(async (c) => {
+    const item = await c.body(zodLikeSchema);
+    return item;
+  });
+
+  const ctx = createMockRailFogContext();
+  const validReq = new Request("https://example.railfog.internal/todos", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title: "Buy groceries" }),
+  });
+  const validRes = await handler(validReq, ctx);
+  assertEquals(validRes.status, 200);
+  const data = await validRes.json();
+  assertEquals(data, { title: "Buy groceries" });
+
+  const invalidReq = new Request("https://example.railfog.internal/todos", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const invalidRes = await handler(invalidReq, ctx);
+  assertEquals(invalidRes.status, 400);
+  const errData = await invalidRes.json();
+  assertEquals(errData.error.code, "VALIDATION_FAILED");
+  assert(errData.error.message.includes("title is required"));
+});
+
+Deno.test("T-0810 / Schema: c.body(fn) supports custom validator functions", async () => {
+  const assertNumberArray = (val: unknown): number[] => {
+    if (!Array.isArray(val) || !val.every((x) => typeof x === "number")) {
+      throw new Error("Expected array of numbers");
+    }
+    return val;
+  };
+
+  const handler = handle(async (c) => {
+    const numbers = await c.body(assertNumberArray);
+    return { sum: numbers.reduce((a, b) => a + b, 0) };
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/sum", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify([10, 20, 30]),
+  });
+  const res = await handler(req, ctx);
+  assertEquals(res.status, 200);
+  const data = await res.json();
+  assertEquals(data, { sum: 60 });
+});
+
+// ===========================================================================
+// Group 7: Semantic Response & Error Shortcuts (c.html, c.redirect, c.notFound, etc.)
+// ===========================================================================
+
+Deno.test("T-0810 / Ergonomics: c.html() returns HTML response with text/html header", async () => {
+  const handler = handle((c) => {
+    return c.html("<h1>Welcome to RailFog</h1>", 200);
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/welcome");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("content-type"), "text/html; charset=utf-8");
+  const text = await res.text();
+  assertEquals(text, "<h1>Welcome to RailFog</h1>");
+});
+
+Deno.test("T-0810 / Ergonomics: c.redirect() returns redirect Response", async () => {
+  const handler = handle((c) => {
+    return c.redirect("/dashboard", 302);
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/login");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 302);
+  assertEquals(res.headers.get("location"), "/dashboard");
+});
+
+Deno.test("T-0810 / Ergonomics: c.notFound() throws canonical ResourceNotFoundError", async () => {
+  const handler = handle((c) => {
+    c.notFound("Custom user not found");
+  });
+
+  const ctx = createMockRailFogContext({ requestId: "01TESTNOTFOUND" });
+  const req = new Request("https://example.railfog.internal/missing");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 404);
+  const data = await res.json();
+  assertEquals(data.error.code, "RESOURCE_NOT_FOUND");
+  assertEquals(data.error.message, "Custom user not found");
+});
+
+Deno.test("T-0810 / Ergonomics: c.badRequest() throws canonical ValidationFailedError", async () => {
+  const handler = handle((c) => {
+    c.badRequest("Invalid email parameter");
+  });
+
+  const ctx = createMockRailFogContext({ requestId: "01TESTBADREQUEST" });
+  const req = new Request("https://example.railfog.internal/bad");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 400);
+  const data = await res.json();
+  assertEquals(data.error.code, "VALIDATION_FAILED");
+  assertEquals(data.error.message, "Invalid email parameter");
+});
+
+Deno.test("T-0810 / Ergonomics: c.fail() normalizes and throws canonical error", async () => {
+  const handler = handle((c) => {
+    c.fail({ code: "PERMISSION_DENIED", message: "Forbidden admin action" });
+  });
+
+  const ctx = createMockRailFogContext({ requestId: "01TESTPERMDENIED" });
+  const req = new Request("https://example.railfog.internal/admin");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 403);
+  const data = await res.json();
+  assertEquals(data.error.code, "PERMISSION_DENIED");
+  assertEquals(data.error.message, "Forbidden admin action");
+});
+
+Deno.test("T-0810 / PLAT-14: c.log emits formatted logs correlated with requestId", async () => {
+  const handler = handle((c) => {
+    c.log.debug("Debug message");
+    c.log.info("Processing order", { orderId: "ord_1" });
+    c.log.warn("High latency detected");
+    c.log.error("Failed to sync", { reason: "timeout" });
+    return { ok: true };
+  });
+
+  const ctx = createMockRailFogContext({ requestId: "01TESTLOGGING" });
+  const req = new Request("https://example.railfog.internal/log");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 200);
+});
+
+// ===========================================================================
+// Group 8: Declarative Queue Consumer (consumer())
+// ===========================================================================
+
+Deno.test("T-0810 / Q-1, Q-4: consumer() executes message processing with automatic idempotency deduplication", async () => {
+  let executionCount = 0;
+  const processMessage = consumer<{ text: string }>(
+    (msg, _ctx) => {
+      executionCount++;
+      assertEquals(msg.body.text, "test-payload");
+    },
+    { idempotent: true, ttlSeconds: 3600 },
+  );
+
+  const ctx = createMockRailFogContext();
+  const msg1: QueueMessage<{ text: string }> = {
+    id: "01MSGID100",
+    body: { text: "test-payload" },
+    timestamp: Date.now(),
+    attempts: 1,
+  };
+
+  // 1st delivery executes handler
+  await processMessage(msg1, ctx);
+  assertEquals(executionCount, 1);
+
+  // 2nd delivery with identical message.id is deduplicated
+  await processMessage(msg1, ctx);
+  assertEquals(executionCount, 1);
+
+  // Different message executes
+  const msg2: QueueMessage<{ text: string }> = {
+    ...msg1,
+    id: "01MSGID200",
+  };
+  await processMessage(msg2, ctx);
+  assertEquals(executionCount, 2);
+});
+
+// ===========================================================================
+// Group 9: Fluent Micro-Router (router())
+// ===========================================================================
+
+Deno.test("T-0810 / PLAT-11: router() fluent builder maps methods and executes directly as FunctionHandler", async () => {
+  const app = router()
+    .get("/items", () => [{ id: 1, name: "Item 1" }])
+    .post("/items", async (c) => {
+      const body = await c.body<{ name: string }>();
+      return c.json({ id: 2, name: body.name }, 201);
+    })
+    .delete("/items/:id", (c) => ({ deleted: c.params?.id }));
+
+  const ctx = createMockRailFogContext();
+
+  // Test GET
+  const getReq = new Request("https://example.railfog.internal/items");
+  const getRes = await app(getReq, ctx);
+  assertEquals(getRes.status, 200);
+  const items = await getRes.json();
+  assertEquals(items, [{ id: 1, name: "Item 1" }]);
+
+  // Test POST
+  const postReq = new Request("https://example.railfog.internal/items", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "New Item" }),
+  });
+  const postRes = await app(postReq, ctx);
+  assertEquals(postRes.status, 201);
+  const newItem = await postRes.json();
+  assertEquals(newItem, { id: 2, name: "New Item" });
+
+  // Test DELETE with parameter extraction
+  const delReq = new Request("https://example.railfog.internal/items/item_42", {
+    method: "DELETE",
+  });
+  const delRes = await app(delReq, ctx);
+  assertEquals(delRes.status, 200);
+  const delResult = await delRes.json();
+  assertEquals(delResult, { deleted: "item_42" });
+});
+
+Deno.test("T-0810 / PLAT-11: router().use() middleware executes in order and decorates responses", async () => {
+  const app = router()
+    .use(async (_c, next) => {
+      const res = await next();
+      res.headers.set("x-custom-middleware", "injected");
+      return res;
+    })
+    .get("/hello", () => ({ hello: "world" }));
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/hello");
+  const res = await app(req, ctx);
+
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("x-custom-middleware"), "injected");
+  const data = await res.json();
+  assertEquals(data, { hello: "world" });
 });

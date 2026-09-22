@@ -29,10 +29,11 @@ Write minimal functions with zero boilerplate.
 
 ### Ultra-Minimalist HTTP Handler: `handle()`
 
-`handle()` automatically provides destructured context (`req`, `body()`,
-`json()`, `text()`, `kv`, `objects`, `queues`, `env`) and automatically
-serializes returned plain objects, arrays, and primitives into JSON responses
-with HTTP status 200:
+`handle()` automatically provides destructured context (`req`, `url`, `query`,
+`body()`, `json()`, `text()`, `html()`, `redirect()`, `notFound()`,
+`badRequest()`, `fail()`, `log`, `kv`, `objects`, `queues`, `env`) and
+automatically serializes returned plain objects, arrays, and primitives into
+JSON responses with HTTP status 200:
 
 ```typescript
 import { handle } from "@railfog/sdk";
@@ -45,15 +46,31 @@ export default handle(async ({ kv }) => {
 });
 ```
 
-Web API `Response` instances are passed through verbatim:
+### Zero-Dependency Schema Validation: `c.body(schema)`
+
+`c.body(schema)` natively supports the industry-standard
+[Standard Schema](https://standardschema.dev) specification (`~standard`) as
+well as Zod/Valibot duck-typing (`.safeParse()` / `.safeParseAsync()`) and
+custom validator functions:
 
 ```typescript
-export default handle(async ({ req, env }) => {
-  return new Response("Hello World", { status: 200 });
+import { handle } from "@railfog/sdk";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+});
+
+export default handle(async (c) => {
+  // Automatically validates payload; throws PLAT-12 400 VALIDATION_FAILED on error
+  const user = await c.body(UserSchema);
+  c.log.info("Registered user", { email: user.email });
+  return c.json({ ok: true, user }, 201);
 });
 ```
 
-### Micro-Router: `api()`
+### Micro-Router: `api()` & Fluent Router: `router()`
 
 Map multiple HTTP methods and parameterized routes in a single function with
 automatic `404 RESOURCE_NOT_FOUND` handling and `PLAT-11` specificity matching:
@@ -66,18 +83,39 @@ export default api({
     return await kv.get(["items"]) ?? [];
   },
 
-  "POST /items": async ({ req, body, kv }) => {
+  "POST /items": async ({ body, kv }) => {
     const item = await body();
     await kv.set(["items", item.id], item);
     return { ok: true, item };
   },
 
-  "GET /items/:id": async ({ req, kv }) => {
-    const id = new URL(req.url).pathname.split("/").pop();
-    const item = await kv.get(["items", id]);
-    return item ?? new Response("Item Not Found", { status: 404 });
+  "GET /items/:id": async ({ params, kv, notFound }) => {
+    const item = await kv.get(["items", params?.id]);
+    if (!item) notFound("Item not found");
+    return item;
   },
 });
+```
+
+Or use the fluent `router()` builder with middleware chaining:
+
+```typescript
+import { router } from "@railfog/sdk";
+
+const app = router()
+  .use(async (_c, next) => {
+    const res = await next();
+    res.headers.set("x-powered-by", "RailFog");
+    return res;
+  })
+  .get("/items", ({ kv }) => kv.get(["items"]))
+  .post("/items", async ({ body, kv, json }) => {
+    const item = await body();
+    await kv.set(["items", item.id], item);
+    return json(item, 201);
+  });
+
+export default app;
 ```
 
 ---
@@ -175,6 +213,17 @@ const consume: QueueConsumerHandler<OrderTask> = async (message, ctx) => {
 export default consume;
 ```
 
+Or write a declarative consumer with automatic KV deduplication using
+`consumer()`:
+
+```typescript
+import { consumer } from "@railfog/sdk";
+
+export default consumer<OrderTask>(async (message, ctx) => {
+  await processOrder(message.body);
+}, { idempotent: true }); // 14-day automatic KV deduplication per Q-4
+```
+
 ### `ScheduleHandler` (`FN-2`)
 
 Entrypoint signature for scheduled cron-triggered functions accepting a typed
@@ -254,6 +303,36 @@ const result = await withCircuitBreaker(
     return await chargePaymentGateway();
   },
   { failureThreshold: 5, cooldownMs: 30_000 },
+);
+```
+
+### `scopedKV` (`KV-2`, `PLAT-6`)
+
+Creates a scoped `KVBinding` with a pre-configured key prefix:
+
+```typescript
+import { scopedKV } from "@railfog/sdk";
+
+// All keys automatically prefixed with ["tenants", orgId]
+const tenantKv = scopedKV(ctx.kv, "tenants", orgId);
+await tenantKv.set(["theme"], "dark");
+const theme = await tenantKv.get(["theme"]);
+```
+
+### `mutate` (`KV-3`, `Q-5`)
+
+Atomically mutates a key using optimistic concurrency (CAS) with automatic
+decorrelated jitter retry on conflict:
+
+```typescript
+import { mutate } from "@railfog/sdk";
+
+// Atomic counter increment with CAS retry loop
+const newCount = await mutate<number>(
+  ctx.kv,
+  ["analytics", "page_views"],
+  (views) => (views ?? 0) + 1,
+  { maxRetries: 5 },
 );
 ```
 

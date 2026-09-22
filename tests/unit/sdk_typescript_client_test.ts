@@ -49,6 +49,9 @@ import {
   DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS,
   DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
   type IdempotencyOptions,
+  mutate,
+  type MutateOptions,
+  scopedKV,
   withCircuitBreaker,
   withIdempotency,
   withRetry,
@@ -162,25 +165,55 @@ class MockKVBinding implements KVBinding {
 
   atomic(): KVAtomicOperation {
     const errorOnCommit = this.errorToThrow;
+    const checks: Array<{ key: string[]; expectedVersion: number }> = [];
+    const sets: Array<{ key: string[]; value: unknown; ttl?: number }> = [];
+    const deletes: Array<{ key: string[] }> = [];
+
     const atomicOp: KVAtomicOperation = {
-      check(_key: string[], _expectedVersion: number): KVAtomicOperation {
+      check: (key: string[], expectedVersion: number): KVAtomicOperation => {
+        checks.push({ key, expectedVersion });
         return atomicOp;
       },
-      set(
-        _key: string[],
-        _value: unknown,
-        _options?: { ttl?: number },
-      ): KVAtomicOperation {
+      set: (
+        key: string[],
+        value: unknown,
+        options?: { ttl?: number },
+      ): KVAtomicOperation => {
+        sets.push({ key, value, ttl: options?.ttl });
         return atomicOp;
       },
-      delete(_key: string[]): KVAtomicOperation {
+      delete: (key: string[]): KVAtomicOperation => {
+        deletes.push({ key });
         return atomicOp;
       },
-      commit(): Promise<{ ok: boolean; version?: number }> {
+      commit: (): Promise<{ ok: boolean; version?: number }> => {
         if (errorOnCommit) {
           return Promise.reject(errorOnCommit);
         }
-        return Promise.resolve({ ok: true, version: 1 });
+        for (const c of checks) {
+          const serialized = this.serializeKey(c.key);
+          const existing = this.store.get(serialized);
+          const currentVer = existing ? existing.version : 0;
+          if (currentVer !== c.expectedVersion) {
+            return Promise.resolve({ ok: false });
+          }
+        }
+        for (const d of deletes) {
+          this.store.delete(this.serializeKey(d.key));
+        }
+        let highestVersion = 1;
+        for (const s of sets) {
+          const serialized = this.serializeKey(s.key);
+          const existing = this.store.get(serialized);
+          const newVer = (existing?.version ?? 0) + 1;
+          this.store.set(serialized, {
+            value: s.value,
+            ttl: s.ttl,
+            version: newVer,
+          });
+          highestVersion = Math.max(highestVersion, newVer);
+        }
+        return Promise.resolve({ ok: true, version: highestVersion });
       },
     };
     return atomicOp;
@@ -1898,4 +1931,119 @@ Deno.test("T-0502 / Q-6: withCircuitBreaker default thresholds and options type 
   };
   assertEquals(opts.failureThreshold, 5);
   assertEquals(opts.cooldownMs, 30_000);
+});
+
+// ============================================================================
+// Group 12: Scoped KV Subspaces (scopedKV)
+// ============================================================================
+
+Deno.test("T-0502 / KV-2, PLAT-6: scopedKV prefixes keys and strips prefixes in list", async () => {
+  const kv = new MockKVBinding();
+  const scoped = scopedKV(kv, "tenants", "tenant_a");
+
+  // 1. Set key via scoped
+  await scoped.set(["settings", "theme"], "dark");
+
+  // Verify stored in underlying KV with full prefix
+  const rawVal = await kv.get(["tenants", "tenant_a", "settings", "theme"]);
+  assertEquals(rawVal, "dark");
+
+  // Verify get via scoped
+  const scopedVal = await scoped.get(["settings", "theme"]);
+  assertEquals(scopedVal, "dark");
+
+  // 2. List via scoped
+  await scoped.set(["settings", "lang"], "en");
+  const listRes = await scoped.list(["settings"]);
+  assertEquals(listRes.entries.length, 2);
+  // Keys in listRes must be relative to the scope (stripped)
+  const keys = listRes.entries.map((e) => e.key.join("/"));
+  assert(keys.includes("settings/theme"));
+  assert(keys.includes("settings/lang"));
+
+  // 3. Atomic via scoped
+  const atomicRes = await scoped.atomic()
+    .check(["settings", "theme"], 1)
+    .set(["settings", "theme"], "light")
+    .commit();
+  assertEquals(atomicRes.ok, true);
+  assertEquals(await scoped.get(["settings", "theme"]), "light");
+
+  // 4. Delete via scoped
+  await scoped.delete(["settings", "lang"]);
+  assertEquals(await scoped.get(["settings", "lang"]), null);
+});
+
+// ============================================================================
+// Group 13: Atomic Concurrency Mutation (mutate<T>)
+// ============================================================================
+
+Deno.test("T-0502 / KV-3: mutate initializes non-existent key", async () => {
+  const kv = new MockKVBinding();
+  const key = ["counters", "views"];
+
+  const newVal = await mutate<number>(kv, key, (curr) => (curr ?? 0) + 1);
+  assertEquals(newVal, 1);
+  assertEquals(await kv.get(key), 1);
+});
+
+Deno.test("T-0502 / KV-3: mutate atomically updates existing key", async () => {
+  const kv = new MockKVBinding();
+  const key = ["users", "usr_1", "balance"];
+  await kv.set(key, 100);
+
+  const newBalance = await mutate<number>(kv, key, (curr) => (curr ?? 0) + 50);
+  assertEquals(newBalance, 150);
+  assertEquals(await kv.get(key), 150);
+});
+
+Deno.test("T-0502 / KV-3, Q-5: mutate retries on CAS conflict and completes successfully", async () => {
+  const kv = new MockKVBinding();
+  const key = ["orders", "ord_42", "sequence"];
+  await kv.set(key, 10);
+
+  let attempts = 0;
+  const finalVal = await mutate<number>(
+    kv,
+    key,
+    async (curr) => {
+      attempts++;
+      if (attempts === 1) {
+        // Interleaving conflicting concurrent write
+        await kv.set(key, 11);
+      }
+      return (curr ?? 0) + 5;
+    },
+    { maxRetries: 3, baseMs: 10, capMs: 50 },
+  );
+
+  // 1st attempt detected conflict (version changed from 1 to 2 by concurrent write)
+  // 2nd attempt re-read 11, computed 16, and successfully committed!
+  assertEquals(attempts, 2);
+  assertEquals(finalVal, 16);
+  assertEquals(await kv.get(key), 16);
+});
+
+Deno.test("T-0502 / KV-3, PLAT-12: mutate throws ConflictError when maxRetries exhausted", async () => {
+  const kv = new MockKVBinding();
+  const key = ["state", "lock"];
+  await kv.set(key, "locked");
+
+  const mutateOpts: MutateOptions = { maxRetries: 2, baseMs: 5, capMs: 10 };
+
+  await assertRejects(
+    () =>
+      mutate<string>(
+        kv,
+        key,
+        async (curr) => {
+          // Always mutate concurrently to force CAS failure on every attempt
+          await kv.set(key, `mutated-${Date.now()}`);
+          return `next-${curr}`;
+        },
+        mutateOpts,
+      ),
+    ConflictError,
+    "Optimistic concurrency mutation conflict",
+  );
 });

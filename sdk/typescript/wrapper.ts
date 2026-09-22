@@ -5,7 +5,16 @@
 // spec: contracts/platform.contract.md#PLAT-12 — Error model and canonical error responses
 // spec: contracts/platform.contract.md#PLAT-15 — Capability-scoped secret access via c.env
 
-import type { FunctionHandler, RailFogContext } from "./types.ts";
+import type {
+  ConsumerOptions,
+  ContextLogger,
+  FunctionHandler,
+  QueueConsumerHandler,
+  QueueMessage,
+  RailFogContext,
+  SchemaValidator,
+  StandardSchemaV1,
+} from "./types.ts";
 import {
   type RailFogErrorCode,
   ResourceNotFoundError,
@@ -13,6 +22,7 @@ import {
   ValidationFailedError,
 } from "../../packages/errors/mod.ts";
 import { normalizeError } from "./client.ts";
+import { withIdempotency } from "./helpers.ts";
 
 /**
  * Stream writer interface for chunked and streaming HTTP responses.
@@ -52,9 +62,15 @@ export interface HandlerContext extends RailFogContext {
   url: URL;
   query: Record<string, string | undefined>;
   params?: Record<string, string | undefined>;
-  body<T = unknown>(): Promise<T>;
+  log: ContextLogger;
+  body<T = unknown>(validator?: SchemaValidator<T>): Promise<T>;
   json(data: unknown, status?: number): Response;
   text(str: string, status?: number): Response;
+  html(htmlStr: string, status?: number): Response;
+  redirect(location: string, status?: number): Response;
+  notFound(message?: string): never;
+  badRequest(message?: string): never;
+  fail(error: unknown): never;
   stream(
     fn: (writer: StreamWriter) => Promise<void> | void,
     options?: { status?: number; headers?: HeadersInit },
@@ -176,6 +192,27 @@ export function handle(fn: HandlerFn): FunctionHandler {
       queryParams[k] = v;
     }
 
+    const logPrefix = `[${ctx.requestId}][${ctx.function}]`;
+    const formatLog = (msg: string, meta?: unknown): string => {
+      if (meta === undefined) return `${logPrefix} ${msg}`;
+      try {
+        return `${logPrefix} ${msg} ${
+          typeof meta === "object" && meta !== null
+            ? JSON.stringify(meta)
+            : String(meta)
+        }`;
+      } catch {
+        return `${logPrefix} ${msg} [unserializable metadata]`;
+      }
+    };
+
+    const log: ContextLogger = {
+      debug: (msg, meta) => console.debug(formatLog(msg, meta)),
+      info: (msg, meta) => console.info(formatLog(msg, meta)),
+      warn: (msg, meta) => console.warn(formatLog(msg, meta)),
+      error: (msg, meta) => console.error(formatLog(msg, meta)),
+    };
+
     // spec: contracts/functions.contract.md#FN-4 — Capability and context injection
     const c: HandlerContext = {
       ...ctx,
@@ -183,7 +220,8 @@ export function handle(fn: HandlerFn): FunctionHandler {
       req,
       url: parsedUrl,
       query: queryParams,
-      async body<T = unknown>(): Promise<T> {
+      log,
+      async body<T = unknown>(validator?: SchemaValidator<T>): Promise<T> {
         if (!bodyParsed) {
           try {
             parsedBody = await req.json();
@@ -197,6 +235,98 @@ export function handle(fn: HandlerFn): FunctionHandler {
           }
           bodyParsed = true;
         }
+
+        if (!validator) {
+          return parsedBody as T;
+        }
+
+        // 1. Standard Schema specification (~standard)
+        if (
+          typeof validator === "object" &&
+          validator !== null &&
+          "~standard" in validator
+        ) {
+          const standardSchema = validator as StandardSchemaV1<unknown, T>;
+          const result = await standardSchema["~standard"].validate(parsedBody);
+          if (result.issues) {
+            const formatted = result.issues
+              .map((issue) => {
+                const pathStr = issue.path
+                  ? issue.path
+                    .map((p) =>
+                      typeof p === "object" && p !== null
+                        ? String((p as { key: PropertyKey }).key)
+                        : String(p)
+                    )
+                    .join(".")
+                  : "";
+                return pathStr ? `${pathStr}: ${issue.message}` : issue.message;
+              })
+              .join("; ");
+            throw new ValidationFailedError(
+              `Validation failed: ${formatted}`,
+              ctx.requestId,
+            );
+          }
+          return result.value;
+        }
+
+        // 2. safeParse / safeParseAsync duck-typing (Zod / Valibot)
+        if (typeof validator === "object" && validator !== null) {
+          const obj = validator as Record<string, unknown>;
+          if (typeof obj.safeParseAsync === "function") {
+            const res =
+              await (obj.safeParseAsync as (data: unknown) => Promise<{
+                success: boolean;
+                data?: T;
+                error?: unknown;
+              }>)(parsedBody);
+            if (!res.success) {
+              const errObj = res.error as { message?: string } | undefined;
+              const msg = errObj?.message
+                ? String(errObj.message)
+                : String(res.error);
+              throw new ValidationFailedError(
+                `Validation failed: ${msg}`,
+                ctx.requestId,
+              );
+            }
+            return res.data as T;
+          }
+          if (typeof obj.safeParse === "function") {
+            const res = (obj.safeParse as (data: unknown) => {
+              success: boolean;
+              data?: T;
+              error?: unknown;
+            })(parsedBody);
+            if (!res.success) {
+              const errObj = res.error as { message?: string } | undefined;
+              const msg = errObj?.message
+                ? String(errObj.message)
+                : String(res.error);
+              throw new ValidationFailedError(
+                `Validation failed: ${msg}`,
+                ctx.requestId,
+              );
+            }
+            return res.data as T;
+          }
+        }
+
+        // 3. Custom validator function / type assertion
+        if (typeof validator === "function") {
+          try {
+            return await validator(parsedBody);
+          } catch (err) {
+            throw new ValidationFailedError(
+              `Validation failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+              ctx.requestId,
+            );
+          }
+        }
+
         return parsedBody as T;
       },
       json(data: unknown, status = 200): Response {
@@ -210,6 +340,27 @@ export function handle(fn: HandlerFn): FunctionHandler {
           status,
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
+      },
+      html(htmlStr: string, status = 200): Response {
+        return new Response(htmlStr, {
+          status,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      },
+      redirect(location: string, status = 302): Response {
+        return new Response(null, {
+          status,
+          headers: { location },
+        });
+      },
+      notFound(message = "Resource not found"): never {
+        throw new ResourceNotFoundError(message, ctx.requestId);
+      },
+      badRequest(message = "Validation failed"): never {
+        throw new ValidationFailedError(message, ctx.requestId);
+      },
+      fail(error: unknown): never {
+        throw normalizeError(error, ctx.requestId);
       },
       stream(
         fn: (writer: StreamWriter) => Promise<void> | void,
@@ -479,4 +630,147 @@ export function api(routes: ApiRouteMap): FunctionHandler {
 
     return await winningRoute.handler(routeContext);
   });
+}
+
+/**
+ * Creates an ergonomic QueueConsumerHandler with optional automatic idempotency deduplication.
+ *
+ * @spec contracts/functions.contract.md#FN-2 — Queue trigger entrypoint
+ * @spec contracts/queues.contract.md#Q-1 — At-least-once delivery
+ * @spec contracts/queues.contract.md#Q-4 — Idempotency deduplication with mandatory TTL
+ */
+export function consumer<T = unknown>(
+  fn: (message: QueueMessage<T>, ctx: RailFogContext) => Promise<void> | void,
+  options?: ConsumerOptions,
+): QueueConsumerHandler<T> {
+  return async (
+    message: QueueMessage<T>,
+    ctx: RailFogContext,
+  ): Promise<void> => {
+    if (options?.idempotent) {
+      const key = options.dedupeKey
+        ? options.dedupeKey(message as QueueMessage)
+        : ["railfog_dedupe", message.id];
+      await withIdempotency(
+        ctx.kv,
+        key,
+        () => fn(message, ctx),
+        { ttlSeconds: options.ttlSeconds },
+      );
+    } else {
+      await fn(message, ctx);
+    }
+  };
+}
+
+/**
+ * Middleware function executed before route handlers in a router instance.
+ */
+export type RouterMiddleware = (
+  c: HandlerContext,
+  next: () => Promise<Response>,
+) => Promise<Response>;
+
+/**
+ * Fluent micro-router instance with method chaining, middleware support,
+ * and direct callability as a standard FunctionHandler.
+ *
+ * @spec contracts/platform.contract.md#PLAT-11 — Specificity matching
+ * @spec contracts/functions.contract.md#FN-1 — Function definition and HTTP handler
+ */
+export interface RouterInstance {
+  (req: Request, ctx: RailFogContext): Promise<Response>;
+  use(middleware: RouterMiddleware): RouterInstance;
+  get(pattern: string, handler: HandlerFn): RouterInstance;
+  post(pattern: string, handler: HandlerFn): RouterInstance;
+  put(pattern: string, handler: HandlerFn): RouterInstance;
+  patch(pattern: string, handler: HandlerFn): RouterInstance;
+  delete(pattern: string, handler: HandlerFn): RouterInstance;
+  all(pattern: string, handler: HandlerFn): RouterInstance;
+  routes(): ApiRouteMap;
+}
+
+/**
+ * Creates a fluent micro-router instance that can be directly exported as a FunctionHandler.
+ *
+ * @spec contracts/platform.contract.md#PLAT-11 — Routing specificity algorithm
+ * @spec contracts/functions.contract.md#FN-1 — Function definition and HTTP handler
+ */
+export function router(): RouterInstance {
+  const routeMap: ApiRouteMap = {};
+  const middlewares: RouterMiddleware[] = [];
+  let cachedHandler: FunctionHandler | null = null;
+
+  function buildHandler(): FunctionHandler {
+    if (cachedHandler) return cachedHandler;
+
+    const baseApi = api(routeMap);
+    if (middlewares.length === 0) {
+      cachedHandler = baseApi;
+      return cachedHandler;
+    }
+
+    cachedHandler = async (
+      req: Request,
+      ctx: RailFogContext,
+    ): Promise<Response> => {
+      const runner = handle(async (c: HandlerContext): Promise<Response> => {
+        let index = 0;
+        const next = async (): Promise<Response> => {
+          if (index < middlewares.length) {
+            const currentMw = middlewares[index++];
+            return await currentMw(c, next);
+          }
+          return await baseApi(c.req, ctx);
+        };
+        return await next();
+      });
+      return await runner(req, ctx);
+    };
+
+    return cachedHandler;
+  }
+
+  const instance = ((req: Request, ctx: RailFogContext) => {
+    return buildHandler()(req, ctx);
+  }) as RouterInstance;
+
+  instance.use = (mw: RouterMiddleware) => {
+    middlewares.push(mw);
+    cachedHandler = null;
+    return instance;
+  };
+  instance.get = (pattern: string, handler: HandlerFn) => {
+    routeMap[`GET ${pattern}`] = handler;
+    cachedHandler = null;
+    return instance;
+  };
+  instance.post = (pattern: string, handler: HandlerFn) => {
+    routeMap[`POST ${pattern}`] = handler;
+    cachedHandler = null;
+    return instance;
+  };
+  instance.put = (pattern: string, handler: HandlerFn) => {
+    routeMap[`PUT ${pattern}`] = handler;
+    cachedHandler = null;
+    return instance;
+  };
+  instance.patch = (pattern: string, handler: HandlerFn) => {
+    routeMap[`PATCH ${pattern}`] = handler;
+    cachedHandler = null;
+    return instance;
+  };
+  instance.delete = (pattern: string, handler: HandlerFn) => {
+    routeMap[`DELETE ${pattern}`] = handler;
+    cachedHandler = null;
+    return instance;
+  };
+  instance.all = (pattern: string, handler: HandlerFn) => {
+    routeMap[`* ${pattern}`] = handler;
+    cachedHandler = null;
+    return instance;
+  };
+  instance.routes = () => ({ ...routeMap });
+
+  return instance;
 }

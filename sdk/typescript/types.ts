@@ -188,3 +188,89 @@ export type ScheduleHandler = (
   event: ScheduleEvent,
   ctx: RailFogContext,
 ) => Promise<void> | void;
+
+/**
+ * Standard Issue format per the Standard Schema specification (https://standardschema.dev).
+ */
+export interface StandardIssue {
+  readonly message: string;
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }>;
+}
+
+export interface StandardSuccessResult<Output> {
+  readonly value: Output;
+  readonly issues?: undefined;
+}
+
+export interface StandardFailureResult {
+  readonly issues: ReadonlyArray<StandardIssue>;
+}
+
+export type StandardResult<Output> =
+  | StandardSuccessResult<Output>
+  | StandardFailureResult;
+
+/**
+ * Standard Schema V1 interface supported natively by Zod, Valibot, ArkType, etc.
+ * @see https://standardschema.dev
+ */
+export interface StandardSchemaV1<Input = unknown, Output = Input> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly validate: (
+      value: unknown,
+    ) => StandardResult<Output> | Promise<StandardResult<Output>>;
+  };
+}
+
+/**
+ * Universal schema validator accepted by c.body(schema).
+ * Supports Standard Schema V1, safeParse/safeParseAsync (Zod/Valibot duck-typing),
+ * or pure synchronous/asynchronous predicate functions.
+ */
+export type SchemaValidator<T> =
+  | StandardSchemaV1<unknown, T>
+  | {
+    safeParse(
+      data: unknown,
+    ): { success: true; data: T } | { success: false; error: unknown };
+  }
+  | {
+    safeParseAsync(
+      data: unknown,
+    ): Promise<{ success: true; data: T } | { success: false; error: unknown }>;
+  }
+  | ((data: unknown) => T | Promise<T>);
+
+/**
+ * Structured contextual logger correlating log messages with PLAT-14 request IDs.
+ * @spec contracts/platform.contract.md#PLAT-14
+ */
+export interface ContextLogger {
+  debug(message: string, meta?: unknown): void;
+  info(message: string, meta?: unknown): void;
+  warn(message: string, meta?: unknown): void;
+  error(message: string, meta?: unknown): void;
+}
+
+/**
+ * Configuration options for the consumer() queue handler wrapper.
+ * @spec contracts/queues.contract.md#Q-4
+ */
+export interface ConsumerOptions {
+  /**
+   * Automatically deduplicate messages using withIdempotency() over ctx.kv.
+   * Defaults to false.
+   */
+  idempotent?: boolean;
+  /**
+   * Retention TTL in seconds for idempotency deduplication keys.
+   * Defaults to 14 days (1,209,600s) per Q-4.
+   */
+  ttlSeconds?: number;
+  /**
+   * Custom key generator for deduplication. Defaults to ["railfog_dedupe", message.id].
+   */
+  dedupeKey?: (message: QueueMessage) => string[];
+}
