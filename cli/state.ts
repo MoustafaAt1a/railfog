@@ -48,6 +48,7 @@ export interface ImportCommandOptions {
   targetOrgId?: string;
   targetProject?: string;
   overwriteKv?: boolean;
+  dryRun?: boolean;
   controlPlaneUrl?: string;
   stateBackupService?: StateBackupService;
   token?: string;
@@ -271,6 +272,50 @@ export async function importCommand(
     targetOrgId = archive.project.orgId || "default";
   }
 
+  if (options.dryRun) {
+    const revCount = archive.functions
+      ? Object.keys(archive.functions).length
+      : 0;
+    const kvCount = archive.kv ? Object.keys(archive.kv).length : 0;
+    const objCount = archive.objects ? Object.keys(archive.objects).length : 0;
+    const queueCount = archive.queues ? Object.keys(archive.queues).length : 0;
+
+    console.log(
+      `[DRY RUN] Validated backup archive '${archive.backupId}' for target '${targetProject}'. Zero mutations applied.`,
+    );
+    console.log();
+    console.log(
+      renderFreightExpressCard({
+        mode: "restore",
+        projectName: `${targetProject} (DRY RUN)`,
+        backupId: archive.backupId,
+        stats: [
+          ["• Mode:", "DRY RUN (Zero Mutation)"],
+          ["• Archive Schema:", `v${archive.version}`],
+          ["• Revisions:", `${revCount} inspectable`],
+          ["• KV Keys:", `${kvCount} keys (dry-run)`],
+          ["• Objects:", `${objCount} objects (dry-run)`],
+          ["• Queues:", `${queueCount} queues (dry-run)`],
+        ],
+      }),
+    );
+    console.log();
+    console.log(
+      renderStatusBar([
+        { label: "Project", value: targetProject },
+        { label: "Dry Run", value: "Verified" },
+        { label: "Status", value: "No Mutate" },
+      ]),
+    );
+
+    return {
+      restoredRevisions: revCount,
+      restoredKvKeys: kvCount,
+      restoredObjects: objCount,
+      restoredQueues: queueCount,
+    };
+  }
+
   let result: ImportProjectResult;
 
   const spinner = (
@@ -382,9 +427,9 @@ Options:
   -p, --project <name>     Target project name (defaults to railfog.toml or archive, alias: -n, --name)
   --org <id>               Target organization ID
   --overwrite-kv           Overwrite existing KV keys in target project
+  --dry-run                Validate archive and inspect resources without applying mutations
   -C, --dir <path>         Target project directory (alias: --project-dir, --cwd, default: current directory)
   --control-url <url>      Control Plane API URL (alias: --control-plane-url)
   --token <key>            API key for authorization (alias: --api-key)
   -h, --help               Show help for import command`);
 }
-

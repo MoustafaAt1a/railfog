@@ -473,11 +473,15 @@ export async function runWhoami(
   }
 }
 
-export async function loginCommand(options?: LoginOptions): Promise<LoginResult> {
+export async function loginCommand(
+  options?: LoginOptions,
+): Promise<LoginResult> {
   return await runLogin(options);
 }
 
-export async function logoutCommand(options?: { configPath?: string }): Promise<void> {
+export async function logoutCommand(
+  options?: { configPath?: string },
+): Promise<void> {
   await runLogout(options);
 }
 
@@ -521,4 +525,3 @@ Options:
   --token <key>            Directly provide API key (alias: --api-key)
   -h, --help               Show help for whoami command`);
 }
-

@@ -171,7 +171,9 @@ export async function runDoctor(
         { label: "Isolate Boot", value: `< ${isolateBootMs.toFixed(2)}ms` },
         {
           label: "Signals",
-          value: `${signals.filter((s) => s.status === "active").length}/${signals.length} Green`,
+          value: `${
+            signals.filter((s) => s.status === "active").length
+          }/${signals.length} Green`,
         },
         { label: "Health", value: overallHealthy ? "Nominal" : "Degraded" },
       ]),
@@ -203,5 +205,3 @@ Options:
   --json                 Output station signal report as structured JSON
   -h, --help             Show help for doctor command`);
 }
-
-

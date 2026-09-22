@@ -60,7 +60,8 @@ export async function devCommand(
           code: "CONFIG_NOT_FOUND",
           message: "Error: railfog.toml not found in project directory.",
           location: tomlPath,
-          solution: "Run 'rail init' to scaffold a new RailFog application here.",
+          solution:
+            "Run 'rail init' to scaffold a new RailFog application here.",
           docs: "https://railfog.dev/docs/dev-server",
         }),
       );
@@ -131,7 +132,9 @@ export async function runDev(options?: DevOptions): Promise<void> {
         // 'd' / 'D': open dashboard in browser
         if (char === "d" || char === "D") {
           const url = `http://${host ?? "localhost"}:${server.port}/__railfog`;
-          console.log(`\n${glyphs.info} Opening dashboard ${url} in browser...`);
+          console.log(
+            `\n${glyphs.info} Opening dashboard ${url} in browser...`,
+          );
           await systemOpenBrowser(url);
         }
 

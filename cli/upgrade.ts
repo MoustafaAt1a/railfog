@@ -486,4 +486,3 @@ Options:
   --compile             Compile into a standalone native binary
   -h, --help            Show help for upgrade command`);
 }
-

@@ -1062,3 +1062,38 @@ Deno.test("adversarial attack: stream failure with secret embedded in error mess
   );
   assertStringIncludes(result.stderr, REDACTED_MARKER);
 });
+
+Deno.test("runLogs: --trace / --request-id filters logs and displays waterfall trace card", async () => {
+  const targetTrace = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+  const otherTrace = "01ARZ3NDEKTSV4RRFFQ69G5FA9";
+  const entries = [
+    createSampleLogEntry({
+      message: "Processing route /api/users",
+      request_id: targetTrace,
+      level: "info",
+    }),
+    createSampleLogEntry({
+      message: "Unrelated background task",
+      request_id: otherTrace,
+      level: "info",
+    }),
+    createSampleLogEntry({
+      message: "Database query finished",
+      request_id: targetTrace,
+      level: "info",
+    }),
+  ];
+
+  const result = await captureRunLogs({
+    logSource: toNdjson(entries),
+    format: "pretty",
+    trace: targetTrace,
+  });
+
+  assertEquals(result.exitCode, 0);
+  assertStringIncludes(result.stdout, "Processing route /api/users");
+  assertStringIncludes(result.stdout, "Database query finished");
+  assertFalse(result.stdout.includes("Unrelated background task"));
+  assertStringIncludes(result.stdout, "ULID Request Trace Waterfall");
+  assertStringIncludes(result.stdout, targetTrace);
+});

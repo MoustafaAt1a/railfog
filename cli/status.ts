@@ -10,12 +10,15 @@ import {
   renderDepartureBoard,
   renderErrorCard,
   renderStatusBar,
+  renderTopologyGraph,
   renderTree,
+  type TopologyNode,
 } from "./ui.ts";
 
 export interface StatusOptions {
   cwd?: string;
   json?: boolean;
+  topology?: boolean;
 }
 
 export function printStatusHelp(): void {
@@ -26,6 +29,7 @@ Usage:
 
 Options:
   -C, --dir <path>   Target project directory (alias: --project-dir, --cwd, default: current directory)
+  -t, --topology     Display architecture topology graph (alias: --graph)
   --json             Output status report as structured JSON
   -h, --help         Show help for status command`);
 }
@@ -52,7 +56,8 @@ export async function statusCommand(
           code: "CONFIG_NOT_FOUND",
           message: "Error: railfog.toml not found in project directory.",
           location: tomlPath,
-          solution: "Run 'rail init' to scaffold a new RailFog application here.",
+          solution:
+            "Run 'rail init' to scaffold a new RailFog application here.",
           docs: "https://railfog.dev/docs/getting-started",
         }),
       );
@@ -109,6 +114,48 @@ export async function statusCommand(
         null,
         2,
       ),
+    );
+    return;
+  }
+  if (options?.topology) {
+    const topologyNodes: TopologyNode[] = fnEntries.map(([name, fnConfig]) => {
+      const entry = (fnConfig?.entry as string) ??
+        (fnConfig?.entrypoint as string) ?? `functions/${name}.ts`;
+      const fnRoutes = routes.filter((r) => r.function === name).map((r) =>
+        r.pattern ?? ""
+      );
+      const permissions = fnConfig?.permissions as {
+        kv?: string[];
+        objects?: string[];
+        queues?: string[];
+        network?: string[];
+      } | undefined;
+      return {
+        name,
+        entrypoint: entry,
+        routes: fnRoutes,
+        kv: permissions?.kv,
+        objects: permissions?.objects,
+        queues: permissions?.queues,
+        network: permissions?.network,
+      };
+    });
+
+    console.log();
+    console.log(
+      renderTopologyGraph({
+        projectName: appName,
+        functions: topologyNodes,
+      }),
+    );
+    console.log();
+    console.log(
+      renderStatusBar([
+        { label: "Project", value: appName },
+        { label: "Functions", value: String(fnEntries.length) },
+        { label: "Routes", value: String(routes.length) },
+        { label: "View", value: "Topology" },
+      ]),
     );
     return;
   }

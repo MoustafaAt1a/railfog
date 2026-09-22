@@ -467,3 +467,36 @@ Deno.test({
     assertMatch(result.stderr, /input|--in/i);
   },
 });
+
+Deno.test({
+  name:
+    "CLI state - rail import --dry-run validates archive without mutating state",
+  fn: async () => {
+    const tempDir = await Deno.makeTempDir();
+    const backupId = "bak_01J8Z000000000000000000010";
+    const archivePath = join(tempDir, `${backupId}.json`);
+    const archive: StateBackupArchive = {
+      version: 1,
+      backupId,
+      createdAt: Date.now(),
+      project: {
+        orgId: "default",
+        projectId: "import-dry-run",
+        name: "import-dry-run",
+      },
+      functions: [],
+      kv: [],
+      objects: [],
+      queues: [],
+    };
+    await Deno.writeTextFile(archivePath, JSON.stringify(archive));
+
+    const result = await runCli(
+      ["import", "--in", archivePath, "--dry-run"],
+      tempDir,
+    );
+    assertEquals(result.code, 0);
+    assertMatch(result.stdout, /\[DRY RUN\]/i);
+    assertMatch(result.stdout, /Zero mutations applied/i);
+  },
+});

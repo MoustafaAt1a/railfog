@@ -155,7 +155,9 @@ export async function rollbackCommand(
   console.log();
   console.log(
     renderCard("Function Rollback Complete", [
-      `${glyphs.success}  ${colors.bold("Pointer flipped successfully (Instant cutover)")}`,
+      `${glyphs.success}  ${
+        colors.bold("Pointer flipped successfully (Instant cutover)")
+      }`,
       "",
       `   ${colors.dim("Project:")}     ${colors.accent(projectName)}`,
       `   ${colors.dim("Function:")}    ${colors.brand(options.functionName)}`,
@@ -184,4 +186,3 @@ export async function rollbackCommand(
 }
 
 export const runRollback = rollbackCommand;
-

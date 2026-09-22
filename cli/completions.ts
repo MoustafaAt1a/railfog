@@ -465,4 +465,3 @@ export function completionsCommand(
 ): { ok: boolean; script?: string } {
   return runCompletions(shellArg);
 }
-

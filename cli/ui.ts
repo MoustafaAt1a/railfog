@@ -1835,3 +1835,184 @@ export function renderCompetitiveMatrix(): string {
     borderColor: colors.brand,
   });
 }
+
+export interface BarChartItem {
+  label: string;
+  value: number;
+  formattedValue?: string;
+  color?: (s: string) => string;
+}
+
+export interface BarChartOptions {
+  width?: number;
+  title?: string;
+  unit?: string;
+}
+
+/**
+ * Renders an ASCII horizontal bar chart formatted in the JetBrains Darcula aesthetic.
+ */
+export function renderHorizontalBarChart(
+  items: BarChartItem[],
+  options?: BarChartOptions,
+): string {
+  const width = Math.max(10, options?.width ?? 24);
+  const total = items.reduce((acc, item) => acc + Math.max(0, item.value), 0);
+  const maxVal = Math.max(...items.map((i) => Math.max(0, i.value)), 0);
+
+  const maxLabelWidth = Math.max(
+    ...items.map((i) => visibleWidth(i.label)),
+    4,
+  );
+
+  const lines: string[] = [];
+  if (options?.title) {
+    lines.push(colors.bold(colors.accent(`[ ${options.title} ]`)));
+    lines.push("");
+  }
+
+  for (const item of items) {
+    const val = Math.max(0, item.value);
+    const barLen = maxVal > 0 ? Math.round((val / maxVal) * width) : 0;
+    const pct = total > 0 ? ((val / total) * 100).toFixed(0) : "0";
+    const colorFn = item.color ?? colors.brand;
+
+    const barStr = barLen > 0 ? colorFn("■".repeat(barLen)) : "";
+    const emptyStr = colors.dim("·".repeat(width - barLen));
+    const labelPadded = item.label.padEnd(maxLabelWidth);
+    const formatted = item.formattedValue ??
+      (options?.unit ? `${options.unit}${val.toFixed(2)}` : val.toFixed(2));
+
+    lines.push(
+      `  ${colors.bold(labelPadded)}  ${barStr}${emptyStr}  ${
+        colors.bold(formatted.padStart(10))
+      } ${colors.dim(`(${pct.padStart(3)}%)`)}`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Renders a segmented proportional single-line horizontal distribution bar.
+ */
+export function renderDistributionBar(
+  items: Array<{ label: string; value: number; color?: (s: string) => string }>,
+  width: number = 32,
+): string {
+  const total = items.reduce((acc, i) => acc + Math.max(0, i.value), 0);
+  if (total <= 0) {
+    return colors.dim(`[ ${"·".repeat(width)} ] 0% allocated`);
+  }
+
+  let filled = 0;
+  const segments: string[] = [];
+  const chars = ["■", "▒", "░", "■"];
+  const defaultColors = [
+    colors.emerald,
+    colors.cyan,
+    colors.amber,
+    colors.purple,
+  ];
+
+  items.forEach((item, idx) => {
+    const val = Math.max(0, item.value);
+    const fraction = val / total;
+    const segLen = Math.round(fraction * width);
+    filled += segLen;
+    const colorFn = item.color ?? defaultColors[idx % defaultColors.length];
+    const ch = chars[idx % chars.length];
+    if (segLen > 0) {
+      segments.push(colorFn(ch.repeat(segLen)));
+    }
+  });
+
+  if (filled < width) {
+    segments.push(colors.dim("·".repeat(width - filled)));
+  }
+
+  return `[${segments.join("")}]`;
+}
+
+export interface TopologyNode {
+  name: string;
+  routes: string[];
+  entrypoint?: string;
+  kv?: string[];
+  objects?: string[];
+  queues?: string[];
+  network?: string[];
+}
+
+/**
+ * Renders a clean ASCII architecture topology diagram linking HTTP Triggers -> Functions -> Primitives.
+ */
+export function renderTopologyGraph(options: {
+  projectName: string;
+  functions: TopologyNode[];
+}): string {
+  const lines: string[] = [];
+  lines.push(colors.bold(colors.accent(`Topology: ${options.projectName}`)));
+  lines.push(
+    colors.dim(
+      "Trigger (HTTP) ──────► Function (Isolate) ──────► Primitives {KV, OBJ, QUEUE}",
+    ),
+  );
+  lines.push("");
+
+  if (options.functions.length === 0) {
+    lines.push(`  ${colors.dim("(no functions declared)")}`);
+    return lines.join("\n");
+  }
+
+  for (let i = 0; i < options.functions.length; i++) {
+    const fn = options.functions[i];
+    const isLastFn = i === options.functions.length - 1;
+    const fnBranch = isLastFn ? "└─" : "├─";
+    const fnPipe = isLastFn ? "  " : "│ ";
+
+    const routesStr = fn.routes.length > 0
+      ? fn.routes.map((r) => colors.bold(colors.emerald(r))).join(", ")
+      : colors.dim("(no routes)");
+
+    lines.push(
+      `${colors.dim(fnBranch)}─┬─ ${colors.bold(colors.brand(fn.name))} ${
+        colors.dim(`[${fn.entrypoint ?? "entrypoint"}]`)
+      }`,
+    );
+    lines.push(`${colors.dim(fnPipe)} ├─ Routes:       ${routesStr}`);
+
+    const bindings: string[] = [];
+    if (fn.kv && fn.kv.length > 0) {
+      bindings.push(`KV: ${fn.kv.join(", ")}`);
+    }
+    if (fn.objects && fn.objects.length > 0) {
+      bindings.push(`OBJ: ${fn.objects.join(", ")}`);
+    }
+    if (fn.queues && fn.queues.length > 0) {
+      bindings.push(`QUEUE: ${fn.queues.join(", ")}`);
+    }
+    if (fn.network && fn.network.length > 0) {
+      bindings.push(`NET: ${fn.network.join(", ")}`);
+    }
+
+    if (bindings.length > 0) {
+      lines.push(
+        `${colors.dim(fnPipe)} └─ Capabilities: ${
+          colors.slate(bindings.join(" • "))
+        }`,
+      );
+    } else {
+      lines.push(
+        `${colors.dim(fnPipe)} └─ Capabilities: ${
+          colors.dim("None (pure function)")
+        }`,
+      );
+    }
+    if (!isLastFn) {
+      lines.push(`${colors.dim(fnPipe)}`);
+    }
+  }
+
+  return lines.join("\n");
+}

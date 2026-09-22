@@ -7,6 +7,8 @@ import { join, resolve } from "@std/path";
 import { parse } from "@std/toml";
 import { specificityScore } from "../runtime/router/route-matcher.ts";
 import {
+  colors,
+  renderCard,
   renderRouteSimulatorCard,
   renderStatusBar,
   type RouteSimulationResult,
@@ -16,6 +18,7 @@ export interface SimulateOptions {
   cwd?: string;
   method?: string;
   json?: boolean;
+  curl?: boolean;
 }
 
 interface RouteEntry {
@@ -165,10 +168,25 @@ export async function runSimulate(
     shadowedBy: shadowedBy.length > 0 ? shadowedBy : undefined,
   };
 
+  const method = options?.method?.toUpperCase() ?? "GET";
+  let curlCmd = `curl -X ${method} http://localhost:8000${cleanPath}`;
+  if (method === "POST" || method === "PUT" || method === "PATCH") {
+    curlCmd += ` -H "Content-Type: application/json" -d '{}'`;
+  }
+
   if (options?.json) {
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify({ ...result, curl: curlCmd }, null, 2));
   } else {
     console.log("\n" + renderRouteSimulatorCard(result) + "\n");
+    if (options?.curl) {
+      console.log(
+        renderCard("Generated Request Command (curl)", [
+          colors.dim("# Direct invocation against local dev server:"),
+          colors.bold(colors.emerald(curlCmd)),
+        ], { borderColor: colors.emerald, padding: true }),
+      );
+      console.log();
+    }
     console.log(
       renderStatusBar([
         { label: "Path", value: cleanPath },
@@ -202,8 +220,7 @@ Arguments:
 Options:
   -m, --method <str>     HTTP method to simulate (default: GET)
   -C, --dir <path>       Target project directory (alias: --project-dir, --cwd, default: current directory)
+  --curl                 Generate ready-to-run curl command for this route
   --json                 Output simulation results as structured JSON
   -h, --help             Show help for simulate command`);
 }
-
-

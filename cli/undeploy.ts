@@ -120,11 +120,17 @@ export async function undeployCommand(
   console.log();
   console.log(
     renderCard("Project Undeployment Complete", [
-      `${glyphs.success}  ${colors.bold("Successfully undeployed from RailFog Control Plane")}`,
+      `${glyphs.success}  ${
+        colors.bold("Successfully undeployed from RailFog Control Plane")
+      }`,
       "",
-      `   ${colors.dim("Project:")}     ${colors.accent(colors.bold(projectName))}`,
+      `   ${colors.dim("Project:")}     ${
+        colors.accent(colors.bold(projectName))
+      }`,
       `   ${colors.dim("Status:")}      ${colors.emerald("DELETED / PURGED")}`,
-      `   ${colors.dim("Routing:")}     ${colors.slate("All routes decoupled")}`,
+      `   ${colors.dim("Routing:")}     ${
+        colors.slate("All routes decoupled")
+      }`,
     ], { borderColor: colors.emerald }),
   );
   console.log();
@@ -142,4 +148,3 @@ export async function undeployCommand(
 }
 
 export const runUndeploy = undeployCommand;
-

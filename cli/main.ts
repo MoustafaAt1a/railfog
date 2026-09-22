@@ -28,10 +28,7 @@ import {
   runCheck,
   type ValidationIssue,
 } from "./check.ts";
-import {
-  compareCommand,
-  printCompareHelp,
-} from "./compare.ts";
+import { compareCommand, printCompareHelp } from "./compare.ts";
 import {
   completionsCommand,
   generateBashCompletion,
@@ -52,12 +49,7 @@ import {
   printDeployHelp,
   runDeploy,
 } from "./deploy.ts";
-import {
-  devCommand,
-  type DevOptions,
-  printDevHelp,
-  runDev,
-} from "./dev.ts";
+import { devCommand, type DevOptions, printDevHelp, runDev } from "./dev.ts";
 import {
   doctorCommand,
   type DoctorOptions,
@@ -93,8 +85,8 @@ import {
 import {
   formatLogEntry,
   type LogEntry,
-  logsCommand,
   type LogsCliOptions,
+  logsCommand,
   printLogsHelp,
   runLogs,
 } from "./logs.ts";
@@ -695,14 +687,20 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           template = arg.slice("--template=".length) as
             | "minimal"
             | "worked-example";
-        } else if ((arg === "--name" || arg === "-n" || arg === "--project" || arg === "-p") && args[i + 1]) {
+        } else if (
+          (arg === "--name" || arg === "-n" || arg === "--project" ||
+            arg === "-p") && args[i + 1]
+        ) {
           projectName = args[i + 1];
           i++;
         } else if (arg.startsWith("--name=")) {
           projectName = arg.slice("--name=".length);
         } else if (arg.startsWith("--project=")) {
           projectName = arg.slice("--project=".length);
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           directory = args[i + 1];
           hasPositionalDir = true;
           i++;
@@ -733,7 +731,9 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           console.log();
           console.log(
             renderCard("Project Scaffolding Complete", [
-              `Project:  ${colors.bold(colors.accent(projectName ?? directory!))}`,
+              `Project:  ${
+                colors.bold(colors.accent(projectName ?? directory!))
+              }`,
               `Location: ${colors.dim(directory!)}`,
               `Template: ${colors.brand(template ?? "minimal")}`,
               `Status:   ${colors.emerald("[+] Initialized successfully")}`,
@@ -768,7 +768,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printAddHelp();
           return;
         }
-        if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -802,6 +805,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
     case "status": {
       let cwd = Deno.cwd();
       let json = false;
+      let topology = false;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -811,7 +815,12 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
         if (arg === "--json" || arg === "--format=json") {
           json = true;
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (arg === "-t" || arg === "--topology" || arg === "--graph") {
+          topology = true;
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -825,7 +834,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
       }
 
-      await statusCommand(cwd, { json });
+      await statusCommand(cwd, { json, topology });
       break;
     }
 
@@ -841,7 +850,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
         if (arg === "--json" || arg === "--format=json") {
           json = true;
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           targetPath = args[i + 1];
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -874,7 +886,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
         if (arg === "-c" || arg === "--compare") {
           compare = true;
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           targetPath = args[i + 1];
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -888,7 +903,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
       }
 
-      const res = await doctorCommand({ cwd: targetPath ?? Deno.cwd(), compare });
+      const res = await doctorCommand({
+        cwd: targetPath ?? Deno.cwd(),
+        compare,
+      });
       if (!res.healthy) {
         Deno.exit(1);
       }
@@ -900,6 +918,8 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let method: string | undefined;
       let targetPath: string | undefined;
       let targetDir: string | undefined;
+      let json = false;
+      let curl = false;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -907,12 +927,19 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printSimulateHelp();
           return;
         }
-        if (arg === "-m" || arg === "--method") {
+        if (arg === "--json" || arg === "--format=json") {
+          json = true;
+        } else if (arg === "--curl") {
+          curl = true;
+        } else if (arg === "-m" || arg === "--method") {
           method = args[i + 1];
           i++;
         } else if (arg.startsWith("--method=")) {
           method = arg.slice("--method=".length);
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           targetDir = args[i + 1];
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -931,7 +958,12 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
 
       try {
-        await simulateCommand(targetPath, { cwd: targetDir ?? Deno.cwd(), method });
+        await simulateCommand(targetPath, {
+          cwd: targetDir ?? Deno.cwd(),
+          method,
+          json,
+          curl,
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
@@ -976,7 +1008,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           host = arg.slice("--host=".length);
         } else if (arg === "--no-watch") {
           watch = false;
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -999,6 +1034,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let env: string | undefined;
       let cwd = Deno.cwd();
       let json = false;
+      let dryRun = false;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1016,23 +1052,34 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           );
           Deno.exit(1);
         }
-        if (arg === "--json" || arg === "--format=json") {
+        if (arg === "--dry-run") {
+          dryRun = true;
+        } else if (arg === "--json" || arg === "--format=json") {
           json = true;
-        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
+        } else if (
+          (arg === "--control-url" || arg === "--control-plane-url") &&
+          args[i + 1]
+        ) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
         } else if (arg.startsWith("--control-plane-url=")) {
           controlPlaneUrl = arg.slice("--control-plane-url=".length);
-        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
+        } else if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && args[i + 1]
+        ) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
         } else if (arg.startsWith("--name=")) {
           project = arg.slice("--name=".length);
-        } else if ((arg === "--env" || arg === "-e" || arg === "--environment") && args[i + 1]) {
+        } else if (
+          (arg === "--env" || arg === "-e" || arg === "--environment") &&
+          args[i + 1]
+        ) {
           env = args[i + 1];
           i++;
         } else if (arg.startsWith("--env=")) {
@@ -1046,7 +1093,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           token = arg.slice("--token=".length);
         } else if (arg.startsWith("--api-key=")) {
           token = arg.slice("--api-key=".length);
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1066,6 +1116,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           token,
           env,
           json,
+          dryRun,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -1099,14 +1150,20 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--to=")) {
           targetRevisionId = arg.slice("--to=".length);
-        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
+        } else if (
+          (arg === "--control-url" || arg === "--control-plane-url") &&
+          args[i + 1]
+        ) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
           controlPlaneUrl = arg.slice("--control-url=".length);
         } else if (arg.startsWith("--control-plane-url=")) {
           controlPlaneUrl = arg.slice("--control-plane-url=".length);
-        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
+        } else if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && args[i + 1]
+        ) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
@@ -1120,7 +1177,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           token = arg.slice("--token=".length);
         } else if (arg.startsWith("--api-key=")) {
           token = arg.slice("--api-key=".length);
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1173,14 +1233,20 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printUndeployHelp();
           return;
         }
-        if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
+        if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && args[i + 1]
+        ) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
         } else if (arg.startsWith("--name=")) {
           project = arg.slice("--name=".length);
-        } else if ((arg === "--control-plane-url" || arg === "--control-url") && args[i + 1]) {
+        } else if (
+          (arg === "--control-plane-url" || arg === "--control-url") &&
+          args[i + 1]
+        ) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-plane-url=")) {
@@ -1196,7 +1262,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           token = arg.slice("--api-key=".length);
         } else if (arg === "-f" || arg === "--force") {
           force = true;
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1243,7 +1312,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--out=")) {
           outputFile = arg.slice("--out=".length);
-        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
+        } else if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && args[i + 1]
+        ) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
@@ -1255,7 +1327,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--org=")) {
           org = arg.slice("--org=".length);
-        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
+        } else if (
+          (arg === "--control-url" || arg === "--control-plane-url") &&
+          args[i + 1]
+        ) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
@@ -1269,7 +1344,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           token = arg.slice("--token=".length);
         } else if (arg.startsWith("--api-key=")) {
           token = arg.slice("--api-key=".length);
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1303,6 +1381,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let project: string | undefined;
       let org: string | undefined;
       let overwriteKv = false;
+      let dryRun = false;
       let controlPlaneUrl: string | undefined;
       let token: string | undefined;
       let cwd = Deno.cwd();
@@ -1313,12 +1392,17 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printImportHelp();
           return;
         }
-        if (arg === "--in" && args[i + 1]) {
+        if (arg === "--dry-run") {
+          dryRun = true;
+        } else if (arg === "--in" && args[i + 1]) {
           inputFile = args[i + 1];
           i++;
         } else if (arg.startsWith("--in=")) {
           inputFile = arg.slice("--in=".length);
-        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
+        } else if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && args[i + 1]
+        ) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
@@ -1332,7 +1416,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           org = arg.slice("--org=".length);
         } else if (arg === "--overwrite-kv") {
           overwriteKv = true;
-        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
+        } else if (
+          (arg === "--control-url" || arg === "--control-plane-url") &&
+          args[i + 1]
+        ) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
@@ -1346,7 +1433,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           token = arg.slice("--token=".length);
         } else if (arg.startsWith("--api-key=")) {
           token = arg.slice("--api-key=".length);
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           cwd = resolve(args[i + 1]);
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1372,6 +1462,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           targetProject: project,
           targetOrgId: org,
           overwriteKv,
+          dryRun,
           controlPlaneUrl,
           token,
         });
@@ -1408,14 +1499,20 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--file=")) {
           filePath = arg.slice("--file=".length);
-        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && subArgs[i + 1]) {
+        } else if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && subArgs[i + 1]
+        ) {
           project = subArgs[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
         } else if (arg.startsWith("--name=")) {
           project = arg.slice("--name=".length);
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && subArgs[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && subArgs[i + 1]
+        ) {
           projectDir = subArgs[i + 1];
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1434,7 +1531,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       }
 
       const exitCode = await secretsCommand({
-        subcommand: sub as "set" | "list" | "delete",
+        subcommand: sub as "set" | "list" | "delete" | "audit",
         key,
         value,
         filePath,
@@ -1457,6 +1554,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let project: string | undefined;
       let controlPlaneUrl: string | undefined;
       let token: string | undefined;
+      let trace: string | undefined;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1492,7 +1590,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           i++;
         } else if (arg.startsWith("--format=")) {
           format = arg.slice("--format=".length) as "pretty" | "json";
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           projectDir = args[i + 1];
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1501,14 +1602,20 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           projectDir = arg.slice("--cwd=".length);
         } else if (arg.startsWith("--project-dir=")) {
           projectDir = arg.slice("--project-dir=".length);
-        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
+        } else if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && args[i + 1]
+        ) {
           project = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
           project = arg.slice("--project=".length);
         } else if (arg.startsWith("--name=")) {
           project = arg.slice("--name=".length);
-        } else if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
+        } else if (
+          (arg === "--control-url" || arg === "--control-plane-url") &&
+          args[i + 1]
+        ) {
           controlPlaneUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
@@ -1522,6 +1629,15 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           token = arg.slice("--token=".length);
         } else if (arg.startsWith("--api-key=")) {
           token = arg.slice("--api-key=".length);
+        } else if (
+          (arg === "--trace" || arg === "--request-id") && args[i + 1]
+        ) {
+          trace = args[i + 1];
+          i++;
+        } else if (arg.startsWith("--trace=")) {
+          trace = arg.slice("--trace=".length);
+        } else if (arg.startsWith("--request-id=")) {
+          trace = arg.slice("--request-id=".length);
         }
       }
 
@@ -1535,6 +1651,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         project,
         controlPlaneUrl,
         token,
+        trace,
       });
       if (exitCode !== 0) {
         Deno.exit(exitCode);
@@ -1549,6 +1666,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
       let projectId: string | undefined;
       let source: string | undefined;
       let rates: Partial<PricingRates> | undefined;
+      let watch = false;
 
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
@@ -1556,7 +1674,9 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printUsageHelp();
           return;
         }
-        if (arg === "--json") {
+        if (arg === "-w" || arg === "--watch") {
+          watch = true;
+        } else if (arg === "--json") {
           format = "json";
         } else if (arg === "--format" && args[i + 1]) {
           const val = args[i + 1];
@@ -1577,7 +1697,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
             Deno.exit(1);
           }
           format = val as "pretty" | "json";
-        } else if ((arg === "-C" || arg === "--dir" || arg === "--cwd" || arg === "--project-dir") && args[i + 1]) {
+        } else if (
+          (arg === "-C" || arg === "--dir" || arg === "--cwd" ||
+            arg === "--project-dir") && args[i + 1]
+        ) {
           projectDir = args[i + 1];
           i++;
         } else if (arg.startsWith("--dir=")) {
@@ -1586,7 +1709,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           projectDir = arg.slice("--cwd=".length);
         } else if (arg.startsWith("--project-dir=")) {
           projectDir = arg.slice("--project-dir=".length);
-        } else if ((arg === "--project" || arg === "-p" || arg === "--name" || arg === "-n") && args[i + 1]) {
+        } else if (
+          (arg === "--project" || arg === "-p" || arg === "--name" ||
+            arg === "-n") && args[i + 1]
+        ) {
           projectId = args[i + 1];
           i++;
         } else if (arg.startsWith("--project=")) {
@@ -1636,6 +1762,7 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         projectId,
         usageSource: source,
         rates,
+        watch,
       });
       if (exitCode !== 0) {
         Deno.exit(exitCode);
@@ -1654,7 +1781,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printLoginHelp();
           return;
         }
-        if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
+        if (
+          (arg === "--control-url" || arg === "--control-plane-url") &&
+          args[i + 1]
+        ) {
           controlUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {
@@ -1701,7 +1831,10 @@ export async function main(args: string[] = Deno.args): Promise<void> {
           printWhoamiHelp();
           return;
         }
-        if ((arg === "--control-url" || arg === "--control-plane-url") && args[i + 1]) {
+        if (
+          (arg === "--control-url" || arg === "--control-plane-url") &&
+          args[i + 1]
+        ) {
           controlUrl = args[i + 1];
           i++;
         } else if (arg.startsWith("--control-url=")) {

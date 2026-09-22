@@ -53,7 +53,10 @@ Deno.test("cli_uninstall: cleanly removes installed binary and metadata in custo
     const metaPath = join(binDir, ".rail-version.json");
     await Deno.writeTextFile(
       metaPath,
-      JSON.stringify({ version: "0.8.0", installedAt: new Date().toISOString() }),
+      JSON.stringify({
+        version: "0.8.0",
+        installedAt: new Date().toISOString(),
+      }),
     );
 
     // Run uninstall with custom root environment override
@@ -63,7 +66,10 @@ Deno.test("cli_uninstall: cleanly removes installed binary and metadata in custo
       const res = await runUninstall();
 
       assertEquals(res.ok, true);
-      assert(res.removedFiles.length >= 2, "Expected at least binary and metadata removed");
+      assert(
+        res.removedFiles.length >= 2,
+        "Expected at least binary and metadata removed",
+      );
 
       // Verify files removed from disk
       let binaryExists = true;
@@ -98,7 +104,9 @@ Deno.test("cli_uninstall: cleanly removes installed binary and metadata in custo
 });
 
 Deno.test("cli_uninstall: handles non-existent installation gracefully without error", async () => {
-  const tempDir = await Deno.makeTempDir({ prefix: "railfog-uninstall-empty-" });
+  const tempDir = await Deno.makeTempDir({
+    prefix: "railfog-uninstall-empty-",
+  });
   try {
     const binDir = join(tempDir, "bin");
     await Deno.mkdir(binDir, { recursive: true });

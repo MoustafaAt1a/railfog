@@ -65,7 +65,9 @@ export async function runUninstall(): Promise<UninstallResult> {
     `  ${glyphs.info} ${colors.dim("Target:")}    ${paths.binDir}`,
   );
   console.log(
-    `  ${glyphs.info} ${colors.dim("Platform:")}  ${Deno.build.os}-${Deno.build.arch}`,
+    `  ${glyphs.info} ${
+      colors.dim("Platform:")
+    }  ${Deno.build.os}-${Deno.build.arch}`,
   );
   if (existingVersion) {
     console.log(
@@ -159,11 +161,15 @@ export async function runUninstall(): Promise<UninstallResult> {
 
   const rightLines: string[] = removedFiles.length > 0
     ? [
-      `${colors.bold(colors.emerald("[+] RailFog CLI Successfully Uninstalled"))}`,
+      `${
+        colors.bold(colors.emerald("[+] RailFog CLI Successfully Uninstalled"))
+      }`,
       "",
       `${colors.dim("STATUS:")}      ${colors.emerald("REMOVED")}`,
       `${colors.dim("DIRECTORY:")}   ${colors.slate(paths.binDir)}`,
-      `${colors.dim("REMOVED:")}     ${colors.bold(`${removedFiles.length} file(s)`)}`,
+      `${colors.dim("REMOVED:")}     ${
+        colors.bold(`${removedFiles.length} file(s)`)
+      }`,
       `${colors.dim("PLATFORM:")}    ${Deno.build.os}-${Deno.build.arch}`,
       `${colors.dim("REINSTALL:")}   ${
         colors.accent(
@@ -191,18 +197,26 @@ export async function runUninstall(): Promise<UninstallResult> {
     `  ${glyphs.success} ${colors.dim("Binary Executables:")}  Removed cleanly`,
   );
   rightLines.push(
-    `  ${glyphs.success} ${colors.dim("Version Metadata:")}    Removed (.rail-version.json)`,
+    `  ${glyphs.success} ${
+      colors.dim("Version Metadata:")
+    }    Removed (.rail-version.json)`,
   );
   if (hasLocalAuth) {
     rightLines.push(
-      `  ${glyphs.info} ${colors.dim("Local Auth Session:")}   ${colors.emerald("Preserved in ~/.railfog/config.json")}`,
+      `  ${glyphs.info} ${colors.dim("Local Auth Session:")}   ${
+        colors.emerald("Preserved in ~/.railfog/config.json")
+      }`,
     );
     rightLines.push(
-      `    ${colors.dim("(Your cloud project tokens are safe if you reinstall)")}`,
+      `    ${
+        colors.dim("(Your cloud project tokens are safe if you reinstall)")
+      }`,
     );
   } else {
     rightLines.push(
-      `  ${glyphs.success} ${colors.dim("Local Auth Session:")}   Zero stored tokens found`,
+      `  ${glyphs.success} ${
+        colors.dim("Local Auth Session:")
+      }   Zero stored tokens found`,
     );
   }
 
@@ -210,15 +224,21 @@ export async function runUninstall(): Promise<UninstallResult> {
   if (inPath) {
     rightLines.push("");
     rightLines.push(
-      `${colors.amber("[!]")} ${colors.dim("PATH Notice:")} ${paths.binDir} is still in your PATH.`,
+      `${colors.amber("[!]")} ${
+        colors.dim("PATH Notice:")
+      } ${paths.binDir} is still in your PATH.`,
     );
     if (isWindows) {
       rightLines.push(
-        `    ${colors.dim("To prune User PATH:")} [Environment]::SetEnvironmentVariable("Path", ($env:Path -replace [regex]::Escape(";${paths.binDir}"), ""), "User")`,
+        `    ${
+          colors.dim("To prune User PATH:")
+        } [Environment]::SetEnvironmentVariable("Path", ($env:Path -replace [regex]::Escape(";${paths.binDir}"), ""), "User")`,
       );
     } else {
       rightLines.push(
-        `    ${colors.dim("Remove the export line from your ~/.bashrc or ~/.zshrc")}`,
+        `    ${
+          colors.dim("Remove the export line from your ~/.bashrc or ~/.zshrc")
+        }`,
       );
     }
   }
@@ -278,4 +298,3 @@ Description:
 Options:
   -h, --help       Show help for uninstall command`);
 }
-

@@ -22,7 +22,12 @@ import {
   type ProjectCostItemized,
   type ProjectUsageSummary,
 } from "../packages/metrics/cost-calculator.ts";
-import { renderStatusBar } from "./ui.ts";
+import {
+  colors,
+  renderDistributionBar,
+  renderHorizontalBarChart,
+  renderStatusBar,
+} from "./ui.ts";
 
 /**
  * Options for the usage reporting CLI subcommand.
@@ -36,6 +41,7 @@ export interface UsageCliOptions {
   format?: "pretty" | "json";
   rates?: Partial<PricingRates>;
   usageSource?: ProjectUsageSummary | string;
+  watch?: boolean;
 }
 
 /**
@@ -116,6 +122,34 @@ export function formatUsageReport(
     `Total Cost:             ${formatUsd(cost.totalCostUsd)}`,
     "==================================================",
   ];
+
+  const chartItems = [
+    {
+      label: "Compute",
+      value: cost.computeCostUsd ?? 0,
+      formattedValue: formatUsd(cost.computeCostUsd),
+      color: colors.emerald,
+    },
+    {
+      label: "Operations",
+      value: cost.operationsCostUsd ?? 0,
+      formattedValue: formatUsd(cost.operationsCostUsd),
+      color: colors.cyan,
+    },
+    {
+      label: "Storage",
+      value: cost.storageCostUsd ?? 0,
+      formattedValue: formatUsd(cost.storageCostUsd),
+      color: colors.amber,
+    },
+  ];
+
+  lines.push("");
+  lines.push(colors.bold(colors.accent("Allocation Distribution:")));
+  lines.push(`  ${renderDistributionBar(chartItems, 34)}`);
+  lines.push("");
+  lines.push(colors.bold(colors.accent("Resource Consumption:")));
+  lines.push(renderHorizontalBarChart(chartItems, { width: 20 }));
 
   return lines.join("\n");
 }
@@ -440,6 +474,6 @@ Options:
   --json                   Output machine-readable JSON (alias for --format=json)
   --source <path|json>     Custom usage source JSON string or file path
   --rates <json>           Custom pricing rates JSON override
+  -w, --watch              Watch usage and stream live cost updates
   -h, --help               Show help for usage command`);
 }
-

@@ -386,3 +386,65 @@ Deno.test(
     }
   },
 );
+
+Deno.test(
+  "Integration: rail status --topology renders architecture topology graph",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-main-status-topo-",
+    });
+    try {
+      const initRes = await runCli(["init"], tempDir);
+      assertEquals(initRes.code, 0);
+
+      const statusRes = await runCli(["status", "--topology"], tempDir);
+      assertEquals(statusRes.code, 0);
+      assert(
+        statusRes.stdout.includes("Topology:"),
+        "Output must display topology title",
+      );
+      assert(
+        statusRes.stdout.includes("Trigger (HTTP)"),
+        "Output must show topology path",
+      );
+      assert(
+        statusRes.stdout.includes("api"),
+        "Output must include api function node",
+      );
+    } finally {
+      await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+    }
+  },
+);
+
+Deno.test(
+  "Integration: rail simulate --curl generates valid curl command",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-main-sim-curl-",
+    });
+    try {
+      const initRes = await runCli(["init"], tempDir);
+      assertEquals(initRes.code, 0);
+
+      const simRes = await runCli([
+        "simulate",
+        "/api/items",
+        "-m",
+        "POST",
+        "--curl",
+      ], tempDir);
+      assertEquals(simRes.code, 0);
+      assert(
+        simRes.stdout.includes("Generated Request Command (curl)"),
+        "Output must render curl card",
+      );
+      assert(
+        simRes.stdout.includes("curl -X POST"),
+        "Output must include curl command with method",
+      );
+    } finally {
+      await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+    }
+  },
+);

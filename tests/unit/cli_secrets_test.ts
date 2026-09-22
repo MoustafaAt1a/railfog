@@ -1046,3 +1046,72 @@ Deno.test(
     }
   },
 );
+
+Deno.test(
+  "Audit: rail secrets audit cross-references declared capabilities with encrypted store",
+  async () => {
+    const projectDir = await Deno.makeTempDir({
+      prefix: "railfog_secrets_audit_",
+    });
+    try {
+      const tomlContent = `name = "audit-app"
+
+[functions.api]
+entry = "functions/api.ts"
+[functions.api.permissions]
+secrets = ["STRIPE_KEY", "DATABASE_URL"]
+`;
+      await Deno.writeTextFile(join(projectDir, "railfog.toml"), tomlContent);
+
+      // Set one secret: STRIPE_KEY
+      await captureRunSecrets({
+        subcommand: "set",
+        key: "STRIPE_KEY",
+        value: "sk_test_12345",
+        projectDir,
+      });
+
+      // Set an orphan secret: UNUSED_SECRET
+      await captureRunSecrets({
+        subcommand: "set",
+        key: "UNUSED_SECRET",
+        value: "orphan_value",
+        projectDir,
+      });
+
+      // Run audit
+      const res = await captureRunSecrets({
+        subcommand: "audit",
+        projectDir,
+      });
+
+      assertEquals(res.exitCode, 0, "Audit must exit 0");
+      assert(
+        res.stdout.includes("STRIPE_KEY"),
+        "Output must mention STRIPE_KEY",
+      );
+      assert(
+        res.stdout.includes("DATABASE_URL"),
+        "Output must mention DATABASE_URL",
+      );
+      assert(
+        res.stdout.includes("UNUSED_SECRET"),
+        "Output must mention UNUSED_SECRET",
+      );
+      assert(
+        res.stdout.includes("[ACTIVE]"),
+        "Output must categorize active secret",
+      );
+      assert(
+        res.stdout.includes("[MISSING]"),
+        "Output must categorize missing secret",
+      );
+      assert(
+        res.stdout.includes("[ORPHAN]"),
+        "Output must categorize orphan secret",
+      );
+    } finally {
+      await Deno.remove(projectDir, { recursive: true }).catch(() => {});
+    }
+  },
+);

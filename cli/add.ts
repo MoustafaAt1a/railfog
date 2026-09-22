@@ -169,5 +169,3 @@ export async function addCommand(
   );
   return result;
 }
-
-

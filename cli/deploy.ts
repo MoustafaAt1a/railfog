@@ -33,7 +33,12 @@ import {
   dim,
   green,
 } from "./spinner.ts";
-import { renderReleaseTrainCard } from "./ui.ts";
+import {
+  colors,
+  renderCard,
+  renderReleaseTrainCard,
+  renderStatusBar,
+} from "./ui.ts";
 
 export interface DeployProgressCallbacks {
   onStepStart?: (step: string) => void;
@@ -46,6 +51,7 @@ export interface DeployOptions {
   projectPath?: string;
   token?: string;
   json?: boolean; // Machine-readable JSON output mode
+  dryRun?: boolean; // Pre-flight dry run mode: packaging and validation only, no upload/activation
   progress?: DeployProgressCallbacks;
   cwd?: string;
   controlPlaneUrl?: string;
@@ -74,6 +80,7 @@ export interface DeployCommandOptions {
   deploymentService?: DeploymentService;
   token?: string;
   json?: boolean;
+  dryRun?: boolean;
   env?: string;
   environment?: string;
 }
@@ -787,6 +794,72 @@ export async function runDeploy(
     throw createSanitizedError(err, sanitizedMsg, knownSecrets);
   }
 
+  // Pre-flight dry-run: return manifest without uploading or mutating remote state
+  if (options?.dryRun) {
+    const elapsedMs = Math.max(1, Math.round(performance.now() - startTime));
+    const routes = parsed.routes ?? [];
+    const summaryFunctions: Array<{ name: string; route?: string }> = [];
+    for (const fnName of Object.keys(parsed.functions)) {
+      const matchedRoutes = routes.filter((r) => r.function === fnName);
+      summaryFunctions.push({
+        name: fnName,
+        route: matchedRoutes.map((r) => r.pattern).filter(Boolean).join(", ") ||
+          undefined,
+      });
+    }
+
+    const summary: DeploySummary = {
+      ok: true,
+      revision: "(dry-run)",
+      project: projectName,
+      elapsedMs,
+      runtimeUrl: "(dry-run)",
+      functions: summaryFunctions,
+    };
+
+    if (isJson) {
+      console.log(JSON.stringify(summary, null, 2));
+    } else {
+      console.log("");
+      console.log(
+        renderCard(
+          "Pre-Flight Release Train Manifest (Dry Run)",
+          [
+            `Project:     ${colors.bold(colors.accent(projectName))}`,
+            `Mode:        ${colors.amber("DRY RUN")} ${
+              colors.dim("(zero remote mutation)")
+            }`,
+            `Functions:   ${colors.bold(String(packagedFunctions.length))}`,
+            `Routes:      ${colors.bold(String(routes.length))}`,
+            `Elapsed:     ${elapsedMs}ms`,
+            "",
+            colors.bold("Packaged Function Artifacts:"),
+            ...packagedFunctions.map(
+              (f) =>
+                `  • ${colors.accent(f.name.padEnd(16))} ${
+                  colors.dim("SHA-256:")
+                } ${colors.emerald(f.artifact.id.slice(0, 23))}... ${
+                  colors.dim(`(${f.artifact.bytes.byteLength} bytes)`)
+                }`,
+            ),
+          ],
+          { borderStyle: "unicode", borderColor: colors.accent, padding: true },
+        ),
+      );
+      console.log("");
+      console.log(
+        renderStatusBar([
+          { label: "Project", value: projectName },
+          { label: "Dry Run", value: "Verified" },
+          { label: "Mutation", value: "None (Dry-Run)" },
+        ]),
+      );
+      console.log("");
+    }
+
+    return summary;
+  }
+
   // ---------------------------------------------------------------------------
   // Step 3: Uploading snapshot bundle to Control Plane (PLAT-1, PLAT-8)
   // ---------------------------------------------------------------------------
@@ -1023,12 +1096,13 @@ export async function deployCommand(
     deploymentService: options?.deploymentService,
     token: options?.token,
     json: options?.json,
+    dryRun: options?.dryRun,
     skipHealthCheck: !options?.json && !options?.deploymentService,
   });
 
   return {
     revisionId: summary.revision,
-    state: summary.ok ? "Deployed" : "Failed",
+    state: summary.ok ? (options?.dryRun ? "DryRun" : "Deployed") : "Failed",
   };
 }
 
@@ -1044,7 +1118,7 @@ Options:
   -p, --project <name>     Override project name declared in railfog.toml (alias: --name)
   -e, --env <name>         Target deployment environment (default: production)
   --token <key>            Directly provide API key for deployment
+  --dry-run                Validate and package artifacts without uploading to Control Plane
   --json                   Output machine-readable JSON deployment summary
   -h, --help               Show help for deploy command`);
 }
-

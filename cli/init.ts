@@ -640,5 +640,3 @@ export const STARTER_FUNCTION = `export default async function handler(
   return new Response("Hello from RailFog!");
 }
 `;
-
-

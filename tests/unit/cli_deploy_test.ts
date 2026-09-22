@@ -1348,3 +1348,28 @@ capabilities = ["env"]
     }
   },
 );
+
+Deno.test(
+  "Deploy: --dry-run packages and validates manifest without uploading",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-deploy-dryrun-",
+    });
+    try {
+      await createValidProject(tempDir, {
+        appName: "dryrun-test-app",
+        routes: [{ pattern: "/api/*", function: "api" }],
+      });
+
+      const res = await deployCommand({
+        cwd: tempDir,
+        dryRun: true,
+      });
+
+      assertEquals(res.revisionId, "(dry-run)");
+      assertEquals(res.state, "DryRun");
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+    }
+  },
+);

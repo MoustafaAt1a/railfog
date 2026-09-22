@@ -1236,5 +1236,3 @@ export async function checkCommand(
   const dir = targetPath ?? options?.cwd ?? Deno.cwd();
   return await runCheck(dir, options);
 }
-
-

@@ -12,7 +12,7 @@ import { join, resolve } from "@std/path";
 import { parse } from "@std/toml";
 import { LocalEncryptedSecretStore } from "../packages/policy/secret-store.ts";
 import { SecretRedactor } from "../packages/logging/secret-redactor.ts";
-import { renderModernTable, renderStatusBar } from "./ui.ts";
+import { colors, renderModernTable, renderStatusBar } from "./ui.ts";
 
 // spec: tasks/milestone-0.5-developer-experience/T-0506-cli-secrets-management.md — Valid secret identifier regex
 export const VALID_SECRET_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -22,7 +22,7 @@ export interface SecretCliOptions {
   projectDir?: string;
   projectId?: string;
   project?: string;
-  subcommand: "set" | "list" | "delete";
+  subcommand: "set" | "list" | "delete" | "audit";
   key?: string;
   value?: string;
   filePath?: string;
@@ -109,13 +109,14 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
     if (
       options.subcommand !== "set" &&
       options.subcommand !== "list" &&
-      options.subcommand !== "delete"
+      options.subcommand !== "delete" &&
+      options.subcommand !== "audit"
     ) {
       // spec: docs/contracts/platform.contract.md#PLAT-12 — VALIDATION_FAILED on invalid subcommand
       safeError(
         `Error: VALIDATION_FAILED: Unknown subcommand '${
           String(options.subcommand)
-        }'. Available: set, list, delete`,
+        }'. Available: set, list, delete, audit`,
       );
       return 1;
     }
@@ -170,7 +171,8 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
     const projectDir = resolve(options.projectDir ?? Deno.cwd());
     const masterKey = await resolveMasterKey(projectDir);
     const storagePath = join(projectDir, ".railfog", "secrets");
-    const projectId = options.projectId ?? options.project ?? await resolveProjectId(projectDir);
+    const projectId = options.projectId ?? options.project ??
+      await resolveProjectId(projectDir);
     const orgId = "default";
 
     // spec: docs/contracts/platform.contract.md#PLAT-15 — LocalEncryptedSecretStore initialization
@@ -282,6 +284,105 @@ export async function runSecrets(options: SecretCliOptions): Promise<number> {
         );
         return 0;
       }
+
+      case "audit": {
+        const names = await store.listNames(orgId, projectId);
+        const storedKeys = new Set(names);
+
+        const referencedKeys = new Set<string>();
+        const tomlPath = join(projectDir, "railfog.toml");
+        try {
+          const raw = await Deno.readTextFile(tomlPath);
+          const parsed = parse(raw) as Record<string, unknown>;
+          const fns = parsed.functions as
+            | Record<
+              string,
+              { permissions?: { secrets?: string[]; env?: string[] } }
+            >
+            | undefined;
+          if (fns && typeof fns === "object") {
+            for (const fn of Object.values(fns)) {
+              if (Array.isArray(fn?.permissions?.secrets)) {
+                for (const s of fn.permissions.secrets) referencedKeys.add(s);
+              }
+              if (Array.isArray(fn?.permissions?.env)) {
+                for (const e of fn.permissions.env) referencedKeys.add(e);
+              }
+            }
+          }
+        } catch {
+          // toml optional
+        }
+
+        const allKeys = new Set([...storedKeys.keys(), ...referencedKeys]);
+        if (allKeys.size === 0) {
+          console.log("No secrets found or referenced in project.");
+          return 0;
+        }
+
+        const headers = ["Secret Key", "Status", "Hygiene & Binding"];
+        const rows: string[][] = [];
+        let activeCount = 0;
+        let orphanCount = 0;
+        let missingCount = 0;
+
+        for (const key of Array.from(allKeys).sort()) {
+          const isStored = storedKeys.has(key);
+          const isReferenced = referencedKeys.has(key);
+
+          if (isStored && isReferenced) {
+            activeCount++;
+            rows.push([
+              colors.bold(key),
+              colors.emerald("[ACTIVE]"),
+              colors.slate(
+                "Encrypted in store & bound to function capabilities",
+              ),
+            ]);
+          } else if (isStored && !isReferenced) {
+            orphanCount++;
+            rows.push([
+              colors.bold(key),
+              colors.amber("[ORPHAN]"),
+              colors.dim(
+                "Present in store but unused by any declared capability",
+              ),
+            ]);
+          } else {
+            missingCount++;
+            rows.push([
+              colors.bold(key),
+              colors.coral("[MISSING]"),
+              colors.dim(
+                "Referenced in capabilities but absent from encrypted store",
+              ),
+            ]);
+          }
+        }
+
+        console.log(
+          renderModernTable(headers, rows, {
+            title: `Secret Store Audit: ${projectId}`,
+            alignments: ["left", "center", "left"],
+            style: "unicode",
+            borderColor: colors.brand,
+          }),
+        );
+        console.log();
+        console.log(
+          renderStatusBar([
+            { label: "Project", value: projectId },
+            { label: "Active", value: String(activeCount) },
+            { label: "Orphan", value: String(orphanCount) },
+            { label: "Missing", value: String(missingCount) },
+            {
+              label: "Health",
+              value: missingCount === 0 ? "Nominal" : "Action Required",
+            },
+          ]),
+        );
+        return 0;
+      }
     }
   } catch (err) {
     // spec: docs/contracts/platform.contract.md#PLAT-15 — Zero plaintext secret leakage in errors or stack traces
@@ -310,6 +411,7 @@ Subcommands:
   set <KEY> [VALUE] [--file <path>]   Set or update an encrypted secret
   list                                List stored secret keys
   delete <KEY>                        Delete an encrypted secret
+  audit                               Audit secrets against declared config capabilities
 
 Options:
   --file <path>                       Read secret value from file (for multiline secrets)
@@ -317,4 +419,3 @@ Options:
   -p, --project <name>                Project name override (alias: -n, --name)
   -h, --help                          Show help for secrets command`);
 }
-
