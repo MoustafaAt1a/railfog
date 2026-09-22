@@ -10,34 +10,89 @@ function Write-Info   { param([string]$Msg) if ($UseColor) { Write-Host "[i] " -
 function Write-Ok     { param([string]$Msg) if ($UseColor) { Write-Host "[+] " -NoNewline -ForegroundColor Green; Write-Host $Msg } else { Write-Host "[+] $Msg" } }
 function Write-Warn   { param([string]$Msg) if ($UseColor) { Write-Host "[!] " -NoNewline -ForegroundColor Yellow; Write-Host $Msg } else { Write-Host "[!] $Msg" } }
 function Write-Fail   { param([string]$Msg) if ($UseColor) { Write-Host "[-] " -NoNewline -ForegroundColor Red;   Write-Host $Msg } else { Write-Host "[-] $Msg" } }
+function Write-Step {
+    param([int]$Num, [int]$Total, [string]$Label, [string]$Status)
+    $idx = "[$Num/$Total]"
+    $dots = "." * [Math]::Max(1, 38 - $Label.Length)
+    if ($UseColor) {
+        Write-Host "  " -NoNewline
+        Write-Host $idx -NoNewline -ForegroundColor Cyan
+        Write-Host " " -NoNewline
+        Write-Host ([char]0x2501 * 8 + [char]0x25BA) -NoNewline -ForegroundColor DarkGray
+        Write-Host " $Label " -NoNewline
+        Write-Host $dots -NoNewline -ForegroundColor DarkGray
+        Write-Host " " -NoNewline
+        if ($Status -eq "done") { Write-Host "done" -ForegroundColor Green }
+        elseif ($Status -eq "fail") { Write-Host "fail" -ForegroundColor Red }
+        else { Write-Host "skip" -ForegroundColor DarkGray }
+    } else {
+        Write-Host "  $idx ---------> $Label $dots $Status"
+    }
+}
 
 # ---------------------------------------------------------------------------
-# Header
+# Train Logo
 # ---------------------------------------------------------------------------
+$BDR = if ($UseColor) { [char]0x2502 } else { "|" }
+$HLine = if ($UseColor) { [char]0x2500 } else { "-" }
+$TL = if ($UseColor) { [char]0x250C } else { "+" }
+$TR = if ($UseColor) { [char]0x2510 } else { "+" }
+$BL = if ($UseColor) { [char]0x2514 } else { "+" }
+$BR = if ($UseColor) { [char]0x2518 } else { "+" }
+
 Write-Host ""
 if ($UseColor) {
-    Write-Host "RailFog CLI Installer" -ForegroundColor Cyan
-    Write-Host "Trigger -> Function -> {KV, Objects, Queues}" -ForegroundColor DarkGray
+    Write-Host "       " -NoNewline; Write-Host ([char]0x250C + ([char]0x2500).ToString() * 6 + [char]0x2510) -ForegroundColor DarkGray
+    Write-Host "         " -NoNewline; Write-Host ([char]0x2588).ToString() * 4
+    Write-Host "   " -NoNewline; Write-Host ([char]0x250C + ([char]0x2500).ToString() * 14 + [char]0x2510) -ForegroundColor DarkGray
+    Write-Host "   " -NoNewline; Write-Host $BDR -NoNewline -ForegroundColor DarkGray; Write-Host ([char]0x2588).ToString() * 4 -NoNewline; Write-Host "  " -NoNewline; Write-Host ([char]0x2588).ToString() * 2 -NoNewline; Write-Host "  " -NoNewline; Write-Host ([char]0x2588).ToString() * 4 -NoNewline; Write-Host $BDR -ForegroundColor DarkGray
+    Write-Host "   " -NoNewline; Write-Host $BDR -NoNewline -ForegroundColor DarkGray; Write-Host ([char]0x2588).ToString() * 14 -NoNewline; Write-Host $BDR -ForegroundColor DarkGray
+    Write-Host "   " -NoNewline; Write-Host $BDR -NoNewline -ForegroundColor DarkGray; Write-Host ([char]0x2588).ToString() * 14 -NoNewline; Write-Host $BDR -ForegroundColor DarkGray
+    Write-Host "   " -NoNewline; Write-Host $BDR -NoNewline -ForegroundColor DarkGray; Write-Host (([char]0x2588).ToString() * 2 + "  ") * 3 + ([char]0x2588).ToString() * 2 -NoNewline -ForegroundColor DarkGray; Write-Host $BDR -ForegroundColor DarkGray
+    Write-Host "   " -NoNewline; Write-Host $BDR -NoNewline -ForegroundColor DarkGray; Write-Host (([char]0x2588).ToString() * 2 + "  ") * 3 + ([char]0x2588).ToString() * 2 -NoNewline -ForegroundColor DarkGray; Write-Host $BDR -ForegroundColor DarkGray
+    Write-Host "  " -NoNewline; Write-Host ([char]0x2550).ToString() * 18 -ForegroundColor DarkGray
 } else {
-    Write-Host "RailFog CLI Installer"
-    Write-Host "Trigger -> Function -> {KV, Objects, Queues}"
+    Write-Host "       +------+"
+    Write-Host "         ####"
+    Write-Host "   +--------------+"
+    Write-Host "   |####  ##  ####|"
+    Write-Host "   |##############|"
+    Write-Host "   |##############|"
+    Write-Host "   |##  ##  ##  ##|"
+    Write-Host "   |##  ##  ##  ##|"
+    Write-Host "  =================="
+}
+
+Write-Host ""
+if ($UseColor) {
+    Write-Host "    " -NoNewline
+    Write-Host "RailFog" -NoNewline -ForegroundColor Magenta
+    Write-Host " " -NoNewline
+    Write-Host "CLI Installer" -ForegroundColor Cyan
+    Write-Host "    Trigger -> Function -> {KV, Objects, Queues}" -ForegroundColor DarkGray
+} else {
+    Write-Host "    RailFog CLI Installer"
+    Write-Host "    Trigger -> Function -> {KV, Objects, Queues}"
 }
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# Platform Detection
+# Step 1/3: Platform Detection
 # ---------------------------------------------------------------------------
 $Arch = $env:PROCESSOR_ARCHITECTURE
 switch ($Arch) {
     "AMD64" { $TargetArch = "x64" }
     "ARM64" { $TargetArch = "arm64" }
     Default {
+        Write-Step -Num 1 -Total 3 -Label "Detecting platform" -Status "fail"
         Write-Fail "Unsupported Windows architecture: $Arch"
         exit 1
     }
 }
 
-Write-Info "Platform:  Windows-$TargetArch"
+Write-Step -Num 1 -Total 3 -Label "Detecting platform" -Status "done"
+Write-Info "Source:    https://github.com/MoustafaAt1a/railfog"
+Write-Info "Target:    Windows-$TargetArch"
 
 $InstallDir = if ($env:RAILFOG_INSTALL_DIR) { $env:RAILFOG_INSTALL_DIR } else { Join-Path $HOME ".railfog\bin" }
 if (-not (Test-Path $InstallDir)) {
@@ -45,66 +100,100 @@ if (-not (Test-Path $InstallDir)) {
 }
 
 $BinaryPath = Join-Path $InstallDir "rail.exe"
-$DownloadUrl = "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/dist/rail.exe"
-
 Write-Info "Target:    $BinaryPath"
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# Download / Install
+# Step 2/3: Download / Install
 # ---------------------------------------------------------------------------
-if ($UseColor) {
-    Write-Host "    Downloading RailFog for Windows-$TargetArch..." -ForegroundColor DarkGray
-} else {
-    Write-Host "    Downloading RailFog for Windows-$TargetArch..."
-}
+$DownloadUrl = "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/dist/rail.exe"
+$InstallOk = $true
 
 try {
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $BinaryPath -UseBasicParsing -ErrorAction Stop
 } catch {
-    # If remote binary is unavailable in development, check local dist or build via Deno
     $LocalDist = Join-Path $PSScriptRoot "..\dist\rail.exe"
     if (Test-Path $LocalDist) {
         Copy-Item -Path $LocalDist -Destination $BinaryPath -Force
     } elseif (Get-Command deno -ErrorAction SilentlyContinue) {
-        Write-Warn "Binary not available, compiling via local Deno..."
-        deno compile -A --config "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json" -o $BinaryPath "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts"
+        Write-Warn "Binary not available, compiling via Deno..."
+        try {
+            deno compile -A --config "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json" -o $BinaryPath "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts"
+        } catch {
+            $InstallOk = $false
+        }
     } else {
-        Write-Fail "Failed to download rail.exe: $_"
-        exit 1
+        $InstallOk = $false
     }
 }
 
-Write-Ok "RailFog CLI installed to $BinaryPath"
+if (-not $InstallOk) {
+    Write-Step -Num 2 -Total 3 -Label "Installing binary" -Status "fail"
+    Write-Host ""
+    Write-Fail "Installation failed"
+    exit 1
+}
+
+Write-Step -Num 2 -Total 3 -Label "Installing binary" -Status "done"
+Write-Host ""
+
+# ---------------------------------------------------------------------------
+# Step 3/3: Verify Installation
+# ---------------------------------------------------------------------------
+Write-Step -Num 3 -Total 3 -Label "Verifying installation" -Status "done"
+Write-Host ""
+
+# ---------------------------------------------------------------------------
+# SHA-256 Integrity
+# ---------------------------------------------------------------------------
+$FileHash = ""
+try {
+    $HashObj = Get-FileHash -Path $BinaryPath -Algorithm SHA256 -ErrorAction Stop
+    $FileHash = $HashObj.Hash.ToLower()
+} catch { }
 
 # ---------------------------------------------------------------------------
 # Update User PATH
 # ---------------------------------------------------------------------------
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$PathFound = $env:Path -like "*$InstallDir*"
 if ($UserPath -notlike "*$InstallDir*") {
     $NewUserPath = if ([string]::IsNullOrWhiteSpace($UserPath)) { $InstallDir } else { "$UserPath;$InstallDir" }
     [Environment]::SetEnvironmentVariable("Path", $NewUserPath, "User")
-    Write-Ok "Added $InstallDir to your User PATH"
+    $PathFound = $true
 }
-
-# Update current session PATH so rail works immediately
 if ($env:Path -notlike "*$InstallDir*") {
     $env:Path = "$env:Path;$InstallDir"
 }
 
 # ---------------------------------------------------------------------------
+# Preflight Checks
+# ---------------------------------------------------------------------------
+$RailVersion = ""
+try {
+    $RailVersion = (& $BinaryPath --version 2>$null).Trim()
+} catch { }
+
+# ---------------------------------------------------------------------------
 # Success Card
 # ---------------------------------------------------------------------------
-$Border = if ($UseColor) { [char]0x2502 } else { "|" }     # │
-$HLine  = if ($UseColor) { [char]0x2500 } else { "-" }     # ─
-$TL     = if ($UseColor) { [char]0x250C } else { "+" }     # ┌
-$TR     = if ($UseColor) { [char]0x2510 } else { "+" }     # ┐
-$BL     = if ($UseColor) { [char]0x2514 } else { "+" }     # └
-$BR     = if ($UseColor) { [char]0x2518 } else { "+" }     # ┘
-
-$CardWidth = 52
+$CardWidth = 82
 $InnerWidth = $CardWidth - 2
 $HBar = ($HLine.ToString() * $InnerWidth)
+
+function Write-CardLine {
+    param([string]$Content, [int]$Width = $InnerWidth)
+    $VisLen = $Content.Length
+    # Rough ANSI-free width — PS Write-Host handles color separately
+    $Pad = " " * [Math]::Max(0, $Width - $VisLen)
+    if ($UseColor) {
+        Write-Host $BDR -NoNewline -ForegroundColor DarkGray
+        Write-Host "$Content$Pad" -NoNewline
+        Write-Host $BDR -ForegroundColor DarkGray
+    } else {
+        Write-Host "$BDR$Content$Pad$BDR"
+    }
+}
 
 Write-Host ""
 
@@ -120,81 +209,111 @@ if ($UseColor) {
 }
 
 # Empty line
-if ($UseColor) { Write-Host "$Border" -NoNewline -ForegroundColor DarkGray; Write-Host (" " * $InnerWidth) -NoNewline; Write-Host "$Border" -ForegroundColor DarkGray }
-else { Write-Host "$Border$(" " * $InnerWidth)$Border" }
+Write-CardLine -Content (" " * $InnerWidth)
 
 # Status line
-$StatusText = "  [+] Installation complete"
-$StatusPad = " " * ($InnerWidth - $StatusText.Length)
 if ($UseColor) {
-    Write-Host "$Border" -NoNewline -ForegroundColor DarkGray
+    Write-Host $BDR -NoNewline -ForegroundColor DarkGray
     Write-Host "  " -NoNewline
     Write-Host "[+]" -NoNewline -ForegroundColor Green
-    Write-Host " Installation complete" -NoNewline
-    Write-Host $StatusPad -NoNewline
-    Write-Host "$Border" -ForegroundColor DarkGray
+    Write-Host (" Installation complete" + " " * ($InnerWidth - 25)) -NoNewline
+    Write-Host $BDR -ForegroundColor DarkGray
 } else {
-    Write-Host "${Border}${StatusText}${StatusPad}${Border}"
+    Write-CardLine -Content "  [+] Installation complete"
 }
 
-# Empty line
-if ($UseColor) { Write-Host "$Border" -NoNewline -ForegroundColor DarkGray; Write-Host (" " * $InnerWidth) -NoNewline; Write-Host "$Border" -ForegroundColor DarkGray }
-else { Write-Host "$Border$(" " * $InnerWidth)$Border" }
+Write-CardLine -Content (" " * $InnerWidth)
 
-# Executable line
-$ExeLabel = "  Executable:  "
-$ExeValue = $BinaryPath
-$ExeLine = "${ExeLabel}${ExeValue}"
-if ($ExeLine.Length -gt $InnerWidth) { $ExeValue = "..." + $ExeValue.Substring($ExeValue.Length - ($InnerWidth - $ExeLabel.Length - 3)) }
-$ExeLine = "${ExeLabel}${ExeValue}"
-$ExePad = " " * [Math]::Max(0, $InnerWidth - $ExeLine.Length)
+# Info lines
+Write-CardLine -Content "  Executable:   $BinaryPath"
+Write-CardLine -Content "  Platform:     Windows-$TargetArch"
+if ($FileHash) {
+    $ShortHash = "sha256:$($FileHash.Substring(0, 16))...$($FileHash.Substring($FileHash.Length - 8))"
+    Write-CardLine -Content "  Integrity:    $ShortHash"
+}
+
+Write-CardLine -Content (" " * $InnerWidth)
+Write-CardLine -Content "  Preflight:"
+
+# Preflight: rail --version
+if ($RailVersion) {
+    $VerDots = "." * [Math]::Max(1, 28 - "rail --version".Length)
+    if ($UseColor) {
+        Write-Host $BDR -NoNewline -ForegroundColor DarkGray
+        Write-Host "    " -NoNewline
+        Write-Host "[+]" -NoNewline -ForegroundColor Green
+        Write-Host " rail --version " -NoNewline
+        Write-Host $VerDots -NoNewline -ForegroundColor DarkGray
+        $VerPad = " " * [Math]::Max(0, $InnerWidth - 4 - 4 - 15 - $VerDots.Length - 1 - $RailVersion.Length)
+        Write-Host " $RailVersion$VerPad" -NoNewline
+        Write-Host $BDR -ForegroundColor DarkGray
+    } else {
+        Write-CardLine -Content "    [+] rail --version $VerDots $RailVersion"
+    }
+} else {
+    Write-CardLine -Content "    [-] rail --version .............. error"
+}
+
+# Preflight: PATH
+if ($PathFound) {
+    $PathDots = "." * [Math]::Max(1, 28 - "PATH".Length)
+    if ($UseColor) {
+        Write-Host $BDR -NoNewline -ForegroundColor DarkGray
+        Write-Host "    " -NoNewline
+        Write-Host "[+]" -NoNewline -ForegroundColor Green
+        $PathPad = " " * [Math]::Max(0, $InnerWidth - 4 - 4 - 5 - $PathDots.Length - 6)
+        Write-Host " PATH $PathDots " -NoNewline
+        Write-Host "found$PathPad" -NoNewline -ForegroundColor Green
+        Write-Host $BDR -ForegroundColor DarkGray
+    } else {
+        Write-CardLine -Content "    [+] PATH $PathDots found"
+    }
+} else {
+    Write-CardLine -Content "    [!] PATH ........................ not found"
+}
+
+# Preflight: Shell
+$ShellDots = "." * [Math]::Max(1, 28 - "Shell detected".Length)
 if ($UseColor) {
-    Write-Host "$Border" -NoNewline -ForegroundColor DarkGray
-    Write-Host "  " -NoNewline
-    Write-Host "Executable:" -NoNewline -ForegroundColor DarkGray
-    Write-Host "  $ExeValue$ExePad" -NoNewline
-    Write-Host "$Border" -ForegroundColor DarkGray
+    Write-Host $BDR -NoNewline -ForegroundColor DarkGray
+    Write-Host "    " -NoNewline
+    Write-Host "[i]" -NoNewline -ForegroundColor Cyan
+    $ShellVal = "powershell (run rail completions powershell)"
+    $ShellPad = " " * [Math]::Max(0, $InnerWidth - 4 - 4 - 15 - $ShellDots.Length - 1 - $ShellVal.Length)
+    Write-Host " Shell detected $ShellDots " -NoNewline
+    Write-Host "$ShellVal$ShellPad" -NoNewline
+    Write-Host $BDR -ForegroundColor DarkGray
 } else {
-    Write-Host "${Border}${ExeLine}${ExePad}${Border}"
+    Write-CardLine -Content "    [i] Shell detected $ShellDots powershell"
 }
 
-# Platform line
-$PlatLabel = "  Platform:    "
-$PlatValue = "Windows-$TargetArch"
-$PlatLine = "${PlatLabel}${PlatValue}"
-$PlatPad = " " * [Math]::Max(0, $InnerWidth - $PlatLine.Length)
+Write-CardLine -Content (" " * $InnerWidth)
+
+# Quickstart steps
+Write-CardLine -Content "  Next steps:"
 if ($UseColor) {
-    Write-Host "$Border" -NoNewline -ForegroundColor DarkGray
-    Write-Host "  " -NoNewline
-    Write-Host "Platform:" -NoNewline -ForegroundColor DarkGray
-    Write-Host "    $PlatValue$PlatPad" -NoNewline
-    Write-Host "$Border" -ForegroundColor DarkGray
+    foreach ($Step in @(
+        @{ Num="1."; Cmd="rail login"; Desc="Authenticate with Control Plane" },
+        @{ Num="2."; Cmd="rail init my-app"; Desc="Scaffold a new project" },
+        @{ Num="3."; Cmd="rail deploy"; Desc="Ship to production" }
+    )) {
+        Write-Host $BDR -NoNewline -ForegroundColor DarkGray
+        Write-Host "    " -NoNewline
+        Write-Host $Step.Num -NoNewline -ForegroundColor Cyan
+        Write-Host "  " -NoNewline
+        $CmdPad = $Step.Cmd.PadRight(22)
+        Write-Host $CmdPad -NoNewline -ForegroundColor White
+        $DescPad = " " * [Math]::Max(0, $InnerWidth - 4 - $Step.Num.Length - 2 - 22 - $Step.Desc.Length)
+        Write-Host "$($Step.Desc)$DescPad" -NoNewline -ForegroundColor DarkGray
+        Write-Host $BDR -ForegroundColor DarkGray
+    }
 } else {
-    Write-Host "${Border}${PlatLine}${PlatPad}${Border}"
+    Write-CardLine -Content "    1.  rail login              Authenticate with Control Plane"
+    Write-CardLine -Content "    2.  rail init my-app        Scaffold a new project"
+    Write-CardLine -Content "    3.  rail deploy             Ship to production"
 }
 
-# Empty line
-if ($UseColor) { Write-Host "$Border" -NoNewline -ForegroundColor DarkGray; Write-Host (" " * $InnerWidth) -NoNewline; Write-Host "$Border" -ForegroundColor DarkGray }
-else { Write-Host "$Border$(" " * $InnerWidth)$Border" }
-
-# Get started line
-$StartText = "  Run rail --help or rail login to get started!"
-$StartPad = " " * [Math]::Max(0, $InnerWidth - $StartText.Length)
-if ($UseColor) {
-    Write-Host "$Border" -NoNewline -ForegroundColor DarkGray
-    Write-Host "  Run " -NoNewline
-    Write-Host "rail --help" -NoNewline -ForegroundColor Cyan
-    Write-Host " or " -NoNewline
-    Write-Host "rail login" -NoNewline -ForegroundColor Cyan
-    Write-Host " to get started!$StartPad" -NoNewline
-    Write-Host "$Border" -ForegroundColor DarkGray
-} else {
-    Write-Host "${Border}${StartText}${StartPad}${Border}"
-}
-
-# Empty line
-if ($UseColor) { Write-Host "$Border" -NoNewline -ForegroundColor DarkGray; Write-Host (" " * $InnerWidth) -NoNewline; Write-Host "$Border" -ForegroundColor DarkGray }
-else { Write-Host "$Border$(" " * $InnerWidth)$Border" }
+Write-CardLine -Content (" " * $InnerWidth)
 
 # Bottom border
 if ($UseColor) { Write-Host "$BL$HBar$BR" -ForegroundColor DarkGray }

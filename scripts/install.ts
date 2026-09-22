@@ -413,142 +413,347 @@ export async function runInstaller(options: InstallerOptions): Promise<{
   }
 }
 
-/**
- * Prints styled help message matching cli/ui.ts JetBrains Darcula design system.
- */
-function printHelp(): void {
-  const noColor = Boolean(
-    Deno.env.get("NO_COLOR") || Deno.env.get("CI"),
-  );
-  const bold = (t: string) => noColor ? t : `\x1b[1m${t}\x1b[22m`;
-  const dim = (t: string) => noColor ? t : `\x1b[2m${t}\x1b[22m`;
-  const cyan = (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`;
-  const gray = (t: string) => noColor ? t : `\x1b[90m${t}\x1b[39m`;
-  const bdr = (t: string) => noColor ? t : `\x1b[38;2;85;85;85m${t}\x1b[39m`;
+// ============================================================================
+// Display Helpers — JetBrains Darcula Design System
+// ============================================================================
 
-  console.log("");
-  console.log(bold(cyan("RailFog CLI Installer")));
-  console.log(dim("Trigger -> Function -> {KV, Objects, Queues}"));
-  console.log("");
-  console.log(`${bold("Usage:")}`);
-  console.log(`  deno run -A scripts/install.ts ${dim("[options]")}`);
-  console.log(`  deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts ${dim("[options]")}`);
-  console.log("");
-  console.log(`${bold("Options:")}`);
-  console.log(`  ${bold("-r")}, ${bold("--root")} ${dim("<dir>")}      Installation root directory`);
-  console.log(`                        ${gray("(default: $DENO_INSTALL_ROOT, $RAILFOG_INSTALL_DIR, or ~/.deno)")}`);
-  console.log(`  ${bold("-c")}, ${bold("--compile")}         Compile standalone executable instead of Deno script shim`);
-  console.log(`  ${bold("-f")}, ${bold("--force")}           Force overwrite existing installation`);
-  console.log(`  ${bold("-l")}, ${bold("--local")}           Install from local repository instead of GitHub`);
-  console.log(`      ${bold("--ref")} ${dim("<ref>")}       Git ref/tag/branch to install ${gray("(default: main)")}`);
-  console.log(`      ${bold("--commit")} ${dim("<sha>")}    Exact git commit SHA to install ${gray("(bypasses CDN caches)")}`);
-  console.log(`      ${bold("--repo")} ${dim("<repo>")}     GitHub repository ${gray("(default: MoustafaAt1a/railfog)")}`);
-  console.log(`  ${bold("-h")}, ${bold("--help")}            Show this help information`);
-  console.log("");
-  console.log(bdr("─".repeat(60)));
-  console.log(`  ${cyan("[i]")} Run ${bold("rail --help")} after installation for CLI commands.`);
-  console.log(bdr("─".repeat(60)));
-  console.log("");
+const ANSI_STRIP =
+  // deno-lint-ignore no-control-regex
+  /\x1b\[[0-9;?]*[a-zA-Z]/g;
+
+function createStyles() {
+  const noColor = Boolean(Deno.env.get("NO_COLOR") || Deno.env.get("CI"));
+  return {
+    noColor,
+    bold: (t: string) => noColor ? t : `\x1b[1m${t}\x1b[22m`,
+    dim: (t: string) => noColor ? t : `\x1b[2m${t}\x1b[22m`,
+    green: (t: string) => noColor ? t : `\x1b[32m${t}\x1b[39m`,
+    red: (t: string) => noColor ? t : `\x1b[31m${t}\x1b[39m`,
+    cyan: (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`,
+    yellow: (t: string) => noColor ? t : `\x1b[33m${t}\x1b[39m`,
+    gray: (t: string) => noColor ? t : `\x1b[90m${t}\x1b[39m`,
+    amber: (t: string) =>
+      noColor ? t : `\x1b[38;2;229;168;75m${t}\x1b[39m`,
+    brand: (t: string) =>
+      noColor ? t : `\x1b[38;2;152;118;170m${t}\x1b[39m`,
+    emerald: (t: string) =>
+      noColor ? t : `\x1b[38;2;98;151;85m${t}\x1b[39m`,
+    bdr: (t: string) =>
+      noColor ? t : `\x1b[38;2;85;85;85m${t}\x1b[39m`,
+    ok: (msg: string) =>
+      noColor ? `[+] ${msg}` : `\x1b[32m[+]\x1b[39m ${msg}`,
+    fail: (msg: string) =>
+      noColor ? `[-] ${msg}` : `\x1b[31m[-]\x1b[39m ${msg}`,
+    info: (msg: string) =>
+      noColor ? `[i] ${msg}` : `\x1b[36m[i]\x1b[39m ${msg}`,
+    warn: (msg: string) =>
+      noColor
+        ? `[!] ${msg}`
+        : `\x1b[38;2;229;168;75m[!]\x1b[39m ${msg}`,
+  };
+}
+
+function visLen(text: string): number {
+  return text.replace(ANSI_STRIP, "").length;
 }
 
 /**
- * Prints styled completion card matching cli/ui.ts JetBrains Darcula design.
- * Uses Unicode box-drawing, [+]/[!] indicators, and NO_COLOR compliance.
+ * Renders the RailFog pixel-art train locomotive (inline, no imports).
+ * Matches cli/ui.ts renderTrainLogo output exactly.
  */
-function printSuccessBox(binaryPath: string, binDir: string): void {
-  const noColor = Boolean(
-    Deno.env.get("NO_COLOR") || Deno.env.get("CI"),
-  );
-  const bold = (t: string) => noColor ? t : `\x1b[1m${t}\x1b[22m`;
-  const dim = (t: string) => noColor ? t : `\x1b[2m${t}\x1b[22m`;
-  const green = (t: string) => noColor ? t : `\x1b[32m${t}\x1b[39m`;
-  const cyan = (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`;
-  const amber = (t: string) =>
-    noColor ? t : `\x1b[38;2;229;168;75m${t}\x1b[39m`;
-  const bdr = (t: string) =>
-    noColor ? t : `\x1b[38;2;85;85;85m${t}\x1b[39m`;
-
-  const currentPath = Deno.env.get("PATH") ?? "";
-  const isWindows = Deno.build.os === "windows";
-  const inPath = isWindows
-    ? currentPath.toLowerCase().includes(binDir.toLowerCase())
-    : currentPath.split(":").includes(binDir);
-
-  // Build content lines
-  const contentLines: string[] = [
-    `${green("[+]")} Installation complete`,
-    "",
-    `${dim("Executable:")}  ${binaryPath}`,
-  ];
-
-  if (!inPath) {
-    contentLines.push("");
-    contentLines.push(`${amber("[!]")} ${binDir} is not in your PATH.`);
-    if (isWindows) {
-      contentLines.push(
-        `    Add it to your User PATH using PowerShell:`,
-      );
-      contentLines.push(
-        `    ${bold(`[Environment]::SetEnvironmentVariable("Path", $env:Path + ";${binDir}", "User")`)}`,
-      );
-    } else {
-      contentLines.push(
-        "    Add the following to your shell profile (~/.bashrc or ~/.zshrc):",
-      );
-      contentLines.push(
-        `    ${bold(`export PATH="${binDir}:$PATH"`)}`,
-      );
-    }
+function renderTrainLogo(s: ReturnType<typeof createStyles>): string[] {
+  if (s.noColor) {
+    return [
+      "       ┌──────┐",
+      "         ████",
+      "   ┌──────────────┐",
+      "   │████  ██  ████│",
+      "   │██████████████│",
+      "   │██████████████│",
+      "   │██  ██  ██  ██│",
+      "   │██  ██  ██  ██│",
+      "  ══════════════════",
+    ];
   }
+  const g = s.gray;
+  const w = (t: string) => s.bold(t);
+  return [
+    `       ${g("┌──────┐")}`,
+    `         ${w("████")}`,
+    `   ${g("┌──────────────┐")}`,
+    `   ${g("│")}${"████"}  ${w("██")}  ${"████"}${g("│")}`,
+    `   ${g("│")}${"██████████████"}${g("│")}`,
+    `   ${g("│")}${"██████████████"}${g("│")}`,
+    `   ${g("│")}${s.gray("██  ██  ██  ██")}${g("│")}`,
+    `   ${g("│")}${s.gray("██  ██  ██  ██")}${g("│")}`,
+    `  ${s.gray("══════════════════")}`,
+  ];
+}
 
-  contentLines.push("");
-  contentLines.push(
-    `Run ${bold("rail --help")} or ${bold("rail login")} to get started!`,
-  );
+/**
+ * Renders a mini railway progress track for a single step.
+ *
+ *   [1/3] ━━━━━━━━━━► Detecting platform ............... done
+ */
+function renderStepProgress(
+  step: number,
+  total: number,
+  label: string,
+  status: "ok" | "fail" | "skip",
+  s: ReturnType<typeof createStyles>,
+): string {
+  const idx = `[${step}/${total}]`;
+  const dots = ".".repeat(Math.max(1, 38 - label.length));
+  const result = status === "ok"
+    ? s.green("done")
+    : status === "fail"
+    ? s.red("fail")
+    : s.gray("skip");
+  return `  ${s.cyan(idx)} ${s.dim("━━━━━━━━►")} ${label} ${s.dim(dots)} ${result}`;
+}
 
-  // Measure max visible width
+/**
+ * Renders a bordered card with title in renderCard style.
+ */
+function renderInstallerCard(
+  title: string,
+  lines: string[],
+  s: ReturnType<typeof createStyles>,
+): string {
   let maxLen = 40;
-  for (const line of contentLines) {
-    const stripped = line.replace(
-      // deno-lint-ignore no-control-regex
-      /\x1b\[[0-9;?]*[a-zA-Z]/g,
-      "",
-    );
-    if (stripped.length > maxLen) {
-      maxLen = stripped.length;
-    }
+  for (const l of lines) {
+    const w = visLen(l);
+    if (w > maxLen) maxLen = w;
   }
   const innerWidth = maxLen + 4;
-  const hBar = "─".repeat(innerWidth);
-
-  // Card title
-  const titleText = " RailFog CLI ";
+  const titleText = ` ${title} `;
   const titleDashes = "─".repeat(
     Math.max(0, innerWidth - titleText.length - 3),
   );
 
-  console.log("");
-  console.log(
-    bdr("┌──") + bold(titleText) + bdr(titleDashes + "┐"),
-  );
-  console.log(bdr("│") + " ".repeat(innerWidth) + bdr("│"));
+  const out: string[] = [];
+  out.push(s.bdr("┌──") + s.bold(titleText) + s.bdr(titleDashes + "┐"));
+  out.push(s.bdr("│") + " ".repeat(innerWidth) + s.bdr("│"));
 
-  for (const line of contentLines) {
-    const stripped = line.replace(
-      // deno-lint-ignore no-control-regex
-      /\x1b\[[0-9;?]*[a-zA-Z]/g,
-      "",
-    );
-    const padRight = " ".repeat(
-      Math.max(0, innerWidth - stripped.length - 2),
-    );
-    console.log(bdr("│") + "  " + line + padRight + bdr("│"));
+  for (const line of lines) {
+    const pad = " ".repeat(Math.max(0, innerWidth - visLen(line) - 2));
+    out.push(s.bdr("│") + "  " + line + pad + s.bdr("│"));
   }
 
-  console.log(bdr("│") + " ".repeat(innerWidth) + bdr("│"));
-  console.log(bdr("└" + hBar + "┘"));
+  out.push(s.bdr("│") + " ".repeat(innerWidth) + s.bdr("│"));
+  out.push(s.bdr("└" + "─".repeat(innerWidth) + "┘"));
+  return out.join("\n");
+}
+
+/**
+ * Prints styled help message matching cli/ui.ts JetBrains Darcula design system.
+ */
+function printHelp(): void {
+  const s = createStyles();
+
+  const logo = renderTrainLogo(s);
+  console.log("");
+  for (const l of logo) console.log("  " + l);
+  console.log("");
+  console.log(`  ${s.bold(s.brand("RailFog"))} ${s.bold(s.cyan("CLI Installer"))}`);
+  console.log(`  ${s.dim("Trigger -> Function -> {KV, Objects, Queues}")}`);
+  console.log("");
+  console.log(`  ${s.bold("Usage:")}`);
+  console.log(`    deno run -A scripts/install.ts ${s.dim("[options]")}`);
+  console.log(`    deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts ${s.dim("[options]")}`);
+  console.log("");
+  console.log(`  ${s.bold("Options:")}`);
+  console.log(`    ${s.bold("-r")}, ${s.bold("--root")} ${s.dim("<dir>")}      Installation root directory`);
+  console.log(`                          ${s.gray("(default: $DENO_INSTALL_ROOT, $RAILFOG_INSTALL_DIR, or ~/.deno)")}`);
+  console.log(`    ${s.bold("-c")}, ${s.bold("--compile")}         Compile standalone executable instead of Deno script shim`);
+  console.log(`    ${s.bold("-f")}, ${s.bold("--force")}           Force overwrite existing installation`);
+  console.log(`    ${s.bold("-l")}, ${s.bold("--local")}           Install from local repository instead of GitHub`);
+  console.log(`        ${s.bold("--ref")} ${s.dim("<ref>")}       Git ref/tag/branch to install ${s.gray("(default: main)")}`);
+  console.log(`        ${s.bold("--commit")} ${s.dim("<sha>")}    Exact git commit SHA to install ${s.gray("(bypasses CDN caches)")}`);
+  console.log(`        ${s.bold("--repo")} ${s.dim("<repo>")}     GitHub repository ${s.gray("(default: MoustafaAt1a/railfog)")}`);
+  console.log(`        ${s.bold("--uninstall")}        Remove rail binary and metadata`);
+  console.log(`    ${s.bold("-h")}, ${s.bold("--help")}            Show this help information`);
+  console.log("");
+  console.log(`  ${s.bdr("─".repeat(60))}`);
+  console.log(`    ${s.info(`Run ${s.bold("rail --help")} after installation for CLI commands.`)}`);
+  console.log(`  ${s.bdr("─".repeat(60))}`);
   console.log("");
 }
+
+/**
+ * Detects the user's current shell for completion hints.
+ */
+function detectShell(): string | null {
+  const shell = Deno.env.get("SHELL") ?? "";
+  if (shell.includes("zsh")) return "zsh";
+  if (shell.includes("bash")) return "bash";
+  if (shell.includes("fish")) return "fish";
+  if (Deno.build.os === "windows") return "powershell";
+  const psModulePath = Deno.env.get("PSModulePath");
+  if (psModulePath) return "powershell";
+  return null;
+}
+
+/**
+ * Detects existing rail installation and returns previous version if found.
+ */
+async function detectExistingVersion(
+  binDir: string,
+): Promise<string | null> {
+  try {
+    const metaPath = join(binDir, ".rail-version.json");
+    const raw = await Deno.readTextFile(metaPath);
+    const meta = JSON.parse(raw);
+    return meta?.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Computes SHA-256 hex digest of a file for integrity display.
+ */
+async function computeFileHash(path: string): Promise<string | null> {
+  try {
+    const data = await Deno.readFile(path);
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    const bytes = new Uint8Array(hash);
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Runs preflight diagnostic checks against the installed binary.
+ */
+async function runPreflight(
+  paths: ReturnType<typeof resolveInstallPaths>,
+  s: ReturnType<typeof createStyles>,
+): Promise<string[]> {
+  const checks: string[] = [];
+  const dotPad = (label: string, width: number) =>
+    label + " " + s.dim(".".repeat(Math.max(1, width - label.length))) + " ";
+
+  // 1. rail --version
+  try {
+    const cmd = Deno.build.os === "windows" &&
+        paths.fullBinaryPath.endsWith(".cmd")
+      ? new Deno.Command("cmd.exe", {
+        args: ["/c", paths.fullBinaryPath, "--version"],
+        stdout: "piped",
+        stderr: "piped",
+      })
+      : new Deno.Command(paths.fullBinaryPath, {
+        args: ["--version"],
+        stdout: "piped",
+        stderr: "piped",
+      });
+    const proc = await cmd.output();
+    const ver = new TextDecoder().decode(proc.stdout).trim();
+    const verNum = ver.replace(/^rail\s*/i, "");
+    checks.push(
+      `${s.ok("")}${dotPad("rail --version", 28)}${s.bold(verNum)}`,
+    );
+  } catch {
+    checks.push(
+      `${s.fail("")}${dotPad("rail --version", 28)}${s.red("error")}`,
+    );
+  }
+
+  // 2. PATH check
+  const currentPath = Deno.env.get("PATH") ?? "";
+  const inPath = Deno.build.os === "windows"
+    ? currentPath.toLowerCase().includes(paths.binDir.toLowerCase())
+    : currentPath.split(":").includes(paths.binDir);
+  checks.push(
+    inPath
+      ? `${s.ok("")}${dotPad("PATH", 28)}${s.green("found")}`
+      : `${s.warn("")}${dotPad("PATH", 28)}${s.amber("not found")}`,
+  );
+
+  // 3. Deno runtime
+  const denoVer = Deno.version?.deno ?? "unknown";
+  checks.push(
+    `${s.ok("")}${dotPad("Deno runtime", 28)}${denoVer}`,
+  );
+
+  // 4. Shell completions hint
+  const shell = detectShell();
+  checks.push(
+    shell
+      ? `${s.info("")}${dotPad("Shell detected", 28)}${shell} ${s.dim("(run rail completions " + shell + ")")}`
+      : `${s.dim("    ")}${dotPad("Shell detected", 28)}${s.dim("none")}`,
+  );
+
+  return checks;
+}
+
+/**
+ * Handles the --uninstall flag: removes binary and metadata.
+ */
+async function runUninstall(options: InstallerOptions): Promise<void> {
+  const s = createStyles();
+  const paths = resolveInstallPaths(options);
+
+  console.log("");
+  console.log(`  ${s.bold(s.cyan("RailFog CLI Uninstaller"))}`);
+  console.log("");
+
+  let removed = false;
+
+  // Remove binary
+  try {
+    await Deno.remove(paths.fullBinaryPath);
+    console.log(
+      `  ${s.ok(`Removed ${paths.fullBinaryPath}`)}`,
+    );
+    removed = true;
+  } catch {
+    console.log(
+      `  ${s.info(`Binary not found at ${paths.fullBinaryPath}`)}`,
+    );
+  }
+
+  // On Windows also remove the shell script shim
+  if (Deno.build.os === "windows") {
+    const shellPath = join(paths.binDir, "rail");
+    try {
+      await Deno.remove(shellPath);
+      console.log(`  ${s.ok(`Removed ${shellPath}`)}`);
+      removed = true;
+    } catch {
+      // May not exist
+    }
+  }
+
+  // Remove metadata
+  const metaPath = join(paths.binDir, ".rail-version.json");
+  try {
+    await Deno.remove(metaPath);
+    console.log(
+      `  ${s.ok("Removed .rail-version.json")}`,
+    );
+    removed = true;
+  } catch {
+    // May not exist
+  }
+
+  console.log("");
+  if (removed) {
+    console.log(`  ${s.ok(s.bold("RailFog CLI uninstalled cleanly."))}`);
+  } else {
+    console.log(
+      `  ${s.info("No RailFog CLI installation found to remove.")}`,
+    );
+  }
+  console.log("");
+}
+
+// ============================================================================
+// Main CLI Entrypoint
+// ============================================================================
 
 // spec: contracts/platform.contract.md#PLAT-19 — Main CLI entrypoint
 if (import.meta.main) {
@@ -559,39 +764,163 @@ if (import.meta.main) {
     Deno.exit(0);
   }
 
-  const noColor = Boolean(
-    Deno.env.get("NO_COLOR") || Deno.env.get("CI"),
-  );
-  const bold = (t: string) => noColor ? t : `\x1b[1m${t}\x1b[22m`;
-  const dim = (t: string) => noColor ? t : `\x1b[2m${t}\x1b[22m`;
-  const cyan = (t: string) => noColor ? t : `\x1b[36m${t}\x1b[39m`;
-  const red = (t: string) => noColor ? t : `\x1b[31m${t}\x1b[39m`;
+  // Handle --uninstall
+  if (Deno.args.includes("--uninstall")) {
+    await runUninstall(options);
+    Deno.exit(0);
+  }
 
+  const s = createStyles();
   const paths = resolveInstallPaths(options);
 
+  // -------------------------------------------------------------------------
+  // Header with train logo
+  // -------------------------------------------------------------------------
+  const logo = renderTrainLogo(s);
   console.log("");
-  console.log(bold(cyan("RailFog CLI Installer")));
-  console.log(dim("Trigger -> Function -> {KV, Objects, Queues}"));
+  for (const l of logo) console.log("    " + l);
+  console.log("");
+  console.log(`    ${s.bold(s.brand("RailFog"))} ${s.bold(s.cyan("CLI Installer"))}`);
+  console.log(`    ${s.dim("Trigger -> Function -> {KV, Objects, Queues}")}`);
   console.log("");
 
+  // -------------------------------------------------------------------------
+  // Detect existing installation for upgrade diff
+  // -------------------------------------------------------------------------
+  const previousVersion = await detectExistingVersion(paths.binDir);
+
+  // -------------------------------------------------------------------------
+  // Step 1/3: Detect platform
+  // -------------------------------------------------------------------------
+  console.log(
+    renderStepProgress(1, 3, "Detecting platform", "ok", s),
+  );
   if (options.local) {
-    console.log(`${cyan("[i]")} Source:  Local repository`);
+    console.log(`         ${s.info("Source:    Local repository")}`);
   } else {
     console.log(
-      `${cyan("[i]")} Source:  https://github.com/${
+      `         ${s.info(`Source:    https://github.com/${
         options.repo ?? "MoustafaAt1a/railfog"
-      } ${dim(`(ref: ${options.ref ?? "main"})`)}`,
+      } ${s.dim(`(ref: ${options.ref ?? "main"})`)}`)}`,
     );
   }
-  console.log(`${cyan("[i]")} Target:  ${paths.binDir}`);
+  console.log(
+    `         ${s.info(`Target:    ${paths.binDir}`)}`,
+  );
+  console.log(
+    `         ${s.info(`Platform:  ${Deno.build.os}-${Deno.build.arch}`)}`,
+  );
   console.log("");
 
+  // -------------------------------------------------------------------------
+  // Step 2/3: Download and install
+  // -------------------------------------------------------------------------
   const result = await runInstaller(options);
   if (!result.ok) {
-    console.error(`\n${red("[-]")} ${bold("Installation failed:")}`);
+    console.log(
+      renderStepProgress(2, 3, "Installing binary", "fail", s),
+    );
+    console.log("");
+    console.error(`  ${s.fail(s.bold("Installation failed:"))}`);
     console.error(`    ${result.output}`);
     Deno.exit(1);
   }
+  console.log(
+    renderStepProgress(2, 3, "Installing binary", "ok", s),
+  );
+  console.log("");
 
-  printSuccessBox(paths.fullBinaryPath, paths.binDir);
+  // -------------------------------------------------------------------------
+  // Step 3/3: Verify installation
+  // -------------------------------------------------------------------------
+  const preflightResults = await runPreflight(paths, s);
+  console.log(
+    renderStepProgress(3, 3, "Verifying installation", "ok", s),
+  );
+  console.log("");
+
+  // -------------------------------------------------------------------------
+  // SHA-256 integrity
+  // -------------------------------------------------------------------------
+  const hash = await computeFileHash(paths.fullBinaryPath);
+
+  // -------------------------------------------------------------------------
+  // Build success card content
+  // -------------------------------------------------------------------------
+  const isUpgrade = previousVersion && previousVersion !== "0.8.0";
+
+  const cardTitle = isUpgrade
+    ? "RailFog CLI Upgrade"
+    : "RailFog CLI";
+
+  const cardLines: string[] = [];
+
+  // Status line
+  if (isUpgrade) {
+    cardLines.push(`${s.ok(s.bold("Upgrade complete"))}`);
+    cardLines.push("");
+    cardLines.push(
+      `${s.dim("Previous:")}     ${s.gray(previousVersion!)}`,
+    );
+    cardLines.push(
+      `${s.dim("Current:")}      ${s.bold("0.8.0")}`,
+    );
+  } else {
+    cardLines.push(`${s.ok(s.bold("Installation complete"))}`);
+  }
+
+  cardLines.push("");
+  cardLines.push(`${s.dim("Executable:")}   ${paths.fullBinaryPath}`);
+  cardLines.push(
+    `${s.dim("Platform:")}     ${Deno.build.os}-${Deno.build.arch}`,
+  );
+  if (hash) {
+    const shortHash = `sha256:${hash.slice(0, 16)}...${hash.slice(-8)}`;
+    cardLines.push(`${s.dim("Integrity:")}    ${s.gray(shortHash)}`);
+  }
+
+  // Preflight diagnostics
+  cardLines.push("");
+  cardLines.push(s.bold("Preflight:"));
+  for (const check of preflightResults) {
+    cardLines.push(`  ${check}`);
+  }
+
+  // PATH warning
+  const currentPath = Deno.env.get("PATH") ?? "";
+  const inPath = Deno.build.os === "windows"
+    ? currentPath.toLowerCase().includes(paths.binDir.toLowerCase())
+    : currentPath.split(":").includes(paths.binDir);
+
+  if (!inPath) {
+    cardLines.push("");
+    cardLines.push(
+      `${s.warn(`${paths.binDir} is not in your PATH.`)}`,
+    );
+    if (Deno.build.os === "windows") {
+      cardLines.push(
+        `    ${s.bold(`[Environment]::SetEnvironmentVariable("Path", $env:Path + ";${paths.binDir}", "User")`)}`,
+      );
+    } else {
+      cardLines.push(
+        `    ${s.bold(`export PATH="${paths.binDir}:$PATH"`)}`,
+      );
+    }
+  }
+
+  // Quickstart steps
+  cardLines.push("");
+  cardLines.push(s.bold("Next steps:"));
+  cardLines.push(
+    `  ${s.cyan("1.")}  ${s.bold("rail login")}              ${s.dim("Authenticate with Control Plane")}`,
+  );
+  cardLines.push(
+    `  ${s.cyan("2.")}  ${s.bold("rail init my-app")}        ${s.dim("Scaffold a new project")}`,
+  );
+  cardLines.push(
+    `  ${s.cyan("3.")}  ${s.bold("rail deploy")}             ${s.dim("Ship to production")}`,
+  );
+
+  console.log(renderInstallerCard(cardTitle, cardLines, s));
+  console.log("");
 }
