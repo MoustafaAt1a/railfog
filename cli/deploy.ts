@@ -734,14 +734,30 @@ export async function runDeploy(
       }
     }
 
-    // spec: docs/contracts/platform.contract.md#PLAT-15 — Scan source code for hardcoded secrets/credentials
+    // spec: docs/contracts/platform.contract.md#PLAT-15 — Scan source code for
+    // hardcoded secrets: AWS keys, Stripe/RailFog tokens, GitHub PATs, Slack
+    // tokens, private key blocks, and credentialed connection URLs
     const textDecoder = new TextDecoder();
+    const SECRET_PATTERNS: [RegExp, string][] = [
+      [/\bAKIA[0-9A-Z_]{16,}\b/, "AWS access key"],
+      [/\bsk_live_[0-9a-zA-Z]{16,}\b/, "Stripe live key"],
+      [/\brfk_[0-9a-f]{32,}\b/, "RailFog API key"],
+      [/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b/, "GitHub token"],
+      [/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/, "Slack token"],
+      [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "private key block"],
+      [
+        /\b(?:postgres(?:ql)?|mysql|redis|amqp):\/\/[^\s"']*:[^\s"']*@/,
+        "credentialed connection URL",
+      ],
+    ];
     for (const fn of packagedFunctions) {
       const codeText = textDecoder.decode(fn.codeBytes);
-      if (/\bAKIA[0-9A-Z_]{16,}\b/.test(codeText)) {
-        throw new ValidationFailedError(
-          "VALIDATION_FAILED: Hardcoded secret pattern detected in source file (PLAT-15)",
-        );
+      for (const [pattern, label] of SECRET_PATTERNS) {
+        if (pattern.test(codeText)) {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Hardcoded secret detected in source file: ${label} (PLAT-15). Move it to the secret store and read it via ctx.env.`,
+          );
+        }
       }
     }
 
@@ -888,20 +904,73 @@ export async function runDeploy(
 
   try {
     if (options?.deploymentService) {
-      for (const item of packagedFunctions) {
-        const deployRes = await options.deploymentService.deploy(
-          projectName,
-          item.name,
-          item.artifact,
-        );
-        if (deployRes.state === "Failed" || !deployRes.active) {
-          throw new Error(
-            `Deployment rejected for function '${item.name}': state is ${deployRes.state}`,
+      // PLAT-3 atomicity at project scope: capture the currently active
+      // revision per function so a mid-batch failure can compensate by
+      // rolling completed functions back instead of leaving a half-updated
+      // project behind
+      const previousRevisions = new Map<string, string | null>();
+      const canInspectPointers =
+        typeof options.deploymentService.getActiveRevisionId === "function" &&
+        typeof options.deploymentService.rollback === "function";
+      if (canInspectPointers) {
+        for (const item of packagedFunctions) {
+          previousRevisions.set(
+            item.name,
+            options.deploymentService.getActiveRevisionId(
+              projectName,
+              item.name,
+            ),
           );
         }
-        lastRevisionId = deployRes.revisionId;
-        lastState = deployRes.state;
-        functionRevisions[item.name] = deployRes.revisionId;
+      }
+
+      try {
+        for (const item of packagedFunctions) {
+          const deployRes = await options.deploymentService.deploy(
+            projectName,
+            item.name,
+            item.artifact,
+          );
+          if (deployRes.state === "Failed" || !deployRes.active) {
+            throw new Error(
+              `Deployment rejected for function '${item.name}': state is ${deployRes.state}`,
+            );
+          }
+          lastRevisionId = deployRes.revisionId;
+          lastState = deployRes.state;
+          functionRevisions[item.name] = deployRes.revisionId;
+        }
+      } catch (batchErr) {
+        // Compensate: every function already activated in this batch flips
+        // back to its previous revision (or has no prior — leave as-is and
+        // report, since a first deploy of a new function has nothing to roll
+        // back to)
+        const rolledBack: string[] = [];
+        for (
+          const [fnName, revId] of Object.entries(
+            canInspectPointers ? functionRevisions : {},
+          )
+        ) {
+          const previous = previousRevisions.get(fnName) ?? null;
+          if (previous) {
+            try {
+              await options.deploymentService.rollback(
+                projectName,
+                fnName,
+                previous,
+              );
+              rolledBack.push(`${fnName} -> ${previous}`);
+            } catch {
+              rolledBack.push(`${fnName} (rollback failed; prior ${previous})`);
+            }
+          }
+        }
+        if (rolledBack.length > 0) {
+          console.error(
+            `Partial deploy compensated; rolled back: ${rolledBack.join(", ")}`,
+          );
+        }
+        throw batchErr;
       }
     } else {
       for (const item of packagedFunctions) {
@@ -923,6 +992,10 @@ export async function runDeploy(
             auth: fnAuth,
             limits: fnLimits,
             triggers: fnTriggers,
+            // spec: docs/contracts/platform.contract.md#PLAT-6 — declared
+            // permission scopes travel with the deploy so the control plane
+            // can resolve bindings (names only; PLAT-15)
+            permissions: fnCfg?.permissions,
             environment: options?.env ?? options?.environment ??
               (parsed as Record<string, unknown>).environment ?? "production",
             domains: (parsed as Record<string, unknown>).domains ??
@@ -962,6 +1035,16 @@ export async function runDeploy(
         lastRevisionId = json.revisionId;
         lastState = json.state;
         functionRevisions[item.name] = json.revisionId;
+      }
+      if (Object.keys(functionRevisions).length > 0) {
+        // The batch failed after at least one function activated: report the
+        // exact rollback surface instead of leaving the operator guessing
+        console.error(
+          `Partial deploy: already activated ${
+            Object.entries(functionRevisions).map(([f, r]) => `${f}@${r}`)
+              .join(", ")
+          } — roll these back via 'rail rollback' if needed`,
+        );
       }
     }
 
@@ -1097,6 +1180,10 @@ export async function deployCommand(
     token: options?.token,
     json: options?.json,
     dryRun: options?.dryRun,
+    // spec: docs/contracts/platform.contract.md#PLAT-3 — the requested target
+    // environment must reach the pipeline; silently deploying --env staging to
+    // production is exactly the failure the flag exists to prevent
+    environment: options?.env ?? options?.environment,
     skipHealthCheck: !options?.json && !options?.deploymentService,
   });
 

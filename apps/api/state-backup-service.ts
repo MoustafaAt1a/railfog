@@ -2,7 +2,9 @@
  * State Backup and Disaster Recovery Service (T-0411).
  *
  * Implements full resource export and restore according to ADR-0002.
- * Serializes project resources (Functions, revisions, KV entries, Object records, Queues)
+ * Serializes project resources (Functions, revisions, KV entries, Object records).
+ * Queue message bodies are NOT archived in 1.0.0: queues are at-least-once
+ * (queues.contract.md#Q-1), so upstream senders replay after recovery.
  * into a portable StateBackupArchive v1 JSON and restores it to target projects with strict
  * tenant isolation and conflict gating.
  *
@@ -88,11 +90,20 @@ function validateIdentifier(id: unknown, fieldName: string): void {
     trimmed.includes("\\") ||
     trimmed.includes("\0") ||
     trimmed.includes("..") ||
+    trimmed.includes(":") ||
     lower.includes("%2e%2e")
   ) {
     throw new ValidationFailedError(
       `VALIDATION_FAILED: ${fieldName} contains invalid characters or path traversal (PLAT-7, PLAT-12)`,
     );
+  }
+  for (let i = 0; i < trimmed.length; i++) {
+    const code = trimmed.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      throw new ValidationFailedError(
+        `VALIDATION_FAILED: ${fieldName} contains control characters (PLAT-7, PLAT-12)`,
+      );
+    }
   }
 }
 
@@ -304,6 +315,22 @@ class DefaultStateBackupService implements StateBackupService {
 
     // 5. Persist archive to object storage
     // spec: docs/contracts/objects.contract.md#OBJ-1 — Durable storage for backups
+    if (options.backupStorageKey !== undefined) {
+      // spec: docs/contracts/platform.contract.md#PLAT-7/PLAT-12 — custom keys
+      // are supported, but must not escape the object root or inject paths
+      const customKey = options.backupStorageKey;
+      if (
+        customKey.startsWith("/") ||
+        customKey.includes("..") ||
+        customKey.includes("\\") ||
+        customKey.includes("\0") ||
+        customKey.trim() !== customKey
+      ) {
+        throw new ValidationFailedError(
+          "VALIDATION_FAILED: backupStorageKey contains path traversal or invalid characters (PLAT-7, PLAT-12)",
+        );
+      }
+    }
     const storageKey = options.backupStorageKey ??
       `backups/${validatedArchive.backupId}.json`;
     const serialized = serializeBackupArchive(validatedArchive);
@@ -494,6 +521,14 @@ class DefaultStateBackupService implements StateBackupService {
         `${options.targetOrgId}/${options.targetProjectId}/${obj.store}/${obj.key}`;
       if (obj.dataBase64 !== undefined) {
         const decodedBytes = decodeBase64(obj.dataBase64);
+        // spec: docs/contracts/objects.contract.md#OBJ-4 — inline payloads get
+        // the same content-address verification as large objects
+        const inlineHash = encodeHex(await computeSha256(decodedBytes));
+        if (inlineHash !== obj.sha256) {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Inline object '${obj.store}/${obj.key}' integrity verification failed (OBJ-4, PLAT-12)`,
+          );
+        }
         await this.objectProvider.put(
           targetKey,
           decodedBytes.buffer as ArrayBuffer,

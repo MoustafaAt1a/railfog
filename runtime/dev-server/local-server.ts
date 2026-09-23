@@ -433,12 +433,41 @@ export async function startLocalServer(
   };
   updateCachedPermissions(currentConfig);
 
+  // spec: docs/contracts/platform.contract.md#PLAT-15 — per-function secret
+  // allowlists: ctx.env exposes ONLY names declared in permissions.secrets
+  const fnSecrets = new Map<string, Set<string>>();
+  const collectSecrets = (
+    fnName: string,
+    fnConfig: NonNullable<RailfogConfig["functions"]>[string],
+  ): void => {
+    const anyFn = fnConfig as Record<string, unknown>;
+    const names = new Set<string>();
+    const push = (v: unknown) => {
+      if (typeof v === "string" && v.length > 0) names.add(v);
+    };
+    if (Array.isArray(fnConfig.permissions?.secrets)) {
+      for (const s of fnConfig.permissions!.secrets!) push(s);
+    }
+    if (Array.isArray(anyFn.secrets)) {
+      for (const s of anyFn.secrets as unknown[]) push(s);
+    }
+    fnSecrets.set(fnName, names);
+  };
+  for (
+    const [fnName, fnConfig] of Object.entries(currentConfig.functions ?? {})
+  ) {
+    collectSecrets(fnName, fnConfig);
+  }
+
   // Hot reload & module caching state
   // spec: docs/contracts/functions.contract.md#FN-1, #FN-3, #FN-6
   let revCounter = 0;
   const loadedModules = new Map<
     string,
-    { handler: (req: Request, ctx: RailFogContext) => Promise<Response> }
+    {
+      rev: number;
+      handler: (req: Request, ctx: RailFogContext) => Promise<Response>;
+    }
   >();
 
   // spec: docs/contracts/functions.contract.md#FN-8 — Per-request hot path handler
@@ -545,21 +574,50 @@ export async function startLocalServer(
     // spec: docs/contracts/functions.contract.md#FN-8 — Load cached permission snapshot
     let resolvedBindings = cachedPermissions.get(matchedRoute.function);
     if (!resolvedBindings) {
-      resolvedBindings = resolvePermissions(
-        {
-          kv: fnConfig.permissions?.kv,
-          objects: fnConfig.permissions?.objects,
-          queues: fnConfig.permissions?.queues,
-        },
-        orgId,
-        projectId,
-        {
-          kv: kvProvider,
-          objects: objectsProvider,
-          queues: queuesProvider,
-        },
-      );
+      try {
+        resolvedBindings = resolvePermissions(
+          {
+            kv: fnConfig.permissions?.kv,
+            objects: fnConfig.permissions?.objects,
+            queues: fnConfig.permissions?.queues,
+          },
+          orgId,
+          projectId,
+          {
+            kv: kvProvider,
+            objects: objectsProvider,
+            queues: queuesProvider,
+          },
+        );
+      } catch (err) {
+        // spec: contracts/platform.contract.md#PLAT-12 — a bad declaration must
+        // surface as a canonical error response, never an unhandled 500
+        const requestId = generateUlid();
+        finalRequestId = requestId;
+        finalStatus = err instanceof RailFogError
+          ? statusFromErrorCode(err.code)
+          : 400;
+        const railfogErr = err instanceof RailFogError
+          ? err
+          : new ValidationFailedError(
+            `Invalid permission declaration for function '${matchedRoute.function}': ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            requestId,
+          );
+        const res = Response.json(toErrorResponseBody(railfogErr), {
+          status: finalStatus,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": requestId,
+            "request-id": requestId,
+          },
+        });
+        logCompletedRequest();
+        return res;
+      }
       cachedPermissions.set(matchedRoute.function, resolvedBindings);
+      collectSecrets(matchedRoute.function, fnConfig);
     }
 
     // spec: docs/contracts/functions.contract.md#FN-1, #FN-3, #FN-6 — Load function into isolate
@@ -591,7 +649,11 @@ export async function startLocalServer(
       }
     }
 
-    let loadedFn = loadedModules.get(resolvedEntry);
+    // Rev-stamped cache: an entry imported against an older revision (slow
+    // import racing a file change) is discarded instead of overwriting the
+    // fresh one — the loser cannot poison the cache with stale code
+    const cached = loadedModules.get(resolvedEntry);
+    let loadedFn = cached && cached.rev === revCounter ? cached : undefined;
     if (!loadedFn) {
       try {
         try {
@@ -608,8 +670,10 @@ export async function startLocalServer(
             "VALIDATION_FAILED: Function module must export a default handler function",
           );
         }
-        loadedFn = { handler: mod.default };
-        loadedModules.set(resolvedEntry, loadedFn);
+        loadedFn = { rev: revCounter, handler: mod.default };
+        if (!cached || cached.rev <= revCounter) {
+          loadedModules.set(resolvedEntry, loadedFn);
+        }
       } catch (err) {
         const requestId = generateUlid();
         finalRequestId = requestId;
@@ -660,8 +724,16 @@ export async function startLocalServer(
       timeout_ms: fnConfig.timeout_ms ?? fnConfig.timeoutMs,
     };
     const configEnv = currentConfig.env;
+    // spec: docs/contracts/platform.contract.md#PLAT-15, PLAT-6 — env access is
+    // capability-scoped: only names in the function's declared secrets are
+    // addressable, from either the project [env] table or the host environment
+    const allowedSecrets = fnSecrets.get(matchedRoute.function) ??
+      new Set<string>();
     const envBinding: EnvBinding = {
       get(key: string): string | undefined {
+        if (!allowedSecrets.has(key)) {
+          return undefined;
+        }
         if (configEnv && key in configEnv) {
           return String(configEnv[key]);
         }
@@ -823,6 +895,13 @@ export async function startLocalServer(
             );
             routes = normalizeRoutes(currentConfig);
             updateCachedPermissions(currentConfig);
+            for (
+              const [fnName, fnConfig] of Object.entries(
+                currentConfig.functions ?? {},
+              )
+            ) {
+              collectSecrets(fnName, fnConfig);
+            }
             console.log("Reloaded railfog.toml");
           } catch (err) {
             console.error("Failed to reload railfog.toml:", err);

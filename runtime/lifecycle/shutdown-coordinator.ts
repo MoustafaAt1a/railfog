@@ -7,9 +7,8 @@
  * closure on hung targets without deadlocks.
  */
 
-// spec: contracts/platform.contract.md#PLAT-10 — Default drain and force timeouts
+// spec: contracts/platform.contract.md#PLAT-10 — Default drain timeout ceiling
 export const DEFAULT_DRAIN_TIMEOUT_MS = 15_000;
-export const DEFAULT_FORCE_TIMEOUT_MS = 30_000;
 
 /**
  * Drain target contract representing a component (e.g. gateway server, worker supervisor)

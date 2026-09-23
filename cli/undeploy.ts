@@ -78,6 +78,36 @@ export async function undeployCommand(
     );
   }
 
+  // Destructive-action gate: `--force` is the documented skip; interactive
+  // runs must type the project name, and non-interactive runs without --force
+  // are refused rather than silently destroying the project
+  const isInteractive = typeof Deno.stdin.isTerminal === "function" &&
+    Deno.stdin.isTerminal();
+  if (!options.force) {
+    if (!isInteractive) {
+      throw new ValidationFailedError(
+        `VALIDATION_FAILED: undeploy permanently deletes project '${projectName}'. Re-run with --force to confirm.`,
+      );
+    }
+    console.log(
+      colors.red(
+        `This will permanently delete project '${projectName}' and all of its revisions.`,
+      ),
+    );
+    console.log(
+      `Type the project name to confirm (or press Enter to abort): `,
+    );
+    const line = await readStdinLine();
+    const confirmation = line.trim();
+    if (confirmation !== projectName) {
+      console.log("Aborted — project left intact.");
+      return {
+        project: projectName,
+        deleted: false,
+      };
+    }
+  }
+
   let deleted = false;
 
   if (options.deploymentService) {
@@ -148,3 +178,16 @@ export async function undeployCommand(
 }
 
 export const runUndeploy = undeployCommand;
+
+async function readStdinLine(): Promise<string> {
+  const decoder = new TextDecoder();
+  let out = "";
+  const buf = new Uint8Array(1024);
+  while (true) {
+    const n = await Deno.stdin.read(buf);
+    if (n === null) break;
+    out += decoder.decode(buf.subarray(0, n));
+    if (out.includes("\n")) break;
+  }
+  return out;
+}

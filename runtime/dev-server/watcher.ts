@@ -46,6 +46,8 @@ const DEFAULT_DEBOUNCE_MS = 100;
  * before triggering the hot reload callback.
  * Spec-anchor: tasks/milestone-0.5-developer-experience/T-0508-local-dev-server-reload.md AC4
  */
+// Debounce buffer cap: prevents unbounded memory under sustained file churn
+const MAX_PENDING_EVENTS = 500;
 export class ProjectWatcher {
   private readonly options: WatchOptions;
   private readonly debounceMs: number;
@@ -109,6 +111,15 @@ export class ProjectWatcher {
             const kind = normalizeKind(event.kind);
             if (!kind) continue;
             this.pendingEvents.push({ path: rawPath, kind });
+            // spec: PLAT-17 — sustained churn (build caches, storage writes)
+            // must not grow the pending buffer without bound; coalesce by
+            // keeping the newest events once the cap is reached
+            if (this.pendingEvents.length > MAX_PENDING_EVENTS) {
+              this.pendingEvents.splice(
+                0,
+                this.pendingEvents.length - MAX_PENDING_EVENTS,
+              );
+            }
           }
 
           if (this.pendingEvents.length > 0 && !this.stopped) {

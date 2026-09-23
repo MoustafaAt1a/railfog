@@ -35,6 +35,9 @@ import { generateUlid } from "../../packages/core/id/ulid.ts";
 import { matchRoute } from "../../runtime/router/route-matcher.ts";
 import { LocalIsolationProvider } from "../../runtime/sandbox/local-isolation.ts";
 import { MultiTenantRateLimiter } from "../gateway/rate-limiter.ts";
+import { hashApiToken } from "../../packages/auth/token.ts";
+import { isValidUlid } from "../../packages/core/id/ulid.ts";
+import { compileCron } from "../../runtime/lifecycle/cron-matcher.ts";
 
 /**
  * Service identifier returned in health check responses.
@@ -45,10 +48,30 @@ const RUNTIME_SERVICE_NAME = "railfog-runtime";
 /**
  * Default networking and polling configuration.
  * spec: contracts/platform.contract.md#PLAT-8, PLAT-19
+ * The data plane binds loopback by default — external traffic enters through
+ * the gateway (PLAT-1); a directly exposed runtime must be an explicit choice.
  */
 const DEFAULT_RUNTIME_PORT = 8080;
 const DEFAULT_RUNTIME_HOST = "127.0.0.1";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
+
+/**
+ * Maximum artifact code payloads cached in memory before oldest eviction.
+ * Prevents unbounded growth across many revisions (PLAT-13 budget hygiene).
+ */
+const MAX_ARTIFACT_CACHE_ENTRIES = 200;
+
+/**
+ * Maximum concurrent tracked request chains for the FN-7 call-depth guard.
+ * Chains are (request_id -> depth) entries; bounded to prevent memory abuse.
+ * spec: contracts/functions.contract.md#FN-7
+ */
+const MAX_CALL_DEPTH_CHAINS = 10_000;
+
+/**
+ * Default call depth ceiling per functions.contract.md FN-7.
+ */
+const CALL_DEPTH_MAX = 8;
 
 /**
  * Configuration options for starting the runtime server daemon.
@@ -81,7 +104,7 @@ export interface RuntimeServer {
 
 /**
  * Resolves or generates the canonical request identifier.
- * Preserves incoming client ID or generates a fresh 26-char Crockford Base32 ULID.
+ * Preserves incoming client ULID or generates a fresh 26-char Crockford Base32 ULID.
  *
  * spec: contracts/platform.contract.md#PLAT-12 — request_id propagated unchanged
  * spec: contracts/platform.contract.md#PLAT-14 — 128-bit Crockford Base32 ULID
@@ -89,7 +112,7 @@ export interface RuntimeServer {
 function resolveRequestId(req: Request): string {
   const incomingId = req.headers.get("x-request-id") ??
     req.headers.get("request-id");
-  if (incomingId && incomingId.trim().length > 0) {
+  if (incomingId && isValidUlid(incomingId.trim())) {
     return incomingId.trim();
   }
   return generateUlid();
@@ -159,6 +182,32 @@ export async function startRuntimeServer(
   let isClosed = false;
   let timerId: ReturnType<typeof setInterval> | undefined = undefined;
 
+  // spec: contracts/functions.contract.md#FN-7 — server-side call-depth tracking.
+  // Every hop of a chain shares the request_id the runtime injected (PLAT-12),
+  // so depth is derived from the chain map, never from a client-supplied header.
+  const callDepthChains = new Map<string, number>();
+
+  const trackCallDepth = (requestId: string, headerDepth: number): number => {
+    const chainDepth = callDepthChains.get(requestId) ?? headerDepth;
+    if (callDepthChains.size >= MAX_CALL_DEPTH_CHAINS) {
+      callDepthChains.clear();
+    }
+    callDepthChains.set(requestId, chainDepth + 1);
+    return chainDepth;
+  };
+
+  // spec: contracts/objects.contract.md#OBJ-4, PLAT-4 — bounded artifact code cache
+  const cacheArtifactCode = (artifactId: string, code: Uint8Array) => {
+    // Evict oldest insertion when at capacity to bound memory across revisions
+    if (artifactCache.size >= MAX_ARTIFACT_CACHE_ENTRIES) {
+      const oldest = artifactCache.keys().next().value;
+      if (oldest !== undefined) {
+        artifactCache.delete(oldest);
+      }
+    }
+    artifactCache.set(artifactId, code);
+  };
+
   // In-memory PLAT-13 structured log ring buffer
   const MAX_LOG_ENTRIES = 1000;
   const logEntries: Array<{
@@ -180,14 +229,20 @@ export async function startRuntimeServer(
     }
   };
 
-  // Cron schedule tickers
+  // Cron schedule tickers — each function's declared cron expression decides
+  // whether a given minute tick fires (FN-2), not a fixed per-minute interval.
   const cronTimers = new Map<string, ReturnType<typeof setInterval>>();
+  const cronMatchers = new Map<
+    string,
+    ReturnType<typeof compileCron> | null
+  >();
 
   const syncCronSchedules = (snapshot: RoutingSnapshot, pId: string) => {
     for (const [key, timer] of cronTimers.entries()) {
       if (key.startsWith(`${pId}:`)) {
         clearInterval(timer);
         cronTimers.delete(key);
+        cronMatchers.delete(key);
       }
     }
 
@@ -196,10 +251,31 @@ export async function startRuntimeServer(
       const triggers = fnAny.triggers as Record<string, unknown> | undefined;
       const schedule = triggers?.schedule ?? fnAny.schedule;
       if (schedule || fnAny.type === "cron") {
-        const intervalMs = 60000;
         const timerKey = `${pId}:${fnName}`;
+        const scheduleExpr = typeof schedule === "string"
+          ? schedule
+          : "* * * * *";
+        let matcher: ReturnType<typeof compileCron> | null = null;
+        try {
+          matcher = compileCron(scheduleExpr);
+        } catch (cronErr) {
+          // spec: contracts/functions.contract.md#FN-2 — an invalid schedule
+          // must not silently fire on a different schedule; log and skip.
+          console.error(
+            `[Cron] Invalid schedule "${scheduleExpr}" for ${fnName}: ${
+              cronErr instanceof Error ? cronErr.message : String(cronErr)
+            }`,
+          );
+          cronMatchers.set(timerKey, null);
+          continue;
+        }
+        cronMatchers.set(timerKey, matcher);
+
+        const intervalMs = 60000;
         const timer = setInterval(async () => {
           if (isClosed) return;
+          const cron = cronMatchers.get(timerKey);
+          if (!cron || !cron.matches(new Date())) return;
           try {
             let artifactCode = artifactCache.get(fnSnap.artifactId);
             if (
@@ -214,7 +290,7 @@ export async function startRuntimeServer(
                 const artRes = await fetch(artUrl);
                 if (artRes.status === 200) {
                   artifactCode = new Uint8Array(await artRes.arrayBuffer());
-                  artifactCache.set(fnSnap.artifactId, artifactCode);
+                  cacheArtifactCode(fnSnap.artifactId, artifactCode);
                 }
               } catch {
                 // ignore
@@ -226,6 +302,7 @@ export async function startRuntimeServer(
               integrity: fnSnap.artifactId,
               entrypoint: "index.ts",
               code: artifactCode ?? new Uint8Array(),
+              permissions: fnSnap.permissions,
             };
 
             const cronLimits: Limits = {
@@ -308,7 +385,7 @@ export async function startRuntimeServer(
             const artRes = await fetch(artUrl);
             if (artRes.status === 200) {
               artifactCode = new Uint8Array(await artRes.arrayBuffer());
-              artifactCache.set(fnSnap.artifactId, artifactCode);
+              cacheArtifactCode(fnSnap.artifactId, artifactCode);
             }
           } catch {
             // ignore fetch failure during prewarm
@@ -415,7 +492,7 @@ export async function startRuntimeServer(
               const artRes = await fetch(artUrl);
               if (artRes.status === 200) {
                 artifactCode = new Uint8Array(await artRes.arrayBuffer());
-                artifactCache.set(targetFnSnap.artifactId, artifactCode);
+                cacheArtifactCode(targetFnSnap.artifactId, artifactCode);
               }
             } catch {
               // ignore
@@ -427,6 +504,7 @@ export async function startRuntimeServer(
             integrity: targetFnSnap.artifactId,
             entrypoint: "index.ts",
             code: artifactCode ?? new Uint8Array(),
+            permissions: targetFnSnap.permissions,
           };
 
           const workerLimits: Limits = {
@@ -581,9 +659,19 @@ export async function startRuntimeServer(
     }
   };
 
-  // spec: contracts/platform.contract.md#PLAT-8 — Step 2: Initial snapshot fetch from control plane
+  // spec: contracts/platform.contract.md#PLAT-8 — Step 2: Initial snapshot fetch from control plane.
+  // Bounded: a slow or dead control plane must not stall data-plane startup;
+  // the server proceeds fail-static and the background poll recovers later.
   if (options.controlPlaneUrl) {
-    await pollControlPlane();
+    await Promise.race([
+      pollControlPlane(),
+      new Promise<"startup-timeout">((resolve) =>
+        setTimeout(
+          () => resolve("startup-timeout"),
+          DEFAULT_POLL_INTERVAL_MS * 2,
+        )
+      ),
+    ]).catch(() => {});
   }
 
   // spec: contracts/platform.contract.md#PLAT-8 — Step 3: Background snapshot polling (~5s interval)
@@ -595,7 +683,15 @@ export async function startRuntimeServer(
       if (isClosed || isPolling) return;
       isPolling = true;
       try {
-        await pollControlPlane();
+        // Bounded poll: a hung fetch must not wedge isPolling forever (PLAT-8)
+        await Promise.race([
+          pollControlPlane(),
+          new Promise<"poll-timeout">((resolve) =>
+            setTimeout(() => resolve("poll-timeout"), pollInterval * 2)
+          ),
+        ]);
+      } catch {
+        // Fail-static
       } finally {
         isPolling = false;
       }
@@ -608,6 +704,25 @@ export async function startRuntimeServer(
   const handler = async (req: Request): Promise<Response> => {
     // spec: contracts/platform.contract.md#PLAT-12, PLAT-14 — Monotonic ULID request identifier
     const requestId = resolveRequestId(req);
+
+    // spec: contracts/functions.contract.md#FN-7 — call-depth guard on the live path
+    const rawDepth = parseInt(
+      req.headers.get("x-railfog-call-depth") ?? "0",
+      10,
+    );
+    const inboundDepth = Number.isNaN(rawDepth) || rawDepth < 0 ? 0 : rawDepth;
+    const trackedDepth = callDepthChains.get(requestId) ?? inboundDepth;
+    if (trackedDepth >= CALL_DEPTH_MAX) {
+      return createErrorResponse(
+        429,
+        "CALL_DEPTH_EXCEEDED",
+        `Call depth limit exceeded (maximum ${CALL_DEPTH_MAX})`,
+        requestId,
+      );
+    }
+    // Record this hop so subsequent function-to-function calls sharing the
+    // request_id cannot reset the depth via a forged header (FN-7).
+    trackCallDepth(requestId, inboundDepth);
 
     try {
       const url = new URL(req.url);
@@ -633,12 +748,22 @@ export async function startRuntimeServer(
 
       // Direct object download / presigned retrieval
       if (url.pathname.startsWith("/local-fs/")) {
-        const objPath = url.pathname.slice("/local-fs/".length);
+        const objPath = decodeURIComponent(
+          url.pathname.slice("/local-fs/".length),
+        );
+        // spec: contracts/platform.contract.md#PLAT-4 — reject traversal before any filesystem access
+        const objSegments = objPath.split("/");
+        const isSafeObjectPath = objSegments.length > 0 &&
+          objSegments.every((seg) =>
+            seg.length > 0 && seg !== "." && seg !== ".." &&
+            !seg.includes("\\") && !seg.includes("\0") &&
+            !seg.toLowerCase().includes("%2e%2e")
+          );
         const iso = options.isolationProvider as unknown as {
           tempDir?: string;
         };
         const tempDir = iso?.tempDir;
-        if (tempDir) {
+        if (tempDir && isSafeObjectPath) {
           const candidateProjects = [
             req.headers.get("x-railfog-project")?.trim(),
             options.projectId,
@@ -647,10 +772,15 @@ export async function startRuntimeServer(
 
           const org = options.orgId ?? "default-org";
           for (const candProject of candidateProjects) {
-            const filePath =
-              `${tempDir}/objects/${org}/${candProject}/${objPath}`;
+            const tenantRoot = `${tempDir}/objects/${org}/${candProject}`;
+            const filePath = `${tenantRoot}/${objPath}`;
+            // Defense in depth: resolved path must remain inside the tenant root
+            const resolved = await Deno.realPath(filePath).catch(() => null);
+            if (!resolved || !resolved.startsWith(tenantRoot)) {
+              continue;
+            }
             try {
-              const data = await Deno.readFile(filePath);
+              const data = await Deno.readFile(resolved);
               return new Response(data, {
                 status: 200,
                 headers: {
@@ -782,10 +912,12 @@ export async function startRuntimeServer(
           );
         }
 
-        // spec: contracts/platform.contract.md#PLAT-9 — Token Bucket Rate Limiting (Identity Scope)
+        // spec: contracts/platform.contract.md#PLAT-9 — Identity (API token) scope
+        // spec: contracts/platform.contract.md#PLAT-15 — raw tokens never retained in rate-limit buckets
         const authHeader = req.headers.get("authorization");
         if (authHeader) {
-          const idDecision = rateLimiter.check("identity", authHeader);
+          const identityKey = await hashApiToken(authHeader);
+          const idDecision = rateLimiter.check("identity", identityKey);
           if (!idDecision.allowed) {
             return new Response(
               JSON.stringify({
@@ -973,10 +1105,12 @@ export async function startRuntimeServer(
       if (fnSnapshot.auth === "bearer") {
         const authHdr = req.headers.get("authorization");
         if (!authHdr || !authHdr.toLowerCase().startsWith("bearer ")) {
+          // spec: contracts/platform.contract.md#PLAT-12 — PERMISSION_DENIED is the
+          // canonical capability code; 401 signals missing client credentials.
           return new Response(
             JSON.stringify({
               error: {
-                code: "UNAUTHORIZED",
+                code: "PERMISSION_DENIED",
                 message:
                   "Unauthorized: Missing or invalid Bearer authentication token",
                 request_id: requestId,
@@ -1009,7 +1143,7 @@ export async function startRuntimeServer(
           const artRes = await fetch(artUrl);
           if (artRes.status === 200) {
             artifactCode = new Uint8Array(await artRes.arrayBuffer());
-            artifactCache.set(fnSnapshot.artifactId, artifactCode);
+            cacheArtifactCode(fnSnapshot.artifactId, artifactCode);
           }
         } catch {
           // Fallback to empty if fetch fails
@@ -1022,6 +1156,9 @@ export async function startRuntimeServer(
         integrity: fnSnapshot.artifactId,
         entrypoint: "index.ts",
         code: artifactCode ?? new Uint8Array(),
+        // spec: contracts/platform.contract.md#PLAT-6/PLAT-15 — declared scopes
+        // ride the artifact so the isolation layer can scope ctx.env
+        permissions: fnSnapshot.permissions,
       };
 
       // spec: contracts/functions.contract.md#FN-5 — Resource limits
@@ -1043,6 +1180,8 @@ export async function startRuntimeServer(
       invocationHeaders["x-railfog-revision"] = fnSnapshot.revisionId;
       invocationHeaders["x-railfog-org"] = options.orgId ?? "default-org";
       invocationHeaders["x-railfog-trigger"] = "http";
+      // spec: contracts/functions.contract.md#FN-7 — depth incremented by the runtime on each hop
+      invocationHeaders["x-railfog-call-depth"] = String(trackedDepth + 1);
 
       // spec: contracts/functions.contract.md#FN-5 — Request body size limit (10MB default, reject with 413 PAYLOAD_TOO_LARGE)
       const maxRequestBodyBytes = 10 * 1024 * 1024;
@@ -1193,6 +1332,7 @@ export async function startRuntimeServer(
         clearInterval(timer);
       }
       cronTimers.clear();
+      cronMatchers.clear();
     });
   }
 
@@ -1216,6 +1356,7 @@ export async function startRuntimeServer(
         clearInterval(timer);
       }
       cronTimers.clear();
+      cronMatchers.clear();
       try {
         await server.shutdown();
       } catch {
@@ -1237,7 +1378,7 @@ export async function startRuntimeServer(
 // spec: contracts/platform.contract.md#PLAT-1 — Standalone daemon runner
 if (import.meta.main) {
   const port = parseInt(Deno.env.get("PORT") || "8080", 10);
-  const host = Deno.env.get("HOST") || "0.0.0.0";
+  const host = Deno.env.get("HOST") || DEFAULT_RUNTIME_HOST;
   const socketPath = Deno.env.get("SOCKET_PATH") ||
     Deno.env.get("RAILFOG_SOCKET_PATH") || undefined;
   const controlPlaneUrl = Deno.env.get("RAILFOG_CONTROL_URL") || undefined;

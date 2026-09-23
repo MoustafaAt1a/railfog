@@ -898,7 +898,17 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
       }
 
-      await statusCommand(cwd, { json, topology });
+      try {
+        await statusCommand(cwd, { json, topology });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(renderErrorCard({
+          code: "INTERNAL",
+          message,
+          solution: "Re-run with --json for machine-readable output.",
+        }));
+        Deno.exit(1);
+      }
       break;
     }
 
@@ -996,6 +1006,15 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         } else if (arg === "--curl") {
           curl = true;
         } else if (arg === "-m" || arg === "--method") {
+          if (!args[i + 1]) {
+            console.error(
+              renderErrorCard({
+                code: "VALIDATION_FAILED",
+                message: `--method requires a value (e.g. --method POST)`,
+              }),
+            );
+            Deno.exit(1);
+          }
           method = args[i + 1];
           i++;
         } else if (arg.startsWith("--method=")) {
@@ -1062,9 +1081,29 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
         if ((arg === "-p" || arg === "--port") && args[i + 1]) {
           port = parseInt(args[i + 1], 10);
+          if (Number.isNaN(port)) {
+            console.error(
+              renderErrorCard({
+                code: "VALIDATION_FAILED",
+                message: `Invalid port: '${args[i + 1]}' is not a number`,
+              }),
+            );
+            Deno.exit(1);
+          }
           i++;
         } else if (arg.startsWith("--port=")) {
           port = parseInt(arg.slice("--port=".length), 10);
+          if (Number.isNaN(port)) {
+            console.error(
+              renderErrorCard({
+                code: "VALIDATION_FAILED",
+                message: `Invalid port: '${
+                  arg.slice("--port=".length)
+                }' is not a number`,
+              }),
+            );
+            Deno.exit(1);
+          }
         } else if (arg === "--host" && args[i + 1]) {
           host = args[i + 1];
           i++;
@@ -1087,7 +1126,13 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         }
       }
 
-      await runDev({ cwd, port, host, watch });
+      try {
+        await runDev({ cwd, port, host, watch });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(renderErrorCard({ code: "INTERNAL", message }));
+        Deno.exit(1);
+      }
       break;
     }
 
@@ -1703,6 +1748,18 @@ export async function main(args: string[] = Deno.args): Promise<void> {
         } else if (arg.startsWith("--request-id=")) {
           trace = arg.slice("--request-id=".length);
         }
+      }
+
+      // spec: contracts/platform.contract.md#PLAT-12 — invalid numeric input
+      // is a validation failure, not a silent NaN propagated to the server
+      if (Number.isNaN(limit)) {
+        console.error(
+          renderErrorCard({
+            code: "VALIDATION_FAILED",
+            message: "--limit must be a number",
+          }),
+        );
+        Deno.exit(1);
       }
 
       const exitCode = await logsCommand({

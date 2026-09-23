@@ -28,11 +28,18 @@ export class SQLiteQueueProvider implements QueueProvider {
   // spec: contracts/queues.contract.md#Q-2 — Max message size 128 KB
   private readonly MAX_PAYLOAD_SIZE_BYTES = 128 * 1024;
 
+  // spec: contracts/queues.contract.md#Q-3 — retention_days default 4, max 14
+  private readonly retentionDays: number;
+
   public readonly deadLetter: QueueProvider;
 
-  constructor(dbPath: string = ":memory:") {
+  constructor(
+    dbPath: string = ":memory:",
+    options?: { retentionDays?: number },
+  ) {
     this.dbPath = dbPath;
     this.db = new DatabaseSync(dbPath);
+    this.retentionDays = Math.min(Math.max(options?.retentionDays ?? 4, 1), 14);
     this.initDb();
 
     this.deadLetter = {
@@ -62,6 +69,20 @@ export class SQLiteQueueProvider implements QueueProvider {
         is_dlq INTEGER DEFAULT 0
       );
     `);
+    // Migration for databases created before retention enforcement (Q-3)
+    const columns = this.db.prepare(
+      "PRAGMA table_info(messages)",
+    ).all() as { name: string }[];
+    if (!columns.some((c) => c.name === "expires_at")) {
+      this.db.exec("ALTER TABLE messages ADD COLUMN expires_at INTEGER");
+    }
+  }
+
+  // spec: contracts/queues.contract.md#Q-3 — messages expire after retention_days
+  private purgeExpired(): void {
+    this.db.prepare(
+      "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?",
+    ).run(Date.now());
   }
 
   send(body: unknown, opts?: { delay?: number }): Promise<{ id: string }> {
@@ -94,11 +115,13 @@ export class SQLiteQueueProvider implements QueueProvider {
     const id = generateUlid();
     const delayMs = (opts?.delay || 0) * 1000;
     const visibleAfter = Date.now() + delayMs;
+    // spec: contracts/queues.contract.md#Q-3 — retention window starts at send time
+    const expiresAt = Date.now() + this.retentionDays * 24 * 3600 * 1000;
 
     const stmt = this.db.prepare(
-      "INSERT INTO messages (id, body, attempts, visible_after, is_dlq) VALUES (?, ?, 0, ?, 0)",
+      "INSERT INTO messages (id, body, attempts, visible_after, is_dlq, expires_at) VALUES (?, ?, 0, ?, 0, ?)",
     );
-    stmt.run(id, jsonBody, visibleAfter);
+    stmt.run(id, jsonBody, visibleAfter, expiresAt);
 
     return Promise.resolve({ id });
   }
@@ -119,6 +142,7 @@ export class SQLiteQueueProvider implements QueueProvider {
 
     while (true) {
       const now = Date.now();
+      this.purgeExpired();
 
       const stmt = this.db.prepare(`
         UPDATE messages 
@@ -170,6 +194,7 @@ export class SQLiteQueueProvider implements QueueProvider {
 
   private receiveDlq(): Promise<QueueMessage | null> {
     const now = Date.now();
+    this.purgeExpired();
     const stmt = this.db.prepare(`
       UPDATE messages 
       SET visible_after = ?

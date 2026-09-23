@@ -44,11 +44,11 @@ Deno.test("Features Enhancement: auth = 'bearer' rejects unauthenticated and all
   const port = server.port;
 
   try {
-    // 1. Unauthenticated request -> 401 UNAUTHORIZED
+    // 1. Unauthenticated request -> 401 with canonical PLAT-12 code
     const unauthRes = await fetch(`http://127.0.0.1:${port}/api/secure`);
     assertEquals(unauthRes.status, 401);
     const unauthBody = await unauthRes.json();
-    assertEquals(unauthBody.error.code, "UNAUTHORIZED");
+    assertEquals(unauthBody.error.code, "PERMISSION_DENIED");
 
     // 2. Authenticated request with Bearer header -> proceeds to isolate (returns 200 or 404/not found handler, not 401)
     const authRes = await fetch(`http://127.0.0.1:${port}/api/secure`, {

@@ -31,7 +31,12 @@ rather than parsing unstable human-readable error messages.
 ## 2. Catching and Normalizing Errors
 
 ```typescript
-import { ConflictError, normalizeError, RailFogError } from "@railfog/sdk";
+import {
+  ConflictError,
+  normalizeError,
+  RailFogError,
+  statusFromErrorCode,
+} from "@railfog/sdk";
 import type { FunctionHandler } from "@railfog/sdk";
 
 const handler: FunctionHandler = async (req, ctx) => {
@@ -61,7 +66,7 @@ const handler: FunctionHandler = async (req, ctx) => {
         code: normalized.code,
         requestId: normalized.requestId,
       },
-      { status: normalized.status },
+      { status: statusFromErrorCode(normalized.code) },
     );
   }
 };

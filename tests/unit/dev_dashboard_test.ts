@@ -89,22 +89,25 @@ Deno.test("Dashboard: /__railfog/api/info and /__railfog/api/kv manage local dev
     );
     assertEquals(setRes.status, 200);
 
-    // 3. List KV keys via dashboard API
+    // 3. List KV keys via dashboard API — keys travel as arrays so segments
+    // containing the delimiter survive the round trip
     const listRes = await fetch(
       `http://localhost:${server.port}/__railfog/api/kv`,
     );
     assertEquals(listRes.status, 200);
     const listJson = await listRes.json();
     assertExists(listJson.keys);
-    const found = listJson.keys.find((k: { key: string }) =>
-      k.key === "user:1"
+    const found = listJson.keys.find((k: { key: string[] }) =>
+      JSON.stringify(k.key) === JSON.stringify(["user", "1"])
     );
     assertExists(found);
     assertEquals(found.value, { name: "Alice" });
 
-    // 4. Delete KV key
+    // 4. Delete KV key (array form)
     const delRes = await fetch(
-      `http://localhost:${server.port}/__railfog/api/kv?key=user:1`,
+      `http://localhost:${server.port}/__railfog/api/kv?key=${
+        encodeURIComponent(JSON.stringify(["user", "1"]))
+      }`,
       { method: "DELETE" },
     );
     assertEquals(delRes.status, 200);

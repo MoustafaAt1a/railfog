@@ -11,6 +11,7 @@
 // spec: tasks/milestone-0.5-developer-experience/T-0503-cli-init-scaffold.md
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0806-interactive-project-scaffolding.md
 
+import { railfogSourceUrl } from "./version.ts";
 import { basename, join, relative, resolve } from "@std/path";
 import { type Choice, selectPrompt, type WriterSync } from "./prompt.ts";
 import {
@@ -111,8 +112,7 @@ export async function runInit(options: InitOptions): Promise<InitResult> {
   }
 
   const template = options.template ?? "minimal";
-  let sdkModUrl =
-    "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts";
+  let sdkModUrl = railfogSourceUrl("sdk/typescript/mod.ts");
   if (
     !import.meta.url.includes("deno-compile") &&
     !import.meta.url.startsWith("deno:")

@@ -24,8 +24,12 @@ export class LocalFSProvider implements ObjectProvider {
     options?: { hmacSecret?: string },
   ) {
     this.rootAbs = resolve(rootDir);
-    this.hmacSecret = options?.hmacSecret ??
-      "railfog-local-fs-internal-secret-token";
+    this.hmacSecret = options?.hmacSecret ?? crypto.randomUUID() +
+        crypto.randomUUID();
+    // spec: docs/contracts/platform.contract.md#PLAT-15 — signing secrets are
+    // never hardcoded. A process-random default keeps dev presigned URLs
+    // unforgeable within a run; pass hmacSecret explicitly when URLs must
+    // survive process restarts.
   }
 
   private getPath(key: string): string {
@@ -160,6 +164,10 @@ export class LocalFSProvider implements ObjectProvider {
       const idx = filtered.indexOf(opts.cursor);
       if (idx !== -1) {
         filtered = filtered.slice(idx + 1);
+      } else {
+        // Cursor key deleted between pages: resume strictly after the cursor
+        // in lexicographic order instead of restarting from the first key
+        filtered = filtered.filter((k) => k > opts.cursor!);
       }
     }
 

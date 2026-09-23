@@ -19,6 +19,7 @@ import type {
 import {
   type RailFogErrorCode,
   ResourceNotFoundError,
+  statusFromErrorCode,
   toErrorResponseBody,
   ValidationFailedError,
 } from "../../packages/errors/mod.ts";
@@ -119,36 +120,6 @@ export type HandlerFn = (
  */
 export interface ApiRouteMap {
   [routePattern: string]: HandlerFn;
-}
-
-/**
- * Maps PLAT-12 canonical error codes to their standardized HTTP status codes.
- *
- * @spec contracts/platform.contract.md#PLAT-12 — Error model exhaustive code table
- */
-function statusFromErrorCode(code: RailFogErrorCode): number {
-  switch (code) {
-    case "RESOURCE_NOT_FOUND":
-      return 404;
-    case "PERMISSION_DENIED":
-      return 403;
-    case "VALIDATION_FAILED":
-      return 400;
-    case "RATE_LIMITED":
-    case "CALL_DEPTH_EXCEEDED":
-      return 429;
-    case "TIMEOUT":
-      return 504;
-    case "PAYLOAD_TOO_LARGE":
-      return 413;
-    case "CONFLICT":
-      return 409;
-    case "UNAVAILABLE":
-      return 503;
-    case "INTERNAL":
-    default:
-      return 500;
-  }
 }
 
 /**

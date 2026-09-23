@@ -101,6 +101,9 @@ export class RuntimeSnapshotCache {
   /**
    * Background polling runner that catches errors silently to maintain fail-static operation.
    * Uses isPolling lock to prevent dogpiling on slow or hanging network requests.
+   * The poll itself is bounded at twice the interval so a hung fetch cannot
+   * wedge isPolling forever — fail-static serving continues and polling
+   * resumes once the control plane responds again (PLAT-8).
    *
    * Spec-anchor: docs/contracts/platform.contract.md#PLAT-8
    */
@@ -109,11 +112,24 @@ export class RuntimeSnapshotCache {
       return;
     }
     this.isPolling = true;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<"poll-timeout">((resolve) => {
+      timerId = setTimeout(
+        () => resolve("poll-timeout"),
+        this.pollIntervalMs * 2,
+      );
+    });
     try {
-      await this.forceRefresh();
+      await Promise.race([
+        this.forceRefresh().then(() => "refreshed" as const),
+        timeoutPromise,
+      ]);
     } catch {
       // spec: contracts/platform.contract.md#PLAT-8 — fail-static: swallow background polling errors
     } finally {
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+      }
       this.isPolling = false;
     }
   }

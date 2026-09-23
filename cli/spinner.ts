@@ -168,14 +168,29 @@ export class TerminalSpinner implements Spinner {
   }
 
   private write(text: string): void {
-    const bytes = textEncoder.encode(text);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const written = this.stream.writeSync(bytes.subarray(offset));
-      if (written <= 0) {
-        break;
+    // A closed stdout (e.g. `rail deploy | head`) must not crash the process
+    // from inside the animation timer — degrade silently instead
+    try {
+      const bytes = textEncoder.encode(text);
+      let offset = 0;
+      while (offset < bytes.length) {
+        const written = this.stream.writeSync(bytes.subarray(offset));
+        if (written <= 0) {
+          break;
+        }
+        offset += written;
       }
-      offset += written;
+    } catch {
+      try {
+        this.stream.writeSync(textEncoder.encode(CURSOR_SHOW));
+      } catch {
+        // stdout is gone entirely; nothing more to do
+      }
+      if (this.timerId !== undefined) {
+        clearInterval(this.timerId);
+        this.timerId = undefined;
+      }
+      this.running = false;
     }
   }
 

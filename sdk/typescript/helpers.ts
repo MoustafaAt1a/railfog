@@ -12,6 +12,7 @@ import {
   UnavailableError,
   ValidationFailedError,
 } from "../../packages/errors/mod.ts";
+import { withRetry as policyWithRetry } from "../../packages/policy/retry.ts";
 
 // spec: contracts/queues.contract.md#Q-3, Q-4 — Default retention window for idempotency dedupe keys (14 days = 1,209,600s)
 // spec: contracts/kv.contract.md#KV-2 — Mandatory TTL prevents unbounded dedupe key growth (Audit Finding #5)
@@ -63,15 +64,6 @@ export interface RetryOptions {
   maxAttempts?: number;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function randomUniform(min: number, max: number): number {
-  if (min >= max) return min;
-  return Math.random() * (max - min) + min;
-}
-
 /**
  * Composed idempotency pattern over KV with mandatory TTL.
  * Checks whether the dedupe key exists in KV; if so, returns without executing action.
@@ -111,13 +103,15 @@ export async function withIdempotency<T>(
 
 /**
  * Exponential backoff with decorrelated jitter retry helper.
- * Implements:
+ * Delegates to the canonical Q-5 engine in packages/policy/retry.ts so the
+ * jitter formula has exactly one implementation (Q-6: composed patterns are
+ * library code, not per-module re-implementations):
  *   sleep_0 = base
  *   sleep_n = min(cap, random_uniform(base, sleep_(n-1) * 3))
  * On exhaustion of maxAttempts, rethrows the original error unchanged.
  *
- * @spec contracts/queues.contract.md#Q-5 — Exponential backoff with decorrelated jitter retry helper (withRetry)
- * @spec contracts/queues.contract.md#Q-6 — Composed reliability patterns as library code over KV
+ * @spec contracts/queues.contract.md#Q-5 — Decorrelated jitter retry helper
+ * @spec contracts/queues.contract.md#Q-6 — Single canonical implementation
  * @spec contracts/platform.contract.md#PLAT-12 — Preservation of original typed error on exhaustion
  */
 export async function withRetry<T>(
@@ -140,28 +134,11 @@ export async function withRetry<T>(
     ? Math.floor(options.maxAttempts)
     : DEFAULT_RETRY_MAX_ATTEMPTS;
 
-  let prevSleep = baseMs;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await action();
-    } catch (err) {
-      // Re-throw when max attempts are exhausted per Q-5 & PLAT-12
-      if (attempt >= maxAttempts) {
-        throw err;
-      }
-
-      // Decorrelated jitter backoff per Q-5
-      const sleepMs = attempt === 1
-        ? prevSleep
-        : Math.min(capMs, randomUniform(baseMs, prevSleep * 3));
-      prevSleep = sleepMs;
-
-      await delay(sleepMs);
-    }
-  }
-
-  throw new Error("Retry loop terminated unexpectedly");
+  return await policyWithRetry(async () => await action(), {
+    baseMs,
+    capMs,
+    maxAttempts,
+  });
 }
 
 /**

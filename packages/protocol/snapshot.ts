@@ -28,6 +28,11 @@ export interface FunctionSnapshot {
     kv?: string[];
     objects?: string[];
     queues?: string[];
+    // spec: docs/contracts/platform.contract.md#PLAT-6/PLAT-15 — secret and
+    // network scopes ride the snapshot so the data plane can scope ctx.env
+    // and egress; names only, never values
+    secrets?: string[];
+    network?: string[];
   };
   limits: {
     cpu_ms: number;
@@ -213,6 +218,19 @@ export function validateRoutingSnapshot(data: unknown): RoutingSnapshot {
         `VALIDATION_FAILED: Function ${fnKey} permissions.queues must be an array of strings`,
       );
     }
+    for (const scope of ["secrets", "network"] as const) {
+      if (
+        perms[scope] !== undefined &&
+        (!Array.isArray(perms[scope]) ||
+          !(perms[scope] as unknown[]).every((item) =>
+            typeof item === "string"
+          ))
+      ) {
+        throw new ValidationFailedError(
+          `VALIDATION_FAILED: Function ${fnKey} permissions.${scope} must be an array of strings`,
+        );
+      }
+    }
 
     if (
       typeof fnRecord.limits !== "object" ||
@@ -295,6 +313,12 @@ export class SnapshotDistributor {
       }
       if (manifestPerms?.queues) {
         permissions.queues = [...manifestPerms.queues];
+      }
+      if (manifestPerms?.secrets) {
+        permissions.secrets = [...manifestPerms.secrets];
+      }
+      if (manifestPerms?.network) {
+        permissions.network = [...manifestPerms.network];
       }
 
       const manifestRec = rev.manifest as unknown as

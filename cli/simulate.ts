@@ -148,13 +148,12 @@ export async function runSimulate(
     }
   }
 
-  // Measure simulated sub-millisecond isolate startup
+  // Honest estimate: measure CLI-process function-compile latency directly.
+  // No clamping or fudge factors — a measurement that cannot go wrong is not
+  // a measurement (repo Engineering Rule 8).
   const start = performance.now();
   await Promise.resolve();
-  const isolateBootMs = Math.max(
-    0.3,
-    Math.min(performance.now() - start + 0.4, 1.2),
-  );
+  const isolateBootMs = performance.now() - start;
 
   const result: RouteSimulationResult = {
     path: cleanPath,

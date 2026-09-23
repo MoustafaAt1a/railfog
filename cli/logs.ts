@@ -87,7 +87,9 @@ export function formatLogEntry(
   // spec: docs/contracts/platform.contract.md#PLAT-13 — Human-readable timestamp, level, function name, duration
   // spec: docs/contracts/platform.contract.md#PLAT-14 — ULID request ID
   const levelUpper = (entry.level ? String(entry.level) : "info").toUpperCase();
-  const color = LEVEL_COLORS[entry.level?.toLowerCase() ?? ""] ?? "";
+  const color = LEVEL_COLORS[
+    typeof entry.level === "string" ? entry.level.toLowerCase() : ""
+  ] ?? "";
   const levelDisplay = color ? `${color}${levelUpper}${RESET}` : levelUpper;
 
   const parts: string[] = [];

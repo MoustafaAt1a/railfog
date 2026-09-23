@@ -119,6 +119,7 @@ function createTestArtifact(params: {
  */
 function createTestInvocation(params?: {
   requestId?: string;
+  org?: string;
   project?: string;
   function?: string;
   revision?: string;
@@ -128,6 +129,7 @@ function createTestInvocation(params?: {
   body?: Uint8Array;
 }): InvocationRequest {
   const headers: Record<string, string> = { ...(params?.headers ?? {}) };
+  if (params?.org) headers["x-railfog-org"] = params.org;
   if (params?.project) headers["x-railfog-project"] = params.project;
   if (params?.function) headers["x-railfog-function"] = params.function;
   if (params?.revision) headers["x-railfog-revision"] = params.revision;
@@ -573,6 +575,7 @@ Deno.test("AC4 (Integration): Warm isolate re-resolves rotated secrets from Secr
     artifact,
     DEFAULT_LIMITS,
     createTestInvocation({
+      org: orgId,
       project: projectId,
       function: "db-worker",
       revision: "rev_01J8Z000000000000000000001",
@@ -597,6 +600,7 @@ Deno.test("AC4 (Integration): Warm isolate re-resolves rotated secrets from Secr
     artifact,
     DEFAULT_LIMITS,
     createTestInvocation({
+      org: orgId,
       project: projectId,
       function: "db-worker",
       revision: "rev_01J8Z000000000000000000001",
@@ -1395,6 +1399,7 @@ Deno.test("Security (PLAT-15): Secret values are strictly tenant-isolated and ca
     artA,
     DEFAULT_LIMITS,
     createTestInvocation({
+      org: "org-sec",
       project: "proj-a",
       function: "billing",
       revision: "rev1",
@@ -1404,6 +1409,7 @@ Deno.test("Security (PLAT-15): Secret values are strictly tenant-isolated and ca
     artB,
     DEFAULT_LIMITS,
     createTestInvocation({
+      org: "org-sec",
       project: "proj-b",
       function: "billing",
       revision: "rev1",

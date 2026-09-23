@@ -29,6 +29,16 @@ export interface Artifact {
   integrity: string; // sha256-... (OBJ-4)
   entrypoint: string;
   code: Uint8Array | ReadableStream<Uint8Array>;
+  // spec: docs/contracts/platform.contract.md#PLAT-6/PLAT-15 — declared
+  // capability scopes (name lists only) ride the artifact so isolation
+  // providers can scope ctx.env and egress without a control-plane round trip
+  permissions?: {
+    kv?: string[];
+    objects?: string[];
+    queues?: string[];
+    secrets?: string[];
+    network?: string[];
+  };
 }
 
 /**

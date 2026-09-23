@@ -324,7 +324,9 @@ export class LocalEncryptedSecretStore implements SecretStore {
       const projectDir = this.#getProjectDir(orgId, projectId);
       await Deno.mkdir(projectDir, { recursive: true });
       const filePath = this.#getRecordPath(orgId, projectId, name);
-      await Deno.writeFile(filePath, record);
+      // spec: docs/contracts/platform.contract.md#PLAT-15 — encrypted records at
+      // rest are owner-readable only (no-op on Windows ACLs)
+      await Deno.writeFile(filePath, record, { mode: 0o600 });
     } else {
       let orgMap = this.#memoryStore.get(orgId);
       if (!orgMap) {

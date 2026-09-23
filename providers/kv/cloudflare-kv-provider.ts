@@ -437,13 +437,22 @@ export class CloudflareKVProvider implements KVProvider {
     }
 
     const items = data.result ?? [];
-    const keysWithValues = await Promise.all(
-      items.map(async (item) => {
-        const decoded = this.decodeKey(item.name);
-        const value = await this.get(decoded);
-        return { key: decoded, value };
-      }),
-    );
+    // spec: docs/contracts/platform.contract.md#PLAT-15 note — value reads are
+    // N+1 by Cloudflare API design; fan-out is bounded so one list call cannot
+    // open up to 1000 concurrent requests (quota burn, socket exhaustion)
+    const READ_FANOUT = 10;
+    const keysWithValues: { key: string[]; value: unknown }[] = [];
+    for (let i = 0; i < items.length; i += READ_FANOUT) {
+      const batch = items.slice(i, i + READ_FANOUT);
+      const settled = await Promise.all(
+        batch.map(async (item) => {
+          const decoded = this.decodeKey(item.name);
+          const value = await this.get(decoded);
+          return { key: decoded, value };
+        }),
+      );
+      keysWithValues.push(...settled);
+    }
 
     const nextCursor = data.result_info?.cursor
       ? data.result_info.cursor

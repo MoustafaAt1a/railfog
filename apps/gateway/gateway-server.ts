@@ -21,6 +21,7 @@ import type {
   RateLimitDecision,
 } from "./rate-limiter.ts";
 import { generateUlid } from "../../packages/core/id/ulid.ts";
+import { hashApiToken } from "../../packages/auth/token.ts";
 
 /**
  * Default network binding parameters.
@@ -117,31 +118,49 @@ function resolveTargetUrl(incomingUrl: URL, options: GatewayOptions): URL {
 }
 
 /**
+ * Interval (ms) between idle-bucket pruning sweeps. Unpruned buckets grow
+ * without bound under ephemeral client churn (PLAT-9 memory hygiene).
+ */
+const PRUNE_INTERVAL_MS = 60_000;
+
+/**
  * Evaluates rate limit tiers across IP, Identity (API token), and Project scopes.
  *
  * spec: contracts/platform.contract.md#PLAT-9 — Token bucket evaluation across tenant scopes
+ * spec: contracts/platform.contract.md#PLAT-15 — raw tokens never retained in rate-limit buckets
  */
-function evaluateRateLimits(
+async function evaluateRateLimits(
   req: Request,
   info: Deno.ServeHandlerInfo,
   rateLimiter: MultiTenantRateLimiter,
-): RateLimitDecision {
+): Promise<RateLimitDecision> {
   const authHeader = req.headers.get("authorization");
   const projectId = req.headers.get("x-project-id");
 
-  // spec: contracts/platform.contract.md#PLAT-9 — Anonymous / IP tier applies to unauthenticated traffic
+  // spec: contracts/platform.contract.md#PLAT-9 — Anonymous / IP tier applies to unauthenticated traffic.
+  // The gateway IS the edge: the peer socket address is authoritative. A
+  // client-supplied x-forwarded-for would let one caller mint unlimited
+  // identities, so it is honored only for loopback peers (a same-host
+  // trusted proxy, per the documented PLAT-1 topology).
   if (!authHeader && !projectId) {
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-      (info.remoteAddr as Deno.NetAddr)?.hostname ||
+    const peer = (info.remoteAddr as Deno.NetAddr)?.hostname ??
       FALLBACK_CLIENT_IP;
+    const peerIsLoopback = peer === "127.0.0.1" || peer === "::1" ||
+      peer === "localhost";
+    const forwardedIp = req.headers.get("x-forwarded-for")
+      ?.split(",")[0].trim();
+    const clientIp = peerIsLoopback && forwardedIp ? forwardedIp : peer;
     return rateLimiter.check("ip", clientIp);
   }
 
   let lastAllowedDecision: RateLimitDecision | undefined;
 
-  // Identity tier: API token
+  // Identity tier: API token (hashed — raw token never stored in a bucket key)
   if (authHeader) {
-    const decision = rateLimiter.check("identity", authHeader);
+    const decision = rateLimiter.check(
+      "identity",
+      await hashApiToken(authHeader),
+    );
     if (!decision.allowed) {
       return decision;
     }
@@ -268,6 +287,13 @@ async function proxyRequest(
 export function startGatewayServer(
   options: GatewayOptions,
 ): Promise<GatewayServer> {
+  // spec: contracts/platform.contract.md#PLAT-9 — periodic idle-bucket pruning
+  const pruneTimer = options.rateLimiter
+    ? setInterval(() => {
+      options.rateLimiter?.prune();
+    }, PRUNE_INTERVAL_MS)
+    : undefined;
+
   const server = Deno.serve(
     {
       port: options.port ?? DEFAULT_GATEWAY_PORT,
@@ -281,7 +307,11 @@ export function startGatewayServer(
 
       // spec: contracts/platform.contract.md#PLAT-9 — Rate limit verification before backend dispatch
       if (options.rateLimiter) {
-        const decision = evaluateRateLimits(req, info, options.rateLimiter);
+        const decision = await evaluateRateLimits(
+          req,
+          info,
+          options.rateLimiter,
+        );
         if (!decision.allowed) {
           const retryAfter = String(
             decision.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS,
@@ -308,7 +338,12 @@ export function startGatewayServer(
   const assignedPort = (server.addr as Deno.NetAddr).port;
   const gatewayServer: GatewayServer = {
     port: assignedPort,
-    close: () => server.shutdown(),
+    close: async () => {
+      if (pruneTimer !== undefined) {
+        clearInterval(pruneTimer);
+      }
+      await server.shutdown();
+    },
   };
 
   return Promise.resolve(gatewayServer);

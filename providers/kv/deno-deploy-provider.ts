@@ -6,6 +6,7 @@ import type {
   KVProvider,
 } from "../../primitives/kv/kv-provider.ts";
 import {
+  ConflictError,
   PayloadTooLargeError,
   ValidationFailedError,
 } from "../../packages/errors/mod.ts";
@@ -263,6 +264,10 @@ export interface DenoDeployKVProviderOptions {
  * Delivers linearizable consistency per KV-5 and atomic CAS per KV-3.
  */
 export class DenoDeployKVProvider implements KVProvider {
+  // spec: docs/contracts/kv.contract.md#KV-5 — the strong tier claim is made
+  // explicit and backed by strong-consistency reads (Deno KV is linearizable
+  // per key when consistency: "strong" is requested)
+  readonly tier = "strong" as const;
   private kvPromise: Promise<Deno.Kv> | null = null;
   private kv: Deno.Kv | null = null;
 
@@ -295,7 +300,7 @@ export class DenoDeployKVProvider implements KVProvider {
   async get(key: string[]): Promise<unknown | null> {
     validateKey(key);
     const kv = await this.getKvInstance();
-    const entry = await kv.get(key);
+    const entry = await kv.get(key, { consistency: "strong" });
     const resolved = await resolveValue(kv, key, entry.value);
     return resolved.value;
   }
@@ -317,7 +322,21 @@ export class DenoDeployKVProvider implements KVProvider {
       ? Date.now() + opts.ttl * 1000
       : undefined;
 
-    while (true) {
+    // spec: contracts/queues.contract.md#Q-5 / kv.contract.md#KV-5 — infinite
+    // retry loops are never implemented; bounded contention retries with backoff
+    const MAX_CAS_RETRIES = 5;
+    for (let attempt = 0;; attempt++) {
+      if (attempt >= MAX_CAS_RETRIES) {
+        throw new ConflictError(
+          "CONFLICT: concurrent writers on key (CAS retries exhausted)",
+        );
+      }
+      if (attempt > 0) {
+        // Small decorrelated-style backoff to de-synchronize contenders
+        await new Promise((r) =>
+          setTimeout(r, 10 + Math.floor(Math.random() * 40))
+        );
+      }
       const entry = await kv.get(key);
       let currentVersion = 0;
       let prevTotalChunks = 0;

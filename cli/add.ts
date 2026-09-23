@@ -1,15 +1,16 @@
 // spec: contracts/platform.contract.md#PLAT-19 — Repository structure & dependency management
 // spec: tasks/milestone-0.8-developer-experience-ux/T-0811-project-dependency-add.md
 
+import { railfogSourceUrl } from "./version.ts";
 import { join, resolve } from "@std/path";
 import { colors, renderCard, renderStatusBar } from "./ui.ts";
 
 // spec: contracts/platform.contract.md#PLAT-19 — Canonical SDK module entrypoint
-export const CANONICAL_SDK_URL =
-  "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/sdk/typescript/mod.ts";
+export const CANONICAL_SDK_URL = railfogSourceUrl("sdk/typescript/mod.ts");
 
-export const CANONICAL_TESTING_URL =
-  "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/packages/testing/mod.ts";
+export const CANONICAL_TESTING_URL = railfogSourceUrl(
+  "packages/testing/mod.ts",
+);
 
 export const SUPPORTED_PACKAGES = [
   "sdk",

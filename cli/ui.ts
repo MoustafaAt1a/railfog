@@ -236,6 +236,14 @@ export function wrapText(text: string, maxWidth: number): string[] {
               sliceIdx++;
               curVis = visibleWidth(currentLine + rem.slice(0, sliceIdx));
             }
+            // No progress means the indent alone fills the width — emit the
+            // remainder unsplit, otherwise this loop would never terminate
+            if (sliceIdx === 0) {
+              lines.push(currentLine + rem);
+              rem = "";
+              currentLine = lineIndent;
+              break;
+            }
             lines.push(currentLine + rem.slice(0, sliceIdx));
             rem = rem.slice(sliceIdx);
             currentLine = lineIndent;

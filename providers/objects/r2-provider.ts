@@ -10,7 +10,10 @@
  */
 
 import type { ObjectProvider } from "../../primitives/objects/object-provider.ts";
-import { ValidationFailedError } from "../../packages/errors/mod.ts";
+import {
+  UnavailableError,
+  ValidationFailedError,
+} from "../../packages/errors/mod.ts";
 import { encodeHex } from "@std/encoding/hex";
 import { computeSha256 } from "../../packages/core/crypto/content-address.ts";
 
@@ -60,6 +63,24 @@ async function getSignatureKey(
   return kSigning;
 }
 
+// spec: docs/contracts/objects.contract.md#OBJ-3 — SigV4-style signing reuses the
+// AWS standard. SigV4 canonicalization percent-encodes every byte outside the
+// RFC 3986 unreserved set A-Za-z0-9-._~ (uppercase hex). encodeURIComponent
+// leaves !'()* raw, which breaks signature verification on such keys.
+function encodeAwsUri(value: string): string {
+  let out = "";
+  const bytes = new TextEncoder().encode(value);
+  for (const b of bytes) {
+    const c = b >= 0x41 && b <= 0x5a || b >= 0x61 && b <= 0x7a ||
+        b >= 0x30 && b <= 0x39 || b === 0x2d || b === 0x5f ||
+        b === 0x2e || b === 0x7e
+      ? String.fromCharCode(b)
+      : `%${b.toString(16).toUpperCase().padStart(2, "0")}`;
+    out += c;
+  }
+  return out;
+}
+
 export class R2Provider implements ObjectProvider {
   private readonly region: string;
 
@@ -70,11 +91,10 @@ export class R2Provider implements ObjectProvider {
   private getObjectUrl(key: string, queryParams?: Record<string, string>): URL {
     const cleanEndpoint = this.options.endpoint.replace(/\/$/, "");
     const cleanKey = key.replace(/^\//, "");
+    // Each segment is encoded with the strict SigV4 rule so the request URL
+    // and the canonical URI are byte-identical; raw % and !'()* are handled.
     const encodedSegments = cleanKey
-      ? cleanKey
-        .split("/")
-        .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
-        .join("/")
+      ? cleanKey.split("/").map(encodeAwsUri).join("/")
       : "";
     const path = encodedSegments
       ? `/${this.options.bucket}/${encodedSegments}`
@@ -106,12 +126,13 @@ export class R2Provider implements ObjectProvider {
       ? encodeHex(await computeSha256(bodyBytes))
       : encodeHex(await computeSha256(new Uint8Array(0)));
 
-    // Canonical query string
-    const queryEntries = Array.from(url.searchParams.entries()).sort(
-      ([a], [b]) => a.localeCompare(b),
-    );
+    // Canonical query string: names and values encoded individually with the
+    // strict rule, sorted byte-wise by encoded name (AWS SigV4 requirement)
+    const queryEntries = Array.from(url.searchParams.entries())
+      .map(([k, v]) => [encodeAwsUri(k), encodeAwsUri(v)] as const)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     const canonicalQueryString = queryEntries
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .map(([k, v]) => `${k}=${v}`)
       .join("&");
 
     // Canonical headers
@@ -210,7 +231,7 @@ export class R2Provider implements ObjectProvider {
       );
     }
 
-    const etagHeader = res.headers.get("etag") ?? res.headers.get("ETag") ?? "";
+    const etagHeader = res.headers.get("etag") ?? "";
     const etag = etagHeader.replace(/^"|"$/g, "");
     return { etag };
   }
@@ -252,7 +273,7 @@ export class R2Provider implements ObjectProvider {
     }
 
     const size = parseInt(res.headers.get("content-length") ?? "0", 10);
-    const etag = (res.headers.get("etag") ?? res.headers.get("ETag") ?? "")
+    const etag = (res.headers.get("etag") ?? "")
       .replace(/^"|"$/g, "");
     return { size, etag };
   }
@@ -274,7 +295,7 @@ export class R2Provider implements ObjectProvider {
 
     const res = await this.signedFetch("GET", "", queryParams);
     if (!res.ok) {
-      throw new Error(
+      throw new UnavailableError(
         `R2 list failed with HTTP ${res.status}: ${res.statusText}`,
       );
     }
@@ -298,8 +319,10 @@ export class R2Provider implements ObjectProvider {
     key: string,
     opts: { method: "GET" | "PUT"; expiresIn?: number; maxExpiresIn?: number },
   ): Promise<{ url: string; expiresAt: number }> {
-    const maxExpiresIn = opts.maxExpiresIn ?? 86400;
-    const expiresIn = opts.expiresIn ?? 900;
+    // spec: docs/contracts/objects.contract.md#OBJ-2 — maxExpiresIn is bounded
+    // by the contract maximum of 86400s regardless of caller input
+    const maxExpiresIn = Math.min(opts.maxExpiresIn ?? 86400, 86400);
+    const expiresIn = Math.floor(opts.expiresIn ?? 900);
 
     // Spec: OBJ-2 validation (default maxExpiresIn 86400, default expiresIn 900)
     if (expiresIn > maxExpiresIn) {
@@ -328,12 +351,12 @@ export class R2Provider implements ObjectProvider {
     url.searchParams.set("X-Amz-Expires", expiresIn.toString());
     url.searchParams.set("X-Amz-SignedHeaders", "host");
 
-    // Canonical query string sorted alphabetically
-    const queryEntries = Array.from(url.searchParams.entries()).sort(
-      ([a], [b]) => a.localeCompare(b),
-    );
+    // Canonical query string sorted byte-wise by encoded name
+    const queryEntries = Array.from(url.searchParams.entries())
+      .map(([k, v]) => [encodeAwsUri(k), encodeAwsUri(v)] as const)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     const canonicalQueryString = queryEntries
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .map(([k, v]) => `${k}=${v}`)
       .join("&");
 
     const canonicalHeaders = `host:${url.host}\n`;

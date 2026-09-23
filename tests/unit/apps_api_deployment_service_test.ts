@@ -22,6 +22,7 @@ import {
   type PackagedArtifact,
   packageFunctionArtifact,
 } from "../../packages/core/artifact/packager.ts";
+import { join } from "@std/path";
 import { ResourceNotFoundError } from "../../packages/errors/mod.ts";
 import { computeIntegrity } from "../../packages/core/crypto/content-address.ts";
 import {
@@ -995,5 +996,67 @@ Deno.test("Integration: AC5 - Passing health check with HealthProbeOptions trans
     assertEquals(activeRecord!.id, result.revisionId);
   } finally {
     await Deno.remove(tempDir, { recursive: true });
+  }
+});
+
+Deno.test("DeploymentService - durable state survives restart via persistencePath (PLAT-3)", async () => {
+  const tempDir = await Deno.makeTempDir({ prefix: "railfog-deploy-state-" });
+  const statePath = join(tempDir, "state.json");
+  try {
+    const serviceA = new DeploymentService(
+      new LocalFSProvider(join(tempDir, "obj-a")),
+      {
+        persistencePath: statePath,
+      },
+    );
+    const artifact = await packageFunctionArtifact(
+      "api.ts",
+      new TextEncoder().encode("export default () => new Response('ok')"),
+    );
+    const first = await serviceA.deploy("proj-x", "api", artifact);
+    assertEquals(first.state, "Deployed");
+    assertEquals(first.active, true);
+    serviceA.setProjectRoutes("proj-x", [{ pattern: "/api", function: "api" }]);
+    await serviceA.flushPersistence();
+
+    // A brand-new service instance recovers the full state from disk
+    const serviceB = new DeploymentService(
+      new LocalFSProvider(join(tempDir, "obj-b")),
+      { persistencePath: statePath },
+    );
+    assertEquals(serviceB.listProjects(), ["proj-x"]);
+    assertEquals(serviceB.listFunctions("proj-x"), ["api"]);
+    assertEquals(
+      serviceB.getActiveRevisionId("proj-x", "api"),
+      first.revisionId,
+    );
+    const restoredRoutes = serviceB.getProjectRoutes("proj-x");
+    assertEquals(restoredRoutes !== null, true);
+    assertEquals(restoredRoutes!.length, 1);
+    assertEquals(restoredRoutes![0].pattern, "/api");
+
+    // Rollback through the restored instance persists across restarts too
+    const second = await serviceB.deploy(
+      "proj-x",
+      "api",
+      await packageFunctionArtifact(
+        "api.ts",
+        new TextEncoder().encode("export default () => new Response('v2')"),
+      ),
+    );
+    await serviceB.rollback("proj-x", "api", first.revisionId);
+    await serviceB.flushPersistence();
+
+    const serviceC = new DeploymentService(
+      new LocalFSProvider(join(tempDir, "obj-c")),
+      { persistencePath: statePath },
+    );
+    assertEquals(
+      serviceC.getActiveRevisionId("proj-x", "api"),
+      first.revisionId,
+    );
+    assertEquals(second.revisionId !== first.revisionId, true);
+  } finally {
+    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
   }
 });

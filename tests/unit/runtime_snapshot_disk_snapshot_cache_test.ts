@@ -1048,7 +1048,9 @@ Deno.test("DiskSnapshotCache - Adversarial PLAT-15: zero secret persistence guar
       "Secret passwords must NEVER appear in disk snapshot (PLAT-15)",
     );
 
-    // Verify snapshot structure strictly contains only non-secret capability names
+    // Verify snapshot structure contains capability NAMES only.
+    // PLAT-6/PLAT-15: declared secret NAMES ride the snapshot so the runtime
+    // can scope ctx.env; secret VALUES must never appear (asserted above).
     const parsed = JSON.parse(rawDiskContent);
     const apiFn = parsed.functions["api"];
     assertExists(apiFn);
@@ -1057,10 +1059,16 @@ Deno.test("DiskSnapshotCache - Adversarial PLAT-15: zero secret persistence guar
     assertEquals(apiFn.permissions.queues, ["app:jobs"]);
     assertEquals(
       apiFn.permissions.secrets,
-      undefined,
-      "secrets must not be in FunctionSnapshot permissions",
+      ["STRIPE_KEY", "DATABASE_URL"],
+      "only declared secret names may appear in FunctionSnapshot permissions",
     );
     assertEquals(apiFn.env, undefined, "env must not be in FunctionSnapshot");
+    assertEquals(
+      rawDiskContent.includes("STRIPE_KEY=") ||
+        rawDiskContent.includes("DATABASE_URL="),
+      false,
+      "secret assignment forms must not be persisted",
+    );
   } finally {
     cache?.stop();
     await Deno.remove(tempDir, { recursive: true }).catch(() => {});

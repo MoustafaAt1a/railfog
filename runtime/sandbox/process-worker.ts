@@ -10,6 +10,7 @@
  */
 
 import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
+import process from "node:process";
 
 // Redirect untrusted customer console output to stderr so stdout is reserved for IPC messages
 console.log = console.error;
@@ -69,9 +70,21 @@ export interface WorkerErrorResponse {
   };
 }
 
-// In-memory module cache for warm reuse strictly within the same {project, function, revision} per FN-6
+// In-memory module cache for warm reuse strictly within the same {project, function, revision} per FN-6.
+// The exact code payload is stored per entry: a cache hit with different code
+// (e.g. re-deployed bytes under the same revision id) re-imports instead of
+// silently running stale code (FN-3 immutable revisions made verifiable).
 type HandlerFn = (req: Request, ctx: unknown) => Promise<Response>;
-const moduleCache = new Map<string, { handler: HandlerFn }>();
+const moduleCache = new Map<
+  string,
+  { codeBase64: string; handler: HandlerFn }
+>();
+
+// spec: contracts/functions.contract.md#FN-5 — cpu_ms hard kill, independent of wall clock.
+// Sampler interval for mid-flight CPU enforcement; process.cpuUsage() gives
+// process-level CPU time, which includes the event loop but is the honest,
+// measurable proxy inside a dedicated subprocess.
+const CPU_SAMPLE_INTERVAL_MS = 10;
 
 async function* readLines(
   stream: ReadableStream<Uint8Array>,
@@ -135,7 +148,7 @@ for await (const line of readLines(Deno.stdin.readable)) {
     ]);
 
     let cached = moduleCache.get(cacheKey);
-    if (!cached) {
+    if (!cached || cached.codeBase64 !== msg.codeBase64) {
       let mod: { default?: unknown };
       try {
         mod = await import(`data:text/typescript;base64,${msg.codeBase64}`);
@@ -151,7 +164,10 @@ for await (const line of readLines(Deno.stdin.readable)) {
         );
       }
 
-      cached = { handler: mod.default as HandlerFn };
+      cached = {
+        codeBase64: msg.codeBase64,
+        handler: mod.default as HandlerFn,
+      };
       moduleCache.set(cacheKey, cached);
     }
 
@@ -195,15 +211,64 @@ for await (const line of readLines(Deno.stdin.readable)) {
 
     // 4. Measure execution time and invoke handler
     const startWallClock = performance.now();
-    const response = await cached.handler(req, ctx);
+    const cpuMsLimit = msg.limits.cpuMs > 0 ? msg.limits.cpuMs : Infinity;
+    const startCpu = process.cpuUsage();
+
+    // spec: contracts/functions.contract.md#FN-5 — cpu_ms: kill at CPU time >= limit,
+    // independent of wall clock. Best-effort preemption for handlers that yield
+    // to the event loop; the parent's wall-clock timeout covers sync runaways.
+    let cpuExceeded = false;
+    let cpuSampler: ReturnType<typeof setInterval> | null = null;
+    if (cpuMsLimit < Infinity) {
+      cpuSampler = setInterval(() => {
+        const used = process.cpuUsage(startCpu);
+        if (used.user + used.system >= cpuMsLimit * 1000) {
+          cpuExceeded = true;
+          if (cpuSampler !== null) {
+            clearInterval(cpuSampler);
+            cpuSampler = null;
+          }
+        }
+      }, CPU_SAMPLE_INTERVAL_MS);
+    }
+
+    let response: Response;
+    try {
+      const rawResponse = await cached.handler(req, ctx);
+      if (rawResponse instanceof Response) {
+        response = rawResponse;
+      } else if (rawResponse === undefined || rawResponse === null) {
+        response = Response.json({ ok: true });
+      } else {
+        response = Response.json(rawResponse);
+      }
+    } finally {
+      if (cpuSampler !== null) {
+        clearInterval(cpuSampler);
+        cpuSampler = null;
+      }
+    }
+
     const wallClockMs = Math.max(
       0,
       Math.round(performance.now() - startWallClock),
     );
-    const cpuTimeMs = Math.min(
-      wallClockMs,
-      msg.limits.cpuMs > 0 ? msg.limits.cpuMs : wallClockMs,
-    );
+    const usedCpu = process.cpuUsage(startCpu);
+    const cpuTimeMs = Math.round((usedCpu.user + usedCpu.system) / 1000);
+
+    // spec: contracts/functions.contract.md#FN-5, PLAT-12 — CPU ceiling surfaces as TIMEOUT
+    if (cpuExceeded || cpuTimeMs >= cpuMsLimit) {
+      await emitStdout({
+        id: msg.id,
+        error: {
+          code: "TIMEOUT",
+          message:
+            `CPU time limit exceeded: consumed ${cpuTimeMs}ms >= limit of ${cpuMsLimit}ms`,
+          name: "TimeoutError",
+        },
+      });
+      continue;
+    }
 
     // 5. Extract response headers and body
     const responseHeaders: Record<string, string> = {};
@@ -233,3 +298,7 @@ for await (const line of readLines(Deno.stdin.readable)) {
     });
   }
 }
+
+// stdin EOF means the parent closed the IPC channel (shutdown or kill) —
+// exit deterministically instead of lingering on the keep-alive interval.
+Deno.exit(0);

@@ -31,7 +31,10 @@ export function isValidCallbackUrl(urlStr: string): boolean {
     const port = parseInt(parsed.port, 10);
     if (isNaN(port) || port < 1024 || port > 65535) return false;
     // Blacklist sensitive internal database and control ports
-    if (port === 5432 || port === 6379 || port === 8080 || port === 8081) {
+    if (
+      port === 3306 || port === 5432 || port === 6379 || port === 8080 ||
+      port === 8081 || port === 9200 || port === 27017
+    ) {
       return false;
     }
     // Pathname must strictly be /callback with zero pre-existing search or hash
@@ -50,9 +53,29 @@ export function isValidCallbackUrl(urlStr: string): boolean {
  * Implements the browser-based authentication flow for `rail login`.
  * Zero external CDN script or stylesheet dependencies.
  */
+// Reflected-value escaping: HTML-escape for markup/attribute contexts, and a
+// JSON literal with `</script>` neutralized for inline script contexts.
+// spec: tasks/milestone-0.8-developer-experience-ux/T-0802-login-page-callback-redirect.md — reflected XSS defense
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function safeJsLiteral(value: string): string {
+  return JSON.stringify(value).replaceAll("<", "\u003c");
+}
+
 export function renderLoginPageHtml(options?: LoginPageOptions): string {
-  const serviceName = options?.serviceName ?? "RailFog Cloud";
-  const defaultOrgId = options?.orgId ?? options?.defaultOrgId ?? "default-org";
+  const serviceName = escapeHtml(options?.serviceName ?? "RailFog Cloud");
+  const rawOrgId = options?.orgId ?? options?.defaultOrgId ?? "default-org";
+  // Query-param derived, so both the attribute and script embeddings must be inert
+  const safeOrgId = rawOrgId.length <= 128 ? rawOrgId : rawOrgId.slice(0, 128);
+  const defaultOrgIdAttr = escapeHtml(safeOrgId);
+  const defaultOrgIdJs = safeJsLiteral(safeOrgId);
 
   const rawCallback = options?.callbackUrl ?? "";
   const validCallback = isValidCallbackUrl(rawCallback) ? rawCallback : "";
@@ -282,7 +305,7 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
     <div id="setup-view">
       <div class="form-group">
         <label for="orgId">Organization Account</label>
-        <input type="text" id="orgId" value="${defaultOrgId}" placeholder="orgId">
+        <input type="text" id="orgId" value="${defaultOrgIdAttr}" placeholder="orgId">
       </div>
       <div class="form-group">
         <label for="keyName">Key Label</label>
@@ -343,7 +366,7 @@ export function renderLoginPageHtml(options?: LoginPageOptions): string {
     const STATE_NONCE = ${JSON.stringify(safeState)};
 
     async function generateApiKey() {
-      const orgId = document.getElementById("orgId").value.trim() || "${defaultOrgId}";
+      const orgId = document.getElementById("orgId").value.trim() || ${defaultOrgIdJs};
       const keyName = document.getElementById("keyName").value.trim() || "cli-session";
       selectedOrgId = orgId;
       selectedKeyName = keyName;

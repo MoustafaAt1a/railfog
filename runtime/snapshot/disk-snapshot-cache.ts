@@ -146,6 +146,8 @@ class DiskSnapshotCacheImpl implements DiskSnapshotCache {
   /**
    * Background polling runner that catches errors silently to maintain fail-static operation.
    * Uses isPolling lock to prevent overlapping polling cycles.
+   * The poll itself is bounded at twice the interval so a hung fetch cannot
+   * wedge isPolling forever (PLAT-8 fail-static recovery).
    *
    * Spec-anchor: docs/contracts/platform.contract.md#PLAT-8
    */
@@ -154,11 +156,24 @@ class DiskSnapshotCacheImpl implements DiskSnapshotCache {
       return;
     }
     this.isPolling = true;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<"poll-timeout">((resolve) => {
+      timerId = setTimeout(
+        () => resolve("poll-timeout"),
+        this.pollIntervalMs * 2,
+      );
+    });
     try {
-      await this.forceRefresh();
+      await Promise.race([
+        this.forceRefresh().then(() => "refreshed" as const),
+        timeoutPromise,
+      ]);
     } catch {
       // spec: contracts/platform.contract.md#PLAT-8 — Fail-static: swallow background polling errors
     } finally {
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+      }
       this.isPolling = false;
     }
   }

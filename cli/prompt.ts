@@ -189,6 +189,15 @@ export async function selectPrompt<T = string>(
         }
 
         if (input === "\x03") {
+          // Restore terminal state before exiting — a bare exit inside raw
+          // mode leaves the user's shell without echo (Ctrl+C)
+          if (isRealTerminal) {
+            try {
+              Deno.stdin.setRaw(false);
+            } catch {
+              // Cleanup ignore
+            }
+          }
           Deno.exit(130);
         }
 

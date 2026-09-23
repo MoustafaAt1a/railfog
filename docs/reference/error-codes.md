@@ -29,15 +29,19 @@ machine-readable error codes.
 
 ## Wire Format
 
-Error responses return standard JSON:
+Error responses return a nested JSON envelope (`PLAT-12`):
 
 ```json
 {
-  "error": "The requested resource was not found",
-  "code": "RESOURCE_NOT_FOUND",
-  "requestId": "01J8G5E1M2R4K7W9P0X1Y2Z3A4"
+  "error": {
+    "code": "RESOURCE_NOT_FOUND",
+    "message": "The requested resource was not found",
+    "request_id": "01J8G5E1M2R4K7W9P0X1Y2Z3A4"
+  }
 }
 ```
 
-The `requestId` is a sortable ULID (`PLAT-14`) that correlates across Gateway
-access logs, Data Plane execution traces, and background metrics.
+The `request_id` is a sortable ULID (`PLAT-14`) that correlates across Gateway
+access logs, Data Plane execution traces, and background metrics. Clients
+should branch on `error.code` only — `error.message` is human-readable prose
+and may change between releases.

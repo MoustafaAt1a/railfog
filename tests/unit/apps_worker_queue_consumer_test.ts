@@ -82,14 +82,14 @@ Deno.test("AC1: Given an available queue message, when processNext() executes an
 
   const queueProvider = new MockQueueProvider([testMessage]);
   let invokedFnName = "";
-  let invokedMessage: QueueMessage | null = null;
+  const invokedMessages: QueueMessage[] = [];
 
   const invokeFunction = (
     fnName: string,
     message: QueueMessage,
   ): Promise<void> => {
     invokedFnName = fnName;
-    invokedMessage = message;
+    invokedMessages.push(message);
     return Promise.resolve();
   };
 
@@ -115,10 +115,16 @@ Deno.test("AC1: Given an available queue message, when processNext() executes an
     "imageProcessor",
     "targetFunctionName must be passed to invokeFunction",
   );
+  // The handler-facing QueueMessage carries the SDK contract fields plus a
+  // delivery timestamp stamped by the consumer
+  const invokedMessage = invokedMessages[0];
+  assertEquals(invokedMessage?.id, testMessage.id);
+  assertEquals(invokedMessage?.body, testMessage.body);
+  assertEquals(invokedMessage?.attempts, testMessage.attempts);
   assertEquals(
-    invokedMessage,
-    testMessage,
-    "QueueMessage must be passed to invokeFunction",
+    typeof invokedMessage?.timestamp,
+    "number",
+    "QueueMessage must carry a delivery timestamp",
   );
   assertEquals(
     queueProvider.acks,

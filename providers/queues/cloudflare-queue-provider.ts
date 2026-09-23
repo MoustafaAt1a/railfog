@@ -13,6 +13,7 @@ import type {
 import {
   InternalError,
   PayloadTooLargeError,
+  UnavailableError,
   ValidationFailedError,
 } from "../../packages/errors/mod.ts";
 
@@ -301,13 +302,25 @@ export class CloudflareQueueProvider implements QueueProvider {
     const data = await this.parseJsonResponse<{
       success: boolean;
       result?: { id?: string; metadata?: unknown };
+      errors?: unknown[];
     }>(res, "send");
 
-    const messageId = (data.result && typeof data.result.id === "string")
-      ? data.result.id
-      : crypto.randomUUID();
+    // spec: contracts/queues.contract.md#Q-1 — a send the broker did not accept
+    // must surface as UNAVAILABLE, never fabricate an id the broker never gave
+    if (
+      data.success === false || !data.result ||
+      typeof data.result.id !== "string"
+    ) {
+      throw new UnavailableError(
+        `UNAVAILABLE: Queue send rejected by Cloudflare${
+          Array.isArray(data.errors) && data.errors.length > 0
+            ? `: ${JSON.stringify(data.errors).slice(0, 300)}`
+            : ""
+        }`,
+      );
+    }
 
-    return { id: messageId };
+    return { id: data.result.id };
   }
 
   // spec: contracts/queues.contract.md#Q-2 — API: sendBatch
@@ -356,13 +369,24 @@ export class CloudflareQueueProvider implements QueueProvider {
       result?: Array<{ id?: string }> | { metadata?: unknown };
     }>(res, "sendBatch");
 
-    if (Array.isArray(data.result)) {
-      return data.result.map((item) => ({
-        id: item.id ?? crypto.randomUUID(),
-      }));
+    // spec: contracts/queues.contract.md#Q-1 — reject the batch when the broker
+    // did not accept it; fabricated ids would ack messages that were never sent
+    if (data.success === false || !Array.isArray(data.result)) {
+      throw new UnavailableError(
+        "UNAVAILABLE: Queue batch send rejected by Cloudflare",
+      );
     }
-
-    return bodies.map(() => ({ id: crypto.randomUUID() }));
+    const ids: { id: string }[] = [];
+    for (let i = 0; i < data.result.length; i++) {
+      const item = data.result[i];
+      if (!item || typeof item.id !== "string") {
+        throw new UnavailableError(
+          `UNAVAILABLE: Queue batch send rejected by Cloudflare (no id for message ${i})`,
+        );
+      }
+      ids.push({ id: item.id });
+    }
+    return ids;
   }
 
   // spec: contracts/queues.contract.md#Q-3 — Redelivery model: visibility timeout and attempts counter

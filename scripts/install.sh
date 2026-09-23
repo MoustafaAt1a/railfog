@@ -107,7 +107,17 @@ printf "         ${CYAN}[i]${RESET} Platform:  ${TARGET_OS}-${TARGET_ARCH}\n"
 
 INSTALL_DIR="${RAILFOG_INSTALL_DIR:-$HOME/.railfog/bin}"
 BINARY_PATH="$INSTALL_DIR/rail"
-DOWNLOAD_URL="https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/dist/rail"
+# Per-arch release assets published by .github/workflows/release.yml; GitHub
+# redirects /releases/latest/download/<asset> to the newest tagged build
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64)  RELEASE_ASSET="rail-darwin-aarch64" ;;
+  Darwin-x86_64) RELEASE_ASSET="rail-darwin-x86_64" ;;
+  Linux-x86_64)  RELEASE_ASSET="rail-linux-x86_64" ;;
+  Linux-aarch64) RELEASE_ASSET="rail-linux-aarch64" ;;
+  *)             RELEASE_ASSET="" ;;
+esac
+RELEASE_URL="https://github.com/MoustafaAt1a/railfog/releases/latest/download/${RELEASE_ASSET}"
+FALLBACK_URL="https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/dist/rail"
 
 printf "         ${CYAN}[i]${RESET} Target:    ${BINARY_PATH}\n"
 printf "\n"
@@ -123,10 +133,29 @@ else
   mkdir -p "$INSTALL_DIR"
   INSTALL_OK="yes"
 
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$DOWNLOAD_URL" -o "$BINARY_PATH" 2>/dev/null || true
-  elif command -v wget >/dev/null 2>&1; then
-    wget -qO "$BINARY_PATH" "$DOWNLOAD_URL" 2>/dev/null || true
+  # Download to a temp file first and move atomically: a mid-transfer failure
+  # or captive-portal HTML response must never become the installed binary
+  TMP_BINARY="$BINARY_PATH.tmp.$$"
+  rm -f "$TMP_BINARY"
+  if [ -n "$RELEASE_ASSET" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "$RELEASE_URL" -o "$TMP_BINARY" 2>/dev/null || true
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO "$TMP_BINARY" "$RELEASE_URL" 2>/dev/null || true
+    fi
+  fi
+  if [ ! -s "$TMP_BINARY" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "$FALLBACK_URL" -o "$TMP_BINARY" 2>/dev/null || true
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO "$TMP_BINARY" "$FALLBACK_URL" 2>/dev/null || true
+    fi
+  fi
+
+  if [ -f "$TMP_BINARY" ] && [ -s "$TMP_BINARY" ]; then
+    mv "$TMP_BINARY" "$BINARY_PATH"
+  else
+    rm -f "$TMP_BINARY"
   fi
 
   # If direct binary not present, compile via Deno or auto-bootstrap Deno
@@ -144,11 +173,9 @@ else
       printf "         ${CYAN}[i]${RESET} Compiling RailFog via Deno...\n"
       deno install -g -A -f --config https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json -n rail https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts 2>/dev/null || INSTALL_OK="no"
     else
-      printf "         ${YELLOW}[!]${RESET} Creating bootstrap runner...\n"
-      cat << 'EOF' > "$BINARY_PATH"
-#!/bin/sh
-exec deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts "$@"
-EOF
+      printf "         ${YELLOW}[!]${RESET} Deno is required to install RailFog from source.\n"
+      printf "         ${YELLOW}[!]${RESET} Install Deno from https://deno.land and re-run this script.\n"
+      INSTALL_OK="no"
     fi
   fi
 
@@ -166,8 +193,28 @@ fi
 # ---------------------------------------------------------------------------
 # Verify Installation — Step 3/3
 # ---------------------------------------------------------------------------
-printf "  ${CYAN}[3/3]${RESET} ${DIM}━━━━━━━━►${RESET} Verifying installation ${DIM}.................${RESET} ${GREEN}done${RESET}\n"
+# spec: PLAT-19 — verification is a gate, not decoration: a failed install
+# must exit non-zero and say so
+VERIFY_OK="yes"
+if [ "$DRY_RUN" = "yes" ]; then
+  printf "  ${CYAN}[3/3]${RESET} ${DIM}━━━━━━━━►${RESET} Verifying installation ${DIM}.................${RESET} ${GRAY}skip${RESET}\n"
+elif [ ! -f "$BINARY_PATH" ] || [ ! -s "$BINARY_PATH" ]; then
+  VERIFY_OK="no"
+  printf "  ${CYAN}[3/3]${RESET} ${DIM}━━━━━━━━►${RESET} Verifying installation ${DIM}.................${RESET} ${RED}fail${RESET}\n"
+  printf "\n  ${RED}[-]${RESET} ${BOLD}Installed binary not found at $BINARY_PATH${RESET}\n\n"
+else
+  if "$BINARY_PATH" --version >/dev/null 2>&1; then
+    printf "  ${CYAN}[3/3]${RESET} ${DIM}━━━━━━━━►${RESET} Verifying installation ${DIM}.................${RESET} ${GREEN}done${RESET}\n"
+  else
+    VERIFY_OK="no"
+    printf "  ${CYAN}[3/3]${RESET} ${DIM}━━━━━━━━►${RESET} Verifying installation ${DIM}.................${RESET} ${RED}fail${RESET}\n"
+    printf "\n  ${RED}[-]${RESET} ${BOLD}Installed binary at $BINARY_PATH did not run correctly${RESET}\n\n"
+  fi
+fi
 printf "\n"
+if [ "$VERIFY_OK" = "no" ]; then
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # SHA-256 Integrity

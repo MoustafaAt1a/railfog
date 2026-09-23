@@ -3,6 +3,7 @@
 // spec: docs/adr/0001-isolation-provider-invocation-protocol.md#ADR-0001
 // spec: tasks/milestone-0.7-repo-consolidation/T-0706-deno-compute-provider-adapter.md
 
+import { generateUlid } from "../../packages/core/id/ulid.ts";
 import type {
   Artifact,
   ComputeProvider,
@@ -44,7 +45,10 @@ export class DenoComputeProvider implements ComputeProvider {
     invocation?: InvocationRequest,
   ): Promise<ExecutionResult> {
     const effectiveInvocation: InvocationRequest = invocation ?? {
-      requestId: "00000000000000000000000000",
+      // spec: docs/contracts/platform.contract.md#PLAT-14 — a defaulted
+      // invocation still gets a real per-call ULID; a shared constant breaks
+      // request-id correlation across all logs and metrics
+      requestId: generateUlid(),
       method: "GET",
       url: "http://localhost/",
       headers: {},

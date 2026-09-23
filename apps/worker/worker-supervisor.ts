@@ -9,7 +9,7 @@
  * - Q-3: Redelivery model (visibility timeout default 30000ms, unacked messages redeliver on compute error).
  * - Q-5: Retries & backoff (exponential backoff capped at 5000ms on fatal provider error).
  * - FN-2: Triggers targeting Functions (Queue triggers dispatch into Functions).
- * - FN-5: Resource limits (MVP defaults cpuMs: 1000, timeoutMs: 30000, memoryMb: 128).
+ * - FN-5: Resource limits (MVP defaults cpuMs: 200, timeoutMs: 30000, memoryMb: 128).
  * - FN-6: Isolation & warm-reuse rule (fresh context, unique Crockford Base32 ULID requestId, isolated headers per invocation, zero state bleeding).
  * - tasks/milestone-0.6-public-beta/T-0608-production-worker-supervisor.md
  */
@@ -26,6 +26,9 @@ import type {
 } from "../../primitives/compute/compute-provider.ts";
 import { generateUlid } from "../../packages/core/id/ulid.ts";
 
+// spec: contracts/queues.contract.md#Q-3 — max_receives before DLQ: 5
+const MAX_RECEIVES_BEFORE_DLQ = 5;
+
 export interface QueueWorkerTarget {
   queueName: string;
   targetFunction: string;
@@ -40,6 +43,9 @@ export interface WorkerSupervisorOptions {
   queues: QueueWorkerTarget[];
   queueProvider: QueueProvider;
   computeProvider: ComputeProvider;
+  // spec: contracts/queues.contract.md#Q-3 — optional dead-letter queue for
+  // poison messages that exhaust max_receives
+  dlqProvider?: QueueProvider;
   signal?: AbortSignal;
 }
 
@@ -298,9 +304,9 @@ class WorkerSupervisorImpl implements WorkerSupervisor {
       code: new Uint8Array(),
     };
 
-    // spec: contracts/functions.contract.md#FN-5 — Resource limits
+    // spec: contracts/functions.contract.md#FN-5 — Resource limits (cpu_ms default 200)
     const limits: Limits = {
-      cpuMs: 1000,
+      cpuMs: 200,
       timeoutMs: 30000,
       memoryMb: 128,
     };
@@ -311,9 +317,26 @@ class WorkerSupervisorImpl implements WorkerSupervisor {
       // spec: contracts/queues.contract.md#Q-2, Q-3 — Acknowledge message upon successful execution
       await queueProvider.ack(message.id);
     } catch (_computeError) {
-      // spec: contracts/queues.contract.md#Q-3 — Compute execution failure
-      // Do not acknowledge message when attempts < maxReceives (5)
-      // leaving it for visibility timeout expiration and redelivery.
+      // spec: contracts/queues.contract.md#Q-3 — Compute execution failure.
+      // Do not acknowledge when attempts < maxReceives (5): the message stays
+      // out for the visibility timeout and redelivers. A poison message that
+      // has exhausted max_receives is routed to the DLQ (when configured) and
+      // acknowledged, never redelivered indefinitely (Audit Finding #6).
+      if ((message.attempts ?? 1) >= MAX_RECEIVES_BEFORE_DLQ) {
+        const dlq = this.options.dlqProvider;
+        if (dlq) {
+          try {
+            await dlq.send(message.body);
+          } catch {
+            // DLQ delivery failure must not block source acknowledgment
+          }
+        }
+        try {
+          await queueProvider.ack(message.id);
+        } catch {
+          // Source ack failure guard: redelivery continues until acked
+        }
+      }
     }
   }
 }

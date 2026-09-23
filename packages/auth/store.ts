@@ -222,6 +222,17 @@ export class ApiKeyStore {
   }
 
   /**
+   * Returns true if at least one API key exists in any organization.
+   * Used by the control plane to gate anonymous bootstrap key creation:
+   * the first key may be minted without credentials, all later ones require
+   * an authenticated principal (PLAT-6).
+   */
+  async hasAnyKeys(): Promise<boolean> {
+    const res = await this.storage.list(["_auth", "orgs"], { limit: 1 });
+    return res.keys.length > 0;
+  }
+
+  /**
    * Lists all API key records for an organization.
    */
   async listKeys(orgId: string): Promise<StoredApiKeyRecord[]> {

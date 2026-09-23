@@ -412,9 +412,7 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       }
 
       if (fn.auth !== undefined) {
-        if (
-          fn.auth !== "bearer" && fn.auth !== "none" && fn.auth !== "apiKey"
-        ) {
+        if (fn.auth !== "bearer" && fn.auth !== "none") {
           errors.push({
             severity: "error",
             code: "VALIDATION_FAILED",
@@ -630,13 +628,11 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
           }
         }
 
+        // relative() is the single source of truth for containment: it
+        // returns a "../" prefix (or an absolute path across drives) for
+        // escapes, and never false-positives when normRoot is a drive root
         const rel = relative(normRoot, resolvedPath);
-        const isOutside = rel.startsWith("..") ||
-          rel === ".." ||
-          isAbsolute(rel) ||
-          (!resolvedPath.startsWith(normRoot + "/") &&
-            !resolvedPath.startsWith(normRoot + "\\") &&
-            resolvedPath !== normRoot);
+        const isOutside = rel.startsWith("..") || isAbsolute(rel);
 
         if (isOutside) {
           errors.push({
@@ -694,7 +690,15 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       const triggers = typeof fn.triggers === "object" && fn.triggers !== null
         ? (fn.triggers as Record<string, unknown>)
         : undefined;
-      const isBackground = Boolean(triggers?.queue || triggers?.schedule);
+      // Shorthand declarations (type = "queue_consumer"/"cron", top-level
+      // queue/schedule keys) normalize to triggers at deploy time, so the
+      // FN-5 background ceiling must recognize them too
+      const fnAny = fn as unknown as Record<string, unknown>;
+      const isBackground = Boolean(
+        triggers?.queue || triggers?.schedule ||
+          fnAny.type === "queue_consumer" || fnAny.type === "cron" ||
+          fnAny.queue || fnAny.schedule,
+      );
 
       if (timeoutMs !== undefined) {
         if (

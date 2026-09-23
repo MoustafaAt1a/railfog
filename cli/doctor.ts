@@ -30,17 +30,16 @@ export interface DoctorResult {
 }
 
 /**
- * Runs a micro-benchmark measuring local V8 isolate initialization latency.
+ * Measures CLI-process function-compilation latency as an ESTIMATE of isolate
+ * startup cost. This is not a real isolate boot (rule 8: report only what was
+ * actually measured), so the result is labeled as an estimate downstream.
  */
 async function benchmarkIsolateStartup(): Promise<number> {
   const start = performance.now();
-  // Simulate minimal isolate context initialization
   const fn = new Function("req", "ctx", "return { ok: true };");
   fn({}, {});
   await Promise.resolve();
-  const elapsed = performance.now() - start;
-  // Bound within realistic sub-millisecond range
-  return Math.max(0.2, Math.min(elapsed, 2.0));
+  return performance.now() - start;
 }
 
 /**
@@ -74,12 +73,14 @@ export async function runDoctor(
   // Track Signal 1: V8 Isolate Engine
   const denoVer = Deno.version?.deno ?? "2.x";
   const v8Ver = Deno.version?.v8 ?? "12.x";
+  // Derive the signal from the measurement instead of asserting GREEN
+  const isolateOk = isolateBootMs < 50;
   signals.push({
     id: 1,
     name: "SIGNAL 1: V8 Isolate Engine",
-    status: "active",
-    statusText: "[GREEN - ACTIVE]",
-    detail: `Deno v${denoVer} (V8 ${v8Ver}) • Isolate cold start: < ${
+    status: isolateOk ? "active" : "warn",
+    statusText: isolateOk ? "[GREEN - ACTIVE]" : "[AMBER - SLOW]",
+    detail: `Deno v${denoVer} (V8 ${v8Ver}) • fn-compile estimate: ${
       isolateBootMs.toFixed(2)
     }ms`,
   });

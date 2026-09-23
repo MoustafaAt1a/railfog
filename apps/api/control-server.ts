@@ -45,6 +45,7 @@ import type {
 import type { StateBackupArchive } from "../../packages/core/backup/archive-schema.ts";
 import { renderLoginPageHtml } from "./login-page.ts";
 import type { ApiKeyStore } from "../../packages/auth/store.ts";
+import type { IdentityContext } from "../../packages/auth/verifier.ts";
 import {
   type AuthResult,
   createAuthMiddleware,
@@ -365,7 +366,6 @@ export async function startControlServer(
         allowAnonymousPaths: [
           "/healthz",
           "/login",
-          "/v1/auth/keys",
           "/v1/auth/verify",
         ],
       })
@@ -518,17 +518,51 @@ export async function startControlServer(
             requestId,
           );
         }
+
+        // spec: contracts/platform.contract.md#PLAT-6 — Anonymous key creation is
+        // bootstrap-only: allowed while the store has zero keys; afterwards the
+        // caller must be authenticated and the key is scoped to their org.
+        const bootstrapAllowed = !(await options.apiKeyStore.hasAnyKeys());
+        let callerIdentity: IdentityContext | null = null;
+        if (!bootstrapAllowed) {
+          if (!authMiddleware) {
+            // Fail closed: no auth mechanism configured yet keys exist
+            throw new PermissionDeniedError(
+              "PERMISSION_DENIED: Authentication required to create API keys (PLAT-6, PLAT-12)",
+              requestId,
+            );
+          }
+          const authRes = await authMiddleware(req, requestId);
+          if (!authRes.ok) {
+            return authRes.response;
+          }
+          callerIdentity = authRes.context;
+        }
+
         const body = await parseJsonBody(req);
-        const orgId = typeof body.orgId === "string" && body.orgId.trim() !== ""
+        const orgId = callerIdentity
+          ? callerIdentity.orgId
+          : typeof body.orgId === "string" && body.orgId.trim() !== ""
           ? body.orgId.trim()
           : DEFAULT_ORG_ID;
         const name = typeof body.name === "string" && body.name.trim() !== ""
           ? body.name.trim()
           : "cli-key";
-        const projectId =
+        const requestedProjectId =
           typeof body.projectId === "string" && body.projectId.trim() !== ""
             ? body.projectId.trim()
             : undefined;
+        // Project-scoped tokens cannot mint keys for a different project
+        if (
+          callerIdentity?.projectId && requestedProjectId &&
+          requestedProjectId !== callerIdentity.projectId
+        ) {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Token is scoped to project '${callerIdentity.projectId}' and cannot create keys for '${requestedProjectId}' (PLAT-6)`,
+            requestId,
+          );
+        }
+        const projectId = callerIdentity?.projectId ?? requestedProjectId;
 
         const result = await options.apiKeyStore.createKey({
           orgId,

@@ -49,6 +49,13 @@ function sanitizeError(msg: string, secret?: string): string {
  */
 export async function systemOpenBrowser(url: string): Promise<boolean> {
   try {
+    // Shell-metacharacter guard: the URL may embed config-provided values, and
+    // the Windows launchers re-parse it inside a shell. Only plain http(s)
+    // URLs without shell-active characters are launched.
+    if (!/^https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$'()*+,;=%]+$/.test(url)) {
+      return false;
+    }
+
     let cmd: string;
     let args: string[];
 

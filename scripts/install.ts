@@ -4,6 +4,7 @@
 
 // deno-lint-ignore no-import-prefix
 import { fromFileUrl, join, resolve } from "jsr:@std/path@0.224.0";
+import { ValidationFailedError } from "../packages/errors/mod.ts";
 import { CLI_VERSION } from "../cli/version.ts";
 
 /**
@@ -111,7 +112,21 @@ export function resolveInstallPaths(options: InstallerOptions): {
     installDir = Deno.env.get("RAILFOG_INSTALL_DIR")!;
   } else {
     const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "";
+    if (home.trim() === "") {
+      // An empty HOME would install into ./.deno of an arbitrary CWD — fail
+      // loudly instead of silently scattering a binary
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Cannot determine home directory — set HOME (POSIX) or USERPROFILE (Windows), or pass --root.",
+      );
+    }
     installDir = join(home, ".deno");
+  }
+  // Env-derived paths flow into printed shell commands and spawns — apply the
+  // same shell-metacharacter guard as --root
+  if (/[&|;`$><]/.test(installDir)) {
+    throw new ValidationFailedError(
+      `VALIDATION_FAILED: Install directory contains shell metacharacters: "${installDir}"`,
+    );
   }
 
   const binDir = join(installDir, "bin");
@@ -182,7 +197,16 @@ export async function runInstaller(options: InstallerOptions): Promise<{
     };
   }
 
-  const paths = resolveInstallPaths(options);
+  let paths: ReturnType<typeof resolveInstallPaths>;
+  try {
+    paths = resolveInstallPaths(options);
+  } catch (err) {
+    return {
+      ok: false,
+      installedPath: "",
+      output: err instanceof Error ? err.message : String(err),
+    };
+  }
   const isLocal = Boolean(options.local);
   let tempDir: string | undefined;
 
@@ -220,12 +244,42 @@ export async function runInstaller(options: InstallerOptions): Promise<{
         };
       }
 
-      const denoJsonUrl =
-        `https://raw.githubusercontent.com/${repo}/${downloadRef}/deno.json`;
+      // Supply-chain hardening (PLAT-3 "Sign artifact" posture): when the
+      // requested ref is a mutable branch, resolve it to a commit SHA so the
+      // downloaded config and entrypoint are pinned to one immutable revision.
+      let pinnedRef = downloadRef;
+      if (!options.commit && /^[a-zA-Z0-9_.-]+$/.test(downloadRef)) {
+        try {
+          const apiRes = await fetch(
+            `https://api.github.com/repos/${repo}/commits/${downloadRef}`,
+            {
+              headers: {
+                "User-Agent": "RailFog-CLI",
+                "Accept": "application/vnd.github.v3+json",
+              },
+              signal: AbortSignal.timeout(6_000),
+            },
+          );
+          if (apiRes.ok) {
+            const data = await apiRes.json() as { sha?: string };
+            if (
+              typeof data.sha === "string" && /^[0-9a-f]{40}$/.test(data.sha)
+            ) {
+              pinnedRef = data.sha;
+              options.commit = data.sha;
+            }
+          }
+        } catch {
+          // Unresolvable (offline/rate-limited): proceed with the ref as-is
+        }
+      }
+
+      const pinnedDenoJsonUrl =
+        `https://raw.githubusercontent.com/${repo}/${pinnedRef}/deno.json`;
 
       let response: Response;
       try {
-        response = await fetch(denoJsonUrl, {
+        response = await fetch(pinnedDenoJsonUrl, {
           signal: AbortSignal.timeout(10_000),
         });
       } catch (err) {
@@ -251,7 +305,7 @@ export async function runInstaller(options: InstallerOptions): Promise<{
       configPath = join(tempDir, "deno.json");
       await Deno.writeTextFile(configPath, denoJsonContent);
       target =
-        `https://raw.githubusercontent.com/${repo}/${downloadRef}/cli/main.ts`;
+        `https://raw.githubusercontent.com/${repo}/${pinnedRef}/cli/main.ts`;
     } else {
       // spec: contracts/platform.contract.md#PLAT-19 — Local repository resolution
       let localRootDir = import.meta.url.startsWith("file:")

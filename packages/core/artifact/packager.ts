@@ -25,6 +25,11 @@ export interface Manifest {
     kv?: string[];
     objects?: string[];
     queues?: string[];
+    // spec: docs/contracts/platform.contract.md#PLAT-6 — the [permissions]
+    // declaration also covers secret names and network hosts; only names
+    // travel (PLAT-15: values resolve at invocation time from the store)
+    secrets?: string[];
+    network?: string[];
   };
   limits: {
     cpu_ms: number;
@@ -59,7 +64,13 @@ export async function packageFunctionArtifact(
   entrypoint: string,
   codeBytes: Uint8Array,
   options?: {
-    permissions?: { kv?: string[]; objects?: string[]; queues?: string[] };
+    permissions?: {
+      kv?: string[];
+      objects?: string[];
+      queues?: string[];
+      secrets?: string[];
+      network?: string[];
+    };
     limits?: { cpu_ms?: number; timeout_ms?: number; memory_mb?: number };
     lockfileBytes?: Uint8Array;
   },
@@ -126,6 +137,12 @@ export async function packageFunctionArtifact(
         : {}),
       ...(options?.permissions?.queues
         ? { queues: [...options.permissions.queues] }
+        : {}),
+      ...(options?.permissions?.secrets
+        ? { secrets: [...options.permissions.secrets] }
+        : {}),
+      ...(options?.permissions?.network
+        ? { network: [...options.permissions.network] }
         : {}),
     },
     limits: {

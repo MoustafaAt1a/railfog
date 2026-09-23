@@ -284,7 +284,9 @@ export function startCallbackServer(
     port,
     callbackUrl,
     state,
-    waitForToken(): Promise<{ token: string; orgId?: string }> {
+    waitForToken(): Promise<
+      { token: string; orgId?: string; keyName?: string }
+    > {
       return tokenPromise;
     },
     close,

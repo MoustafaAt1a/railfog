@@ -1,6 +1,7 @@
 // spec: contracts/platform.contract.md#PLAT-19 — Repository structure & CLI distribution
 // cli/uninstall.ts — RailFog CLI self-removal
 
+import { railfogSourceUrl } from "./version.ts";
 import { join } from "@std/path";
 import { resolveInstallPaths } from "../scripts/install.ts";
 import { getDefaultConfigPath } from "./auth-config.ts";
@@ -80,12 +81,14 @@ export async function runUninstall(): Promise<UninstallResult> {
   const removeSpinner = createTrackSpinner();
   removeSpinner.start("Removing CLI binary and metadata...");
 
+  let removalFailures = 0;
   // Primary executable
   try {
     await Deno.remove(paths.fullBinaryPath);
     removedFiles.push(paths.fullBinaryPath);
-  } catch {
-    // File not present
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) removalFailures++;
+    // File not present is fine
   }
 
   // Windows counterpart executable/script shims
@@ -104,7 +107,8 @@ export async function runUninstall(): Promise<UninstallResult> {
         if (!removedFiles.includes(shim)) {
           removedFiles.push(shim);
         }
-      } catch {
+      } catch (err) {
+        if (!(err instanceof Deno.errors.NotFound)) removalFailures++;
         // Optional shim
       }
     }
@@ -114,7 +118,8 @@ export async function runUninstall(): Promise<UninstallResult> {
   try {
     await Deno.remove(metaPath);
     removedFiles.push(metaPath);
-  } catch {
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) removalFailures++;
     // Optional metadata
   }
 
@@ -173,7 +178,7 @@ export async function runUninstall(): Promise<UninstallResult> {
       `${colors.dim("PLATFORM:")}    ${Deno.build.os}-${Deno.build.arch}`,
       `${colors.dim("REINSTALL:")}   ${
         colors.accent(
-          "deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts",
+          `deno run -A ${railfogSourceUrl("scripts/install.ts")}`,
         )
       }`,
     ]
@@ -185,7 +190,7 @@ export async function runUninstall(): Promise<UninstallResult> {
       `${colors.dim("TARGET:")}      ${colors.dim(paths.fullBinaryPath)}`,
       `${colors.dim("INSTALL:")}     ${
         colors.accent(
-          "deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts",
+          `deno run -A ${railfogSourceUrl("scripts/install.ts")}`,
         )
       }`,
     ];
@@ -194,7 +199,13 @@ export async function runUninstall(): Promise<UninstallResult> {
   rightLines.push("");
   rightLines.push(colors.bold("Hygiene & Clean-Room Audit:"));
   rightLines.push(
-    `  ${glyphs.success} ${colors.dim("Binary Executables:")}  Removed cleanly`,
+    removalFailures > 0
+      ? `  ${glyphs.fail} ${
+        colors.dim("Binary Executables:")
+      }  ${removalFailures} file(s) could not be removed (locked or permission denied)`
+      : `  ${glyphs.success} ${
+        colors.dim("Binary Executables:")
+      }  Removed cleanly`,
   );
   rightLines.push(
     `  ${glyphs.success} ${

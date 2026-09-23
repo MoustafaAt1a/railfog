@@ -751,8 +751,13 @@ Deno.test({
           store: "docs",
           key: "confidential.txt",
           sizeBytes: 25,
-          sha256:
-            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+          // Self-consistent hash: this test exercises tenant re-scoping, and
+          // inline payload integrity is verified separately by OBJ-4 checks
+          sha256: encodeHex(
+            await computeSha256(
+              new TextEncoder().encode("attacker modified document"),
+            ),
+          ),
           integrity: "sha256-uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=",
           dataBase64: encodeBase64(
             new TextEncoder().encode("attacker modified document"),

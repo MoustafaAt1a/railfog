@@ -61,9 +61,11 @@ export async function saveCliConfig(
   }
 
   const payload = JSON.stringify(config, null, 2);
-  await Deno.writeTextFile(path, payload);
+  // Owner-only mode set atomically at creation (PLAT-15) — writing first and
+  // chmod-ing later leaves the token briefly world-readable on POSIX
+  await Deno.writeTextFile(path, payload, { mode: 0o600 });
 
-  // Restrict permissions to owner only on POSIX systems (PLAT-15)
+  // Restrict permissions on pre-existing files written before this mode existed
   if (Deno.build.os !== "windows") {
     try {
       await Deno.chmod(path, 0o600);

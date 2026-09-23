@@ -30,11 +30,15 @@ import { generateUlid } from "../../packages/core/id/ulid.ts";
 import {
   InternalError,
   RailFogError,
-  type RailFogErrorCode,
+  statusFromErrorCode,
   TimeoutError,
   toErrorResponseBody,
   ValidationFailedError,
 } from "../../packages/errors/mod.ts";
+
+// spec: contracts/queues.contract.md#Q-2 — delay <= 900 (15 min); beyond that,
+// a schedule trigger (FN-2) is the correct primitive
+const MAX_QUEUE_DELAY_SECONDS = 900;
 import {
   CALL_DEPTH_HEADER,
   createInvocationTracker,
@@ -94,53 +98,6 @@ interface WarmInstance {
   filePath: string;
 }
 
-// Known organization identifier candidates used across tests and default configs
-const KNOWN_ORG_CANDIDATES = [
-  "org-test",
-  "org-sec",
-  "local-org",
-  "default",
-  "org_1",
-  "org-1",
-  "org_2",
-  "org-2",
-  "org_a",
-  "org_b",
-  "acme",
-  "acme_corp",
-  "tenant_alpha",
-  "tenant_beta",
-  "corp_x",
-  "test-org",
-  "railfog",
-];
-
-// spec: docs/contracts/platform.contract.md#PLAT-12 — HTTP status mapping for PLAT-12 error taxonomy
-function statusFromErrorCode(code: RailFogErrorCode): number {
-  switch (code) {
-    case "RESOURCE_NOT_FOUND":
-      return 404;
-    case "PERMISSION_DENIED":
-      return 403;
-    case "VALIDATION_FAILED":
-      return 400;
-    case "RATE_LIMITED":
-    case "CALL_DEPTH_EXCEEDED":
-      return 429;
-    case "TIMEOUT":
-      return 504;
-    case "PAYLOAD_TOO_LARGE":
-      return 413;
-    case "CONFLICT":
-      return 409;
-    case "UNAVAILABLE":
-      return 503;
-    case "INTERNAL":
-    default:
-      return 500;
-  }
-}
-
 /**
  * Performs case-insensitive header lookup.
  */
@@ -188,45 +145,79 @@ function createMockKvBinding(
     ];
   };
 
-  const builder: KVAtomicBuilder = {
-    check(_key: string[], _version: number) {
-      tracker.recordKvOp();
-      return this;
-    },
-    set(key: string[], value: unknown, opts?: { ttl?: number }) {
-      tracker.recordKvOp();
-      store.set(normalizeKey(key), value);
-      if (redisProvider) {
-        redisProvider.set(toRedisKey(key), value, opts).catch(() => {});
-      }
-      return this;
-    },
-    delete(key: string[]) {
-      tracker.recordKvOp();
-      store.delete(normalizeKey(key));
-      if (redisProvider) {
-        redisProvider.delete(toRedisKey(key)).catch(() => {});
-      }
-      return this;
-    },
-    commit() {
-      return Promise.resolve({ ok: true });
-    },
+  // spec: contracts/kv.contract.md#KV-3 — optimistic concurrency state.
+  // Versions live beside the values so check/commit can detect CAS conflicts
+  // even when the caller holds a stale version from a previous read.
+  const versions = new Map<string, number>();
+  const versionOf = (normKey: string): number => versions.get(normKey) ?? 0;
+
+  // spec: contracts/kv.contract.md#KV-2/KV-3 — every atomic() call is an
+  // independent transaction with its own buffered checks and mutations.
+  const newAtomicBuilder = (): KVAtomicBuilder => {
+    const pendingChecks: { normKey: string; expectedVersion: number }[] = [];
+    const pendingMutations: {
+      kind: "set" | "delete";
+      normKey: string;
+      value?: unknown;
+    }[] = [];
+
+    return {
+      check(key: string[], expectedVersion: number) {
+        tracker.recordKvOp();
+        pendingChecks.push({ normKey: normalizeKey(key), expectedVersion });
+        return this;
+      },
+      set(key: string[], value: unknown, opts?: { ttl?: number }) {
+        tracker.recordKvOp();
+        pendingMutations.push({
+          kind: "set",
+          normKey: normalizeKey(key),
+          value,
+        });
+        if (redisProvider) {
+          redisProvider.set(toRedisKey(key), value, opts).catch(() => {});
+        }
+        return this;
+      },
+      delete(key: string[]) {
+        tracker.recordKvOp();
+        pendingMutations.push({ kind: "delete", normKey: normalizeKey(key) });
+        if (redisProvider) {
+          redisProvider.delete(toRedisKey(key)).catch(() => {});
+        }
+        return this;
+      },
+      commit() {
+        // spec: contracts/kv.contract.md#KV-3 — write succeeds iff every checked
+        // key's stored version equals the expected version; conflict is reported
+        // as { ok: false } so callers re-read and retry.
+        for (const c of pendingChecks) {
+          if (versionOf(c.normKey) !== c.expectedVersion) {
+            return Promise.resolve({ ok: false });
+          }
+        }
+        for (const m of pendingMutations) {
+          if (m.kind === "set") {
+            store.set(m.normKey, m.value);
+          } else {
+            store.delete(m.normKey);
+          }
+          versions.set(m.normKey, versionOf(m.normKey) + 1);
+        }
+        const version = pendingMutations.length > 0
+          ? versionOf(pendingMutations[pendingMutations.length - 1].normKey)
+          : undefined;
+        return Promise.resolve({ ok: true, version });
+      },
+    };
   };
 
   return {
     async get(key: string[] | string) {
       tracker.recordKvOp();
-      if (redisProvider) {
-        try {
-          const val = await redisProvider.get(toRedisKey(key));
-          if (val !== null && val !== undefined) {
-            return val;
-          }
-        } catch {
-          // fallback to memoryStore
-        }
-      }
+      // The in-memory store is authoritative in local mode; the optional Redis
+      // layer is a replica whose writes land asynchronously, so it is only a
+      // fallback on miss — never a source of stale reads.
       const normKey = normalizeKey(key);
       if (store.has(normKey)) {
         return store.get(normKey) ?? null;
@@ -234,11 +225,23 @@ function createMockKvBinding(
       if (typeof key === "string" && store.has(key)) {
         return store.get(key) ?? null;
       }
+      if (redisProvider) {
+        try {
+          const val = await redisProvider.get(toRedisKey(key));
+          if (val !== null && val !== undefined) {
+            return val;
+          }
+        } catch {
+          // miss
+        }
+      }
       return null;
     },
     async set(key: string[] | string, value: unknown, opts?: { ttl?: number }) {
       tracker.recordKvOp();
-      store.set(normalizeKey(key), value);
+      const normKey = normalizeKey(key);
+      store.set(normKey, value);
+      versions.set(normKey, versionOf(normKey) + 1);
       if (redisProvider) {
         try {
           await redisProvider.set(toRedisKey(key), value, opts);
@@ -249,7 +252,10 @@ function createMockKvBinding(
     },
     async delete(key: string[] | string) {
       tracker.recordKvOp();
-      store.delete(normalizeKey(key));
+      const normKey = normalizeKey(key);
+      store.delete(normKey);
+      // spec: contracts/kv.contract.md#KV-3 — non-existent key has version 0
+      versions.set(normKey, 0);
       if (redisProvider) {
         try {
           await redisProvider.delete(toRedisKey(key));
@@ -260,7 +266,28 @@ function createMockKvBinding(
     },
     async list(prefix: string[] | string) {
       tracker.recordKvOp();
-      if (redisProvider) {
+      const keys: {
+        key: string[];
+        value: unknown;
+        version: number;
+      }[] = [];
+      const prefixArr = Array.isArray(prefix) ? prefix : [prefix];
+      for (const [kStr, val] of store.entries()) {
+        try {
+          const parsed = JSON.parse(kStr) as string[];
+          if (
+            Array.isArray(parsed) &&
+            prefixArr.every((seg, idx) => parsed[idx] === seg)
+          ) {
+            // spec: contracts/kv.contract.md#KV-2/KV-3 — entries carry the
+            // version the SDK KVBinding type promises for CAS check() calls
+            keys.push({ key: parsed, value: val, version: versionOf(kStr) });
+          }
+        } catch {
+          // ignore non-json keys
+        }
+      }
+      if (keys.length === 0 && redisProvider) {
         try {
           const res = await redisProvider.list(toRedisKey(prefix));
           const resEntries = (res as Record<string, unknown> | null)?.entries;
@@ -270,7 +297,7 @@ function createMockKvBinding(
             ) => ({
               key: Array.isArray(e.key) ? e.key.slice(2) : e.key,
               value: e.value,
-              version: e.version,
+              version: e.version ?? 0,
             }));
             return { entries: stripped, keys: stripped };
           }
@@ -278,25 +305,10 @@ function createMockKvBinding(
           // fallback
         }
       }
-      const keys: { key: string[]; value: unknown }[] = [];
-      const prefixArr = Array.isArray(prefix) ? prefix : [prefix];
-      for (const [kStr, val] of store.entries()) {
-        try {
-          const parsed = JSON.parse(kStr) as string[];
-          if (
-            Array.isArray(parsed) &&
-            prefixArr.every((seg, idx) => parsed[idx] === seg)
-          ) {
-            keys.push({ key: parsed, value: val });
-          }
-        } catch {
-          // ignore non-json keys
-        }
-      }
       return { keys, entries: keys };
     },
     atomic() {
-      return builder;
+      return newAtomicBuilder();
     },
   } as unknown as KVBinding;
 }
@@ -468,13 +480,24 @@ function createMockQueueBinding(
         delay = (arg2 as { delay?: number }).delay ?? 0;
       }
 
+      // spec: contracts/queues.contract.md#Q-2 — delay <= 900s; longer delays
+      // belong to a schedule trigger (FN-2), validated not silently clamped
+      if (
+        typeof delay !== "number" || !Number.isFinite(delay) || delay < 0 ||
+        delay > MAX_QUEUE_DELAY_SECONDS
+      ) {
+        return Promise.reject(
+          new ValidationFailedError(
+            "VALIDATION_FAILED: Delay must be a non-negative number <= 900s. Use a schedule trigger instead per FN-2",
+          ),
+        );
+      }
+
       if (queueDispatcher && projectId) {
         queueMicrotask(async () => {
           try {
             if (delay > 0) {
-              await new Promise((r) =>
-                setTimeout(r, Math.min(delay * 1000, 900000))
-              );
+              await new Promise((r) => setTimeout(r, delay * 1000));
             }
             await queueDispatcher(queue, body, projectId, id);
           } catch (e) {
@@ -521,7 +544,6 @@ export class LocalIsolationProvider implements IsolationProvider {
   private readonly warmInstances = new Map<string, WarmInstance>();
   private readonly tempDir: string;
   private fileGeneration = 0;
-  private readonly trackedOrgs = new Set<string>(KNOWN_ORG_CANDIDATES);
   // Persistent tenant-isolated key-value stores per PLAT-7
   private readonly projectKvStores = new Map<string, Map<string, unknown>>();
   private redisProvider: KVProvider | null = null;
@@ -554,24 +576,6 @@ export class LocalIsolationProvider implements IsolationProvider {
           this.redisProvider = null;
         }
       }
-    }
-
-    // Track any dynamic secret store operations to capture custom org identifiers
-    if (
-      this.secretStore &&
-      typeof (this.secretStore as unknown as Record<string, unknown>).set ===
-        "function"
-    ) {
-      const origSet = this.secretStore.set.bind(this.secretStore);
-      this.secretStore.set = async (
-        orgId: string,
-        projectId: string,
-        name: string,
-        value: string,
-      ) => {
-        this.trackedOrgs.add(orgId);
-        return await origSet(orgId, projectId, name, value);
-      };
     }
   }
 
@@ -822,68 +826,37 @@ export class LocalIsolationProvider implements IsolationProvider {
 
   /**
    * Resolves secrets from SecretStore for this project and tenant.
-   * Strictly scopes to orgId when provided to prevent cross-tenant secret leakage.
-   * Spec-anchor: docs/contracts/platform.contract.md#PLAT-15, PLAT-7.
+   * Strictly scoped: only secrets stored under the resolved (orgId, projectId)
+   * pair, and — when the artifact declares permissions.secrets (PLAT-6) — only
+   * those names are exposed to the Function.
+   * Spec-anchor: docs/contracts/platform.contract.md#PLAT-15, PLAT-6, PLAT-7.
    */
   private async resolveSecrets(
     orgId: string | undefined,
     projectId: string,
+    allowedSecretNames?: string[],
   ): Promise<Record<string, string>> {
-    if (!this.secretStore) {
+    // spec: docs/contracts/platform.contract.md#PLAT-7 — no org context, no secrets
+    if (!this.secretStore || !orgId) {
       return {};
     }
 
     const secrets: Record<string, string> = {};
-
-    // If orgId is explicitly provided or configured, query ONLY this orgId (PLAT-7)
-    if (orgId) {
-      try {
-        const names = await this.secretStore.listNames(orgId, projectId);
-        if (names && names.length > 0) {
-          for (const name of names) {
-            const val = await this.secretStore.get(orgId, projectId, name);
-            if (val !== null) {
-              secrets[name] = val;
-            }
-          }
+    try {
+      const names = await this.secretStore.listNames(orgId, projectId);
+      for (const name of names) {
+        if (allowedSecretNames && !allowedSecretNames.includes(name)) {
+          continue;
         }
-      } catch {
-        // Ignore validation errors from invalid orgId
-      }
-      return secrets;
-    }
-
-    // Only when orgId is completely undefined, fallback to candidate search in local mode
-    const candidates = new Set<string>();
-    candidates.add(projectId);
-    for (const org of this.trackedOrgs) {
-      candidates.add(org);
-    }
-
-    for (const candidateOrgId of candidates) {
-      try {
-        const names = await this.secretStore.listNames(
-          candidateOrgId,
-          projectId,
-        );
-        if (names && names.length > 0) {
-          for (const name of names) {
-            const val = await this.secretStore.get(
-              candidateOrgId,
-              projectId,
-              name,
-            );
-            if (val !== null) {
-              secrets[name] = val;
-            }
-          }
-          break; // Found matching tenant namespace
+        const val = await this.secretStore.get(orgId, projectId, name);
+        if (val !== null) {
+          secrets[name] = val;
         }
-      } catch {
-        // Ignore validation errors from mismatching candidate org IDs
       }
+    } catch {
+      // Invalid identifiers or store failures resolve to no secrets (PLAT-6:
+      // absence of a binding is unaddressable, never a fallback scan)
     }
-
     return secrets;
   }
 
@@ -945,8 +918,24 @@ export class LocalIsolationProvider implements IsolationProvider {
       throw err;
     }
 
-    // 5. Dynamic Secret Resolution (PLAT-15, FN-6 fresh per invocation)
-    const secretsMap = await this.resolveSecrets(meta.orgId, meta.project);
+    // 5. Dynamic Secret Resolution (PLAT-15, FN-6 fresh per invocation).
+    // Scoped to the Function's declared permissions.secrets when the manifest
+    // carries them (PLAT-6); every name in the namespace otherwise.
+    const artObj = artifact as unknown as Record<string, unknown>;
+    const declaredPermissions = artObj.permissions as
+      | Record<string, unknown>
+      | undefined;
+    const declaredSecretNames = declaredPermissions?.secrets;
+    const allowedSecretNames = Array.isArray(declaredSecretNames)
+      ? (declaredSecretNames as unknown[]).filter(
+        (n): n is string => typeof n === "string",
+      )
+      : undefined;
+    const secretsMap = await this.resolveSecrets(
+      meta.orgId,
+      meta.project,
+      allowedSecretNames,
+    );
     let activeEnv = true;
     const envBinding: EnvBinding = {
       get(key: string): string | undefined {
@@ -957,7 +946,6 @@ export class LocalIsolationProvider implements IsolationProvider {
 
     // 6. Build fresh RailFogContext (FN-4, FN-6)
     const deadline = Date.now() + limits.timeoutMs;
-    const artObj = artifact as unknown as Record<string, unknown>;
     const customContext = (artObj.context ?? artObj.bindings) as
       | Record<string, unknown>
       | undefined;
@@ -1101,13 +1089,12 @@ export class LocalIsolationProvider implements IsolationProvider {
         0,
         Math.round(performance.now() - startWallClock),
       );
-      const cpuTimeMs = Math.min(
-        wallClockMs,
-        limits.cpuMs > 0 ? limits.cpuMs - 1 : 0,
-      );
-
-      // Verify CPU ceiling
-      killEnforcer.checkCpuLimit(cpuTimeMs);
+      // spec: docs/contracts/platform.contract.md#PLAT-17 — LocalIsolation is the
+      // trusted-dev column ("Isolation: none"): per-isolate CPU time is not
+      // measurable in-process, so wall clock is reported as the honest proxy and
+      // cpu_ms enforcement is delegated to the process/microVM isolation layers
+      // (PLAT-4). Never fabricate a value below the limit.
+      const cpuTimeMs = wallClockMs;
 
       // Extract response payload
       const responseHeaders: Record<string, string> = {};

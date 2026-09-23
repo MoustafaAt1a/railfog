@@ -468,6 +468,40 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
     // spec: docs/contracts/platform.contract.md#PLAT-10 — Calculate deterministic itemized cost
     const cost = calculateProjectCost(usage, options.rates);
 
+    // spec: tasks/milestone-0.6-public-beta/T-0607-cli-usage-cost-reporting.md — AC:
+    // -w/--watch re-renders the report on an interval until interrupted
+    if (options.watch) {
+      const WATCH_INTERVAL_MS = 5000;
+      console.log(
+        `Watching usage for '${cost.projectId}' — refreshing every ${
+          WATCH_INTERVAL_MS / 1000
+        }s (Ctrl+C to stop)`,
+      );
+      const render = () => {
+        const refreshed = calculateProjectCost(usage, options.rates);
+        console.log(
+          `
+──────── ${new Date().toLocaleTimeString()} ────────
+` +
+            formatUsageReport(refreshed, options.format ?? "pretty"),
+        );
+      };
+      render();
+      const timer = setInterval(render, WATCH_INTERVAL_MS);
+      const stop = () => {
+        clearInterval(timer);
+        console.log("Usage watch stopped.");
+        Deno.exit(0);
+      };
+      try {
+        Deno.addSignalListener("SIGINT", stop);
+        Deno.addSignalListener("SIGTERM", stop);
+      } catch {
+        // Signal listeners unsupported on this platform; Ctrl+C still exits
+      }
+      return 0; // unreachable in practice — the process stays alive on timers
+    }
+
     // spec: tasks/milestone-0.6-public-beta/T-0607-cli-usage-cost-reporting.md#AC1, AC2 — Output report
     console.log(formatUsageReport(cost, options.format ?? "pretty"));
     if (options.format !== "json") {
@@ -484,9 +518,10 @@ export async function runUsage(options: UsageCliOptions = {}): Promise<number> {
     }
     return 0;
   } catch (err) {
-    // spec: docs/contracts/platform.contract.md#PLAT-12 — Error containment
+    // spec: docs/contracts/platform.contract.md#PLAT-12 — unclassified faults
+    // are INTERNAL; VALIDATION_FAILED is reserved for schema validation
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`Error [VALIDATION_FAILED]: ${message}`);
+    console.error(`Error [INTERNAL]: ${message}`);
     return 1;
   }
 }

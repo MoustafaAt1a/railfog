@@ -1651,9 +1651,11 @@ export default api({
         const listJson = await listRes.json();
         assert(Array.isArray(listJson.keys));
 
-        const foundKey = listJson.keys.find(
-          (k: { key: string }) => k.key === "dev:feature_flags",
-        );
+        // Keys travel as arrays so segments containing the delimiter are
+        // preserved through the round trip
+        const isTargetKey = (k: { key: string[] }) =>
+          JSON.stringify(k.key) === JSON.stringify(["dev", "feature_flags"]);
+        const foundKey = listJson.keys.find(isTargetKey);
         assert(foundKey !== undefined, "Set key must appear in dashboard list");
         assertEquals(foundKey.value, {
           beta_transcoder: true,
@@ -1662,7 +1664,9 @@ export default api({
 
         // 3. Delete key via dashboard API
         const delRes = await fetch(
-          `${baseUrl}/__railfog/api/kv?key=dev:feature_flags`,
+          `${baseUrl}/__railfog/api/kv?key=${
+            encodeURIComponent(JSON.stringify(["dev", "feature_flags"]))
+          }`,
           { method: "DELETE" },
         );
         assertEquals(delRes.status, 200);
@@ -1672,9 +1676,7 @@ export default api({
         // 4. Verify key was removed
         const verifyRes = await fetch(`${baseUrl}/__railfog/api/kv`);
         const verifyJson = await verifyRes.json();
-        const removedKey = verifyJson.keys.find(
-          (k: { key: string }) => k.key === "dev:feature_flags",
-        );
+        const removedKey = verifyJson.keys.find(isTargetKey);
         assertEquals(removedKey, undefined);
       },
     );

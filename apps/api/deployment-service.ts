@@ -94,8 +94,20 @@ const ARTIFACT_STORAGE_PREFIX = "artifacts/";
  * Spec-anchor: docs/contracts/platform.contract.md#PLAT-18 (Resource hierarchy Project -> Function -> Revision)
  * Spec-anchor: docs/contracts/functions.contract.md#FN-3 (Lifecycle & instant pointer-flip rollback)
  */
+export interface DeploymentServiceOptions {
+  /**
+   * When set, deployment state survives process restarts via an atomically
+   * rewritten snapshot file (tmp + rename). Corrupt files fail static to an
+   * empty state with a logged warning — matching PLAT-8's recovery posture.
+   */
+  persistencePath?: string;
+}
+
 export class DeploymentService {
   private readonly storage: ObjectProvider;
+  private readonly persistencePath?: string;
+  private persistQueued = false;
+  private persistChain: Promise<void> = Promise.resolve();
 
   // spec: contracts/platform.contract.md#PLAT-7 — Nested maps prevent delimiter collision attacks
   // spec: contracts/platform.contract.md#PLAT-18 — Project -> Function -> RevisionId -> RevisionRecord
@@ -121,8 +133,111 @@ export class DeploymentService {
 
   private lastTimestamp = 0;
 
-  constructor(storage: ObjectProvider) {
+  constructor(
+    storage: ObjectProvider,
+    options?: DeploymentServiceOptions,
+  ) {
     this.storage = storage;
+    this.persistencePath = options?.persistencePath;
+    if (this.persistencePath) {
+      this.#hydrate();
+    }
+  }
+
+  #hydrate(): void {
+    try {
+      const raw = Deno.readTextFileSync(this.persistencePath!);
+      if (!raw.trim()) return;
+      const parsed = JSON.parse(raw) as {
+        revisions?: [string, Map<string, Map<string, RevisionRecord>>][];
+        activePointers?: [string, Map<string, string>][];
+        projectRoutes?: [
+          string,
+          Array<{ pattern: string; function: string }>,
+        ][];
+        projectMetadata?: [
+          string,
+          { environment?: string; domains?: string[] },
+        ][];
+      };
+      for (const [project, fnMap] of parsed.revisions ?? []) {
+        const outer = new Map<string, Map<string, RevisionRecord>>();
+        for (
+          const [fn, records] of fnMap as unknown as [
+            string,
+            RevisionRecord[],
+          ][]
+        ) {
+          // Records were serialized as a values array; key them by id on load
+          outer.set(fn, new Map(records.map((r) => [r.id, r])));
+        }
+        this.revisions.set(project, outer);
+      }
+      for (const [project, fnMap] of parsed.activePointers ?? []) {
+        this.activePointers.set(project, new Map(fnMap));
+      }
+      for (const [project, routes] of parsed.projectRoutes ?? []) {
+        this.projectRoutes.set(project, routes);
+      }
+      for (const [project, meta] of parsed.projectMetadata ?? []) {
+        this.projectMetadata.set(project, meta);
+      }
+    } catch (err) {
+      if (!(err instanceof Deno.errors.NotFound)) {
+        // spec: contracts/platform.contract.md#PLAT-8 — corrupt state fails
+        // static to empty rather than blocking the control plane
+        console.error(
+          "[railfog-control] deployment state file unreadable, starting empty:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+  }
+
+  #schedulePersist(): void {
+    if (!this.persistencePath) return;
+    this.persistQueued = true;
+    // Serialize writes through a promise chain; each write is atomic
+    const targetPath = this.persistencePath;
+    this.persistChain = this.persistChain.then(async () => {
+      if (!this.persistQueued || !targetPath) return;
+      this.persistQueued = false;
+      const snapshot = {
+        version: 1,
+        revisions: Array.from(
+          this.revisions,
+          ([project, fnMap]) =>
+            [
+              project,
+              Array.from(
+                fnMap,
+                ([fn, revMap]) => [fn, Array.from(revMap.values())],
+              ),
+            ] as const,
+        ),
+        activePointers: Array.from(
+          this.activePointers,
+          ([project, fnMap]) => [project, Array.from(fnMap)] as const,
+        ),
+        projectRoutes: Array.from(this.projectRoutes),
+        projectMetadata: Array.from(this.projectMetadata),
+      };
+      const tmp = `${targetPath}.tmp`;
+      await Deno.writeTextFile(tmp, JSON.stringify(snapshot));
+      await Deno.rename(tmp, targetPath);
+    }).catch((err) => {
+      console.error(
+        "[railfog-control] failed to persist deployment state:",
+        err instanceof Error ? err.message : err,
+      );
+    });
+  }
+
+  /**
+   * Resolves once any queued persistence write completes (test seam).
+   */
+  async flushPersistence(): Promise<void> {
+    await this.persistChain;
   }
 
   /**
@@ -302,6 +417,8 @@ export class DeploymentService {
         active = true;
       }
 
+      this.#schedulePersist();
+
       return {
         revisionId,
         state: "Deployed",
@@ -312,6 +429,8 @@ export class DeploymentService {
       // spec: contracts/functions.contract.md#FN-3 — State transition to Failed
       revision.state = "Failed";
       this.saveRevisionRecord(project, functionName, revision);
+
+      this.#schedulePersist();
 
       return {
         revisionId,
@@ -359,6 +478,7 @@ export class DeploymentService {
     // spec: contracts/functions.contract.md#FN-3 — Instant pointer flip, never rebuilds
     // spec: contracts/platform.contract.md#PLAT-1 — Never evaluates customer code
     this.setActivePointer(project, functionName, targetRevisionId);
+    this.#schedulePersist();
 
     return {
       previousRevisionId,
@@ -471,6 +591,7 @@ export class DeploymentService {
     if (isActive) {
       // spec: docs/contracts/functions.contract.md#FN-3 — Instant pointer-flip activation
       this.setActivePointer(project, functionName, revision.id);
+      this.#schedulePersist();
     }
   }
 
@@ -483,6 +604,7 @@ export class DeploymentService {
     routes: Array<{ pattern: string; function: string }>,
   ): void {
     this.projectRoutes.set(project, routes.map((r) => ({ ...r })));
+    this.#schedulePersist();
   }
 
   /**
@@ -507,6 +629,7 @@ export class DeploymentService {
       environment: meta.environment,
       domains: meta.domains ? [...meta.domains] : undefined,
     });
+    this.#schedulePersist();
   }
 
   /**
@@ -545,6 +668,9 @@ export class DeploymentService {
     const hadPtr = this.activePointers.delete(project);
     const hadRts = this.projectRoutes.delete(project);
     const hadMeta = this.projectMetadata.delete(project);
+    if (hadRev || hadPtr || hadRts || hadMeta) {
+      this.#schedulePersist();
+    }
     return hadRev || hadPtr || hadRts || hadMeta;
   }
 
@@ -608,7 +734,11 @@ if (import.meta.main) {
   const storageDir = Deno.env.get("RAILFOG_OBJECTS_DIR") || ".railfog/objects";
   const storage = new LocalFSProvider(storageDir);
   const kv = new SQLiteKVProvider();
-  const deploymentService = new DeploymentService(storage);
+  const deploymentService = new DeploymentService(storage, {
+    // Durable control-plane state: revisions, active pointers, routes and
+    // metadata survive restarts (PLAT-3/PLAT-18 continuity)
+    persistencePath: Deno.env.get("RAILFOG_CONTROL_STATE") || undefined,
+  });
   const stateBackupService = createStateBackupService(
     deploymentService,
     kv,

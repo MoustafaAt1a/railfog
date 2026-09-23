@@ -23,13 +23,30 @@ export interface DashboardContext {
   routes: RouteConfig[];
 }
 
+// spec: docs/contracts/platform.contract.md#PLAT-15 — untrusted values are never
+// interpolated into markup or inline scripts unescaped. Config strings and KV
+// contents can carry HTML/script payloads ("clone a repo, run rail dev").
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+// Neutralizes </script> breakout when embedding JSON into an inline <script>
+function safeScriptJson(value: unknown): string {
+  return JSON.stringify(value).replaceAll("<", "\\u003c");
+}
+
 export function renderDashboardHtml(
   config: RailfogConfig,
   ctx: DashboardContext,
 ): string {
-  const appName = config.name ?? ctx.projectId;
-  const routesJson = JSON.stringify(config.routes ?? []);
-  const functionsJson = JSON.stringify(config.functions ?? {});
+  const appName = escapeHtml(config.name ?? ctx.projectId);
+  const routesJson = safeScriptJson(config.routes ?? []);
+  const functionsJson = safeScriptJson(config.functions ?? {});
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -361,6 +378,7 @@ export function renderDashboardHtml(
   </div>
 
   <script>
+    const esc = (s) => String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
     const routes = ${routesJson};
     const functions = ${functionsJson};
 
@@ -385,9 +403,9 @@ export function renderDashboardHtml(
         const cleanPath = pattern.replace('/*', '');
         tr.innerHTML = \`
           <td><span class="method method-get">ANY</span></td>
-          <td style="font-weight: 600;">\${pattern}</td>
-          <td>\${r.function}</td>
-          <td><a class="test-link" href="\${cleanPath || '/'}" target="_blank">Open ↗</a></td>
+          <td style="font-weight: 600;">\${esc(pattern)}</td>
+          <td>\${esc(r.function)}</td>
+          <td><a class="test-link" href="\${encodeURIComponent(cleanPath || '/')}" target="_blank">Open ↗</a></td>
         \`;
         tbody.appendChild(tr);
       });
@@ -405,15 +423,22 @@ export function renderDashboardHtml(
         }
         data.keys.forEach(k => {
           const tr = document.createElement('tr');
+          const display = typeof k.value === 'object' ? JSON.stringify(k.value) : String(k.value);
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'danger';
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.addEventListener('click', () => deleteKvKey(k.key));
           tr.innerHTML = \`
-            <td style="font-weight: 600;">\${k.key}</td>
-            <td><code>\${typeof k.value === 'object' ? JSON.stringify(k.value) : k.value}</code></td>
-            <td><button class="danger" onclick="deleteKvKey('\${k.key}')">Delete</button></td>
+            <td style="font-weight: 600;">\${esc(k.key)}</td>
+            <td><code>\${esc(display)}</code></td>
           \`;
+          const actions = document.createElement('td');
+          actions.appendChild(deleteBtn);
+          tr.appendChild(actions);
           tbody.appendChild(tr);
         });
       } catch (err) {
-        tbody.innerHTML = \`<tr><td colspan="3" style="color: var(--stop);">Failed to load KV: \${err.message}</td></tr>\`;
+        tbody.innerHTML = \`<tr><td colspan="3" style="color: var(--stop);">Failed to load KV: \${esc(err.message)}</td></tr>\`;
       }
     }
 
@@ -477,7 +502,7 @@ export async function handleDashboardRequest(
       try {
         const listRes = await ctx.kvProvider.list([]);
         const items = listRes.keys.map((k) => ({
-          key: k.key.join(":"),
+          key: k.key,
           value: k.value,
         }));
         return Response.json({ keys: items });
@@ -487,6 +512,15 @@ export async function handleDashboardRequest(
     }
 
     if (req.method === "POST") {
+      // CSRF guard: a cross-origin simple POST cannot set this content-type,
+      // and a forged preflight fails because the dev server answers no OPTIONS
+      const contentType = req.headers.get("content-type") ?? "";
+      if (!contentType.toLowerCase().includes("application/json")) {
+        return Response.json(
+          { ok: false, error: "VALIDATION_FAILED: JSON content-type required" },
+          { status: 415 },
+        );
+      }
       try {
         const body = await req.json();
         if (
@@ -512,9 +546,21 @@ export async function handleDashboardRequest(
     if (req.method === "DELETE") {
       const key = url.searchParams.get("key");
       if (key) {
-        const keyArr = key.includes(":") ? key.split(":") : [key];
-        await ctx.kvProvider.delete(keyArr);
-        return Response.json({ ok: true });
+        // Keys arrive as JSON arrays — a split round-trip corrupts segments
+        // that themselves contain the delimiter
+        try {
+          const parsed = JSON.parse(key);
+          if (
+            Array.isArray(parsed) &&
+            parsed.every((seg) => typeof seg === "string")
+          ) {
+            await ctx.kvProvider.delete(parsed);
+            return Response.json({ ok: true });
+          }
+        } catch {
+          // fall through to 400
+        }
+        return Response.json({ ok: false }, { status: 400 });
       }
       return Response.json({ ok: false }, { status: 400 });
     }

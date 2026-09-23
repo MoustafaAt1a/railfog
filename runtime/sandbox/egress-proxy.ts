@@ -656,8 +656,9 @@ export class EgressProxy implements EgressProxy {
 
     // 5. Connect upstream directly to validatedIp to prevent DNS rebinding
     this.incrementActiveConnections(invocationId);
+    let upstream: Deno.TcpConn | undefined;
     try {
-      const upstream = await Deno.connect({
+      upstream = await Deno.connect({
         hostname: blockResult.ip,
         port: destPort,
       });
@@ -686,6 +687,14 @@ export class EgressProxy implements EgressProxy {
       );
     } finally {
       this.decrementActiveConnections(invocationId);
+      if (upstream) {
+        this.openSockets.delete(upstream);
+        try {
+          upstream.close();
+        } catch {
+          // Ignore
+        }
+      }
       try {
         conn.close();
       } catch {
@@ -824,9 +833,13 @@ export class EgressProxy implements EgressProxy {
   }
 
   private decrementActiveConnections(invocationId: string): void {
-    const current = this.getActiveConnectionCount(invocationId);
+    const current = this.activeConnections.get(invocationId);
+    // Unregistered invocations are not resurrected as zero-count entries
+    if (current === undefined) {
+      return;
+    }
     if (current <= 1) {
-      this.activeConnections.set(invocationId, 0);
+      this.activeConnections.delete(invocationId);
     } else {
       this.activeConnections.set(invocationId, current - 1);
     }

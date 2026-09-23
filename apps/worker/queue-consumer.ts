@@ -161,6 +161,7 @@ export class QueueConsumerWorker {
       id: messageId,
       body: messageBody,
       attempts,
+      timestamp: Date.now(),
     });
 
     try {
@@ -413,6 +414,7 @@ export class ResilientQueueConsumerWorker {
       id: messageId,
       body: messageBody,
       attempts,
+      timestamp: Date.now(),
     });
 
     try {
