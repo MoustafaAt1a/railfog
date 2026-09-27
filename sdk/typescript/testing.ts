@@ -467,5 +467,15 @@ export function createMockContext(
     queues,
     env,
     storage,
+    // spec: contracts/concepts.contract.md#CONCEPT-2 — Conceptual aliases
+    get state() {
+      return kv;
+    },
+    get data() {
+      return objects;
+    },
+    get signal() {
+      return queues;
+    },
   };
 }

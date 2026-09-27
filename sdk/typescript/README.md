@@ -23,25 +23,26 @@ This injects `@railfog/sdk` into your `deno.json` imports map.
 
 ---
 
-## Ergonomic Handlers (`handle()` & `api()`)
+## Ergonomic Handlers (`compute()`, `handle()` & `api()`)
 
-Write minimal functions with zero boilerplate.
+Write minimal functions with zero boilerplate using the v0.9.1 Four-Primitives model.
 
-### Ultra-Minimalist HTTP Handler: `handle()`
+### Ultra-Minimalist Compute Handler: `compute()` / `handle()`
 
-`handle()` automatically provides destructured context (`req`, `url`, `query`,
+`compute()` (and its backwards-compatible alias `handle()`) automatically provides destructured context (`req`, `url`, `query`,
 `body()`, `json()`, `text()`, `html()`, `redirect()`, `notFound()`,
-`badRequest()`, `fail()`, `log`, `kv`, `objects`, `queues`, `env`) and
+`badRequest()`, `fail()`, `log`, `state`, `data`, `signal`, `kv`, `objects`, `queues`, `env`) and
 automatically serializes returned plain objects, arrays, and primitives into
 JSON responses with HTTP status 200:
 
 ```typescript
-import { handle } from "@railfog/sdk";
+import { compute } from "@railfog/sdk";
 
-// 1-line counter endpoint with automatic JSON response
-export default handle(async ({ kv }) => {
-  const count = await kv.get(["counter"]) ?? 0;
-  await kv.set(["counter"], count + 1);
+// 1-line counter endpoint with automatic JSON response using State primitive
+export default compute(async ({ state, kv }) => {
+  const store = state ?? kv;
+  const count = await store.get<number>(["counter"]) ?? 0;
+  await store.set(["counter"], count + 1);
   return { counter: count + 1 };
 });
 ```
@@ -138,6 +139,8 @@ import type {
 
 import {
   api,
+  compute,
+  consumer,
   handle,
   normalizeError,
   RailFogError,
@@ -148,7 +151,7 @@ import {
 
 ---
 
-## Invocation Context: `RailFogContext` (`FN-4`)
+## Invocation Context: `RailFogContext` (`FN-4`, `CONCEPT-2`)
 
 Every invocation is supplied a `RailFogContext` instance containing metadata and
 pre-scoped capability bindings (`PLAT-6`, `FN-4`):
@@ -165,6 +168,11 @@ export interface RailFogContext {
   objects: ObjectBinding; // Capability-scoped Object storage (OBJ-2)
   queues: QueueBinding; // Capability-scoped Queue sender (Q-2)
   env: EnvBinding; // Capability-scoped secrets access (PLAT-15)
+
+  // Canonical Conceptual Aliases (v0.9.1 Unified Specification)
+  state?: KVBinding; // Conceptual State binding (alias to kv)
+  data?: ObjectBinding; // Conceptual Data binding (alias to objects)
+  signal?: QueueBinding; // Conceptual Signal binding (alias to queues)
 }
 ```
 
@@ -183,7 +191,7 @@ Entrypoint signature for HTTP-triggered functions accepting standard Web API
 import type { FunctionHandler } from "@railfog/sdk";
 
 const handler: FunctionHandler = async (req, ctx) => {
-  const data = await ctx.kv.get(["items", "item-1"]);
+  const data = await ctx.state.get(["items", "item-1"]);
   return Response.json({ data, requestId: ctx.requestId });
 };
 
@@ -204,7 +212,7 @@ interface OrderTask {
 
 const consume: QueueConsumerHandler<OrderTask> = async (message, ctx) => {
   const { orderId } = message.body;
-  await ctx.kv.set(["processed", orderId], {
+  await ctx.state.set(["processed", orderId], {
     attempts: message.attempts,
     receivedAt: message.timestamp,
   });
@@ -213,15 +221,15 @@ const consume: QueueConsumerHandler<OrderTask> = async (message, ctx) => {
 export default consume;
 ```
 
-Or write a declarative consumer with automatic KV deduplication using
+Or write a declarative consumer with automatic State/KV deduplication using
 `consumer()`:
 
 ```typescript
-import { consumer } from "@railfog/sdk";
+import { consumer, type ConsumerContext } from "@railfog/sdk";
 
-export default consumer<OrderTask>(async (message, ctx) => {
-  await processOrder(message.body);
-}, { idempotent: true }); // 14-day automatic KV deduplication per Q-4
+export default consumer<OrderTask>(async (message, ctx: ConsumerContext) => {
+  await ctx.state.set(["processed", message.body.orderId], { done: true });
+}, { idempotent: true }); // 14-day automatic deduplication per Q-4
 ```
 
 ### `ScheduleHandler` (`FN-2`)
@@ -234,7 +242,7 @@ import type { ScheduleHandler } from "@railfog/sdk";
 
 const schedule: ScheduleHandler = async (event, ctx) => {
   console.log(`Cron [${event.cron}] triggered at ${event.timestamp}`);
-  await ctx.kv.set(["last_cron_run"], event.timestamp);
+  await ctx.state.set(["last_cron_run"], event.timestamp);
 };
 
 export default schedule;
@@ -246,7 +254,7 @@ export default schedule;
 
 ### `withIdempotency` (`Q-4`, `KV-2`)
 
-Composed idempotency helper over KV. Guards against duplicate message processing
+Composed idempotency helper over State/KV. Guards against duplicate message processing
 under at-least-once delivery (`Q-1`). Writes dedupe keys with a mandatory TTL
 (default: 14 days / `14 * 24 * 3600` seconds per `Q-4` to match maximum queue
 message retention):
@@ -255,7 +263,7 @@ message retention):
 import { withIdempotency } from "@railfog/sdk";
 
 await withIdempotency(
-  ctx.kv,
+  ctx.state,
   ["processed_jobs", message.id],
   async () => {
     // Business logic executed exactly once
@@ -288,7 +296,7 @@ const response = await withRetry(
 
 ### `withCircuitBreaker` (`Q-6`, `KV-2`)
 
-Composed circuit breaker pattern over KV with mandatory TTL. Fails fast with
+Composed circuit breaker pattern over State/KV with mandatory TTL. Fails fast with
 `UnavailableError` (503) when consecutive failures reach `failureThreshold`
 (default: 5) during the `cooldownMs` window (default: 30,000ms / 30s).
 Automatically resets failure count upon successful recovery:
@@ -297,7 +305,7 @@ Automatically resets failure count upon successful recovery:
 import { withCircuitBreaker } from "@railfog/sdk";
 
 const result = await withCircuitBreaker(
-  ctx.kv,
+  ctx.state,
   ["circuits", "payment_api"],
   async () => {
     return await chargePaymentGateway();
@@ -314,7 +322,7 @@ Creates a scoped `KVBinding` with a pre-configured key prefix:
 import { scopedKV } from "@railfog/sdk";
 
 // All keys automatically prefixed with ["tenants", orgId]
-const tenantKv = scopedKV(ctx.kv, "tenants", orgId);
+const tenantKv = scopedKV(ctx.state, "tenants", orgId);
 await tenantKv.set(["theme"], "dark");
 const theme = await tenantKv.get(["theme"]);
 ```
@@ -327,9 +335,9 @@ decorrelated jitter retry on conflict:
 ```typescript
 import { mutate } from "@railfog/sdk";
 
-// Atomic counter increment with CAS retry loop
+// Atomic counter increment with CAS retry loop over State primitive
 const newCount = await mutate<number>(
-  ctx.kv,
+  ctx.state,
   ["analytics", "page_views"],
   (views) => (views ?? 0) + 1,
   { maxRetries: 5 },
@@ -366,7 +374,7 @@ import {
 
 try {
   const apiKey = ctx.env.require("STRIPE_KEY");
-  const result = await ctx.kv.atomic().check(["key"], 1).set(["key"], 2)
+  const result = await ctx.state.atomic().check(["key"], 1).set(["key"], 2)
     .commit();
   if (!result.ok) {
     throw new ConflictError("Version conflict on CAS update", ctx.requestId);
@@ -456,31 +464,31 @@ Deno.test("creates user and stores in KV", async () => {
   const res = await handler(req, ctx);
   assertEquals(res.status, 200);
 
-  // Inspect storage directly via ctx.storage
+  // Inspect storage directly via ctx.storage and ctx.state
   assertEquals(ctx.storage.queue.length, 0);
-  assertEquals(await ctx.kv.get(["users", "u_2"]), { name: "Bob" });
+  assertEquals(await ctx.state.get(["users", "u_2"]), { name: "Bob" });
 });
 ```
 
 ---
 
-## Zero-Boilerplate Object Stream Readers: `readText()`, `readJson()`, `readBytes()`
+## Zero-Boilerplate Data & Object Stream Readers: `readText()`, `readJson()`, `readBytes()`
 
 Safely consume binary and text object streams returned from
-`c.objects.get(key)`:
+`c.data.get(key)` (with `c.objects.get(key)` supported for backwards compatibility):
 
 ```typescript
 import { readBytes, readJson, readText } from "@railfog/sdk";
 
-// Read and decode UTF-8 text
-const stream = await c.objects.get("notes.txt");
+// Read and decode UTF-8 text via Data primitive
+const stream = await c.data.get("notes.txt");
 const text = await readText(stream);
 
 // Read and parse typed JSON with automatic ValidationFailedError on corrupt data
-const config = await readJson<AppConfig>(await c.objects.get("config.json"));
+const config = await readJson<AppConfig>(await c.data.get("config.json"));
 
 // Read raw binary Uint8Array
-const bytes = await readBytes(await c.objects.get("avatar.png"));
+const bytes = await readBytes(await c.data.get("avatar.png"));
 ```
 
 ---

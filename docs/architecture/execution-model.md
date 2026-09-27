@@ -26,11 +26,11 @@ RailFog eliminates ambient authority entirely:
 │   ❌ Deno.env (Blocked)           ❌ Direct Filesystem (Blocked)      │
 │   ❌ Raw Sockets (Blocked)        ❌ Process Exit (Blocked)           │
 │                                                                        │
-│   ✅ Injected RailFogContext (FN-4):                                   │
-│      • ctx.kv      ─► Scoped strictly to declared KV namespace         │
-│      • ctx.objects ─► Scoped strictly to declared Object bucket        │
-│      • ctx.queues  ─► Scoped strictly to declared Queue target         │
-│      • ctx.env     ─► Scoped strictly to declared secret identifiers   │
+│   ✅ Injected RailFogContext (FN-4, CONCEPT-2):                         │
+│      • ctx.state  / ctx.kv      ─► Scoped strictly to declared State namespace │
+│      • ctx.data   / ctx.objects ─► Scoped strictly to declared Data bucket     │
+│      • ctx.signal / ctx.queues  ─► Scoped strictly to declared Signal target   │
+│      • ctx.env                  ─► Scoped strictly to declared secret identifiers │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,7 +71,9 @@ following IP ranges are blocked unconditionally:
 - **Cloud Metadata Services**: `169.254.169.254`, `fd00:ec2::254`.
 - **Link-Local Addresses**: `169.254.0.0/16`, `fe80::/10`.
 - **Loopback Interfaces**: `127.0.0.0/8`, `::1/128`.
-- **RFC1918 Private Subnets**: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`.
+- **RFC 1918 Private Subnets**: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`.
+- **RFC 6598 Carrier-Grade NAT**: `100.64.0.0/10`.
+- **RFC 4193 IPv6 Unique Local Addresses (ULA)**: `fc00::/7`.
 
 ---
 
@@ -87,4 +89,4 @@ advance. The very first customer request hits an already-compiled, warm isolate.
 ## Next Steps
 
 - Explore [High-Performance Data-Plane Optimizations](performance.md).
-- Learn about the [Functions Primitive](../primitives/functions/overview.md).
+- Learn about [Writing Functions](../guides/functions.md).

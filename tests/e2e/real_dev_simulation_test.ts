@@ -290,6 +290,15 @@ function createMockContext(
     objects: overrides?.objects ?? mockObjects,
     queues: overrides?.queues ?? mockQueues,
     env: overrides?.env ?? mockEnv,
+    get state() {
+      return this.kv;
+    },
+    get data() {
+      return this.objects;
+    },
+    get signal() {
+      return this.queues;
+    },
     ...overrides,
   };
 }

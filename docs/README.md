@@ -2,155 +2,153 @@
 
 > [!NOTE]
 > **Runtime**: Deno v2.0+ Native Web Standards &nbsp;|&nbsp; **Specification**:
-> [LTS 1.0 Formal Contracts](contracts/platform.contract.md) &nbsp;|&nbsp;
+> [Unified Four-Primitives (CONCEPT-1)](contracts/concepts.contract.md) & [LTS Formal Contracts](contracts/platform.contract.md) &nbsp;|&nbsp;
 > **Architecture**: Modular Monolith & Shared-Nothing Isolates &nbsp;|&nbsp;
 > **Security**: Capability-Based (Zero Ambient Authority)
 
-Welcome to the **RailFog Developer Documentation**. RailFog is a minimalist edge
-application platform reducing cloud infrastructure to its simplest mathematical
-minimum:
+RailFog reduces backend application infrastructure to four fundamental concepts:
 
-$$\text{Workload} = \text{Trigger} \longrightarrow \text{Function} \longrightarrow \{\text{KV}, \text{Objects}, \text{Queues}\}$$
+$$\mathbf{RailFog} = \{\mathbf{Compute},\, \mathbf{State},\, \mathbf{Data},\, \mathbf{Signal}\}$$
+
+Mapped directly to four infrastructure primitives:
+
+$$\begin{aligned}
+\mathbf{Compute} &\longrightarrow \text{Function} && (\text{Execute / } \textit{transform}) \\
+\mathbf{State} &\longrightarrow \text{KV} && (\text{Remember / } \textit{remember}) \\
+\mathbf{Data} &\longrightarrow \text{Object} && (\text{Persist / } \textit{persist}) \\
+\mathbf{Signal} &\longrightarrow \text{Queue} && (\text{Communicate / } \textit{communicate})
+\end{aligned}$$
 
 ---
 
-## Documentation Navigation
+## Documentation Navigation Map
 
-```
 docs/
-├── get-started/        # Fast-track onboarding and first steps
-├── architecture/       # Process topology, sandboxing, and hot-path performance
-├── primitives/         # The four fundamental platform building blocks
-│   ├── functions/      # Isolated execution units and resource ceilings
-│   ├── kv/             # Low-latency structured state and atomic CAS
-│   ├── objects/        # Durable binary storage and direct presigning
-│   └── queues/         # Decoupled messaging and dead-letter handling
-├── configuration/      # Declarative manifest (railfog.toml) and route matching
-├── sdk/                # @railfog/sdk TypeScript API, context, and reliability
-├── cli/                # Command-line interface reference and operations
-└── reference/          # Constitution, domain glossary, and error codes
+├── concepts/           # Section 1: The Four Concepts (Compute, State, Data, Signal, Composition)
+├── sdk/                # Section 2: TypeScript SDK (Compute, State, Data, Signal, Context)
+├── composition/        # Section 3: Architecture Composition & Design Patterns
+├── providers/          # Section 4: Pluggable Infrastructure Drivers (Compute, State, Data, Signal)
+├── get-started/        # Fast-track onboarding and installation
+├── guides/             # Everyday developer workflows
+├── reference/          # Authoritative CLI, SDK, manifest, limits, error codes
+├── architecture/       # Deep-dive internals and process topology
+├── contributing/       # Contribution workflows and testing
+├── contracts/          # Formal LTS Contracts (CONCEPT, PLAT, FN, KV, OBJ, Q, Worked Example)
+├── adr/                # Architecture Decision Records (ADR-0001, ADR-0002, ADR-0005)
+├── glossary.md         # Canonical platform terminology (single source of truth)
+└── CONSTITUTION.md     # Architectural doctrine (The Boundary Rule)
 ```
 
 ---
 
-## 1. Getting Started
+## 1. Core Concepts
 
-Fast-path guides to installing RailFog, creating projects, and mastering the
-development loop:
+The developer mental model behind RailFog:
 
-- [**Platform Overview**](get-started/overview.md): The core mental model,
-  primitives breakdown, and architectural tenets.
-- [**5-Minute Quickstart**](get-started/quickstart.md): Install the `rail` CLI,
-  scaffold a project, run the local dev server, and deploy.
-- [**Project Structure**](get-started/project-structure.md): Standard file
-  layout, `railfog.toml` role, and entrypoint conventions.
-
----
-
-## 2. System Architecture & Internals
-
-Engineering blueprints for understanding RailFog's runtime, security, and data
-flow:
-
-- [**System Design & Process Topology**](architecture/overview.md): The
-  two-process physical deployment boundary (`PLAT-1`), Gateway, Data Plane,
-  Control Plane, and fail-static snapshot caching (`PLAT-8`).
-- [**Execution Model & Sandboxing**](architecture/execution-model.md): V8
-  isolate sandboxes, zero ambient authority (`PLAT-6`), hard resource limits
-  (`FN-5`), and SSRF egress firewalls (`PLAT-5`).
-- [**Hot-Path Performance**](architecture/performance.md): Low-allocation DOD
-  hot paths, zero-copy header frames (`Object.create(null)`), pre-warmed
-  isolates, and Unix Domain Socket (UDS) IPC.
+- [**Compute**](concepts/compute.md): Execution, transformation, validation, and decision making (`transform`).
+- [**State**](concepts/state.md): Small, addressable, mutable state and optimistic CAS coordination (`remember`).
+- [**Data**](concepts/data.md): Durable bulk byte persistence, streaming, and presigned direct transfers (`persist`).
+- [**Signal**](concepts/signal.md): Asynchronous message dispatch, job queues, and event buffering (`communicate`).
+- [**Composition Principle**](concepts/composition.md): Power through composition and the Primitive Addition Test.
+- [**Conceptual Architecture**](concepts/architecture.md): Modular monolith and two-process physical deployment boundary (`PLAT-1`).
+- [**Execution Model & Sandboxing**](concepts/execution-model.md): V8 isolates, request lifecycle (`FN-8`), and warm reuse (`FN-6`).
+- [**Capability-Based Security**](concepts/capabilities.md): Zero ambient authority and deploy-time capability injection (`PLAT-6`).
+- [**Immutable Revisions**](concepts/revisions.md): Content-addressed artifacts (`OBJ-4`) and state archives (`rail export`).
+- [**Provider Abstractions**](concepts/providers.md): Pluggable SPI contracts (`PLAT-16`), local/cloud parity, and `TenantGuard` (`PLAT-4`).
+- [**Defense-in-Depth Isolation**](concepts/isolation.md): V8 sandboxes, process containment, gVisor (`PLAT-7`), and egress firewall (`PLAT-5`).
+- [**Consistency Tiers**](concepts/consistency.md): Linearizable strong consistency vs edge eventual consistency (`KV-5`).
+- [**Failure Model & Reliability**](concepts/failure-model.md): Fail-static data plane (`PLAT-8`), circuit breaking, and DLQ routing.
 
 ---
 
-## 3. Storage & Compute Primitives
+## 2. TypeScript SDK (`@railfog/sdk`)
 
-Detailed guides for RailFog's four core primitives:
+Developer-facing representation exposing capabilities, not cloud providers:
 
-### Functions
-
-- [**Functions Overview**](primitives/functions/overview.md): The Trigger ->
-  Function model, handler entrypoint signatures, and invocation triggers.
-- [**Resource Limits & Quotas**](primitives/functions/limits.md): CPU
-  millisecond ceilings (`cpu_ms: 200`), wall-clock timeouts, memory limits, and
-  concurrency token buckets.
-
-### Key-Value Storage (KV)
-
-- [**KV Storage Overview**](primitives/kv/overview.md): Low-latency state,
-  hierarchical tuple keys, and 256 KB size ceilings.
-- [**Consistency Tiers & Atomic CAS**](primitives/kv/consistency.md): `strong`
-  vs `eventual` tiers (`KV-5`), and atomic Check-And-Set optimistic concurrency
-  (`KV-3`).
-
-### Object Storage
-
-- [**Objects Storage Overview**](primitives/objects/overview.md): Durable binary
-  storage, S3 compatibility, and metadata operations.
-- [**Direct Client Transfers**](primitives/objects/direct-transfers.md): The
-  Zero-Bandwidth-Proxy Principle (`OBJ-3`) and SigV4 presigned upload URLs.
-
-### Asynchronous Queues
-
-- [**Queues Overview**](primitives/queues/overview.md): Decoupled asynchronous
-  message passing with at-least-once delivery.
-- [**Dead-Letter Queues & Deduplication**](primitives/queues/dead-letter-queues.md):
-  Visibility timeout, poison message handling (`dlq`), and idempotency with
-  mandatory 14-day TTL.
+- [**SDK Overview**](sdk/overview.md): Four primitives mental model, zero-boilerplate handlers, and backwards compatibility.
+- [**Compute SDK**](sdk/compute.md): `compute()`, `handle()`, `api()`, and `router()` function wrappers.
+- [**State SDK**](sdk/state.md): `c.state.get/set/delete`, hierarchical tuple keys, and `atomic()` CAS commits.
+- [**Data SDK**](sdk/data.md): `c.data.get/put/delete`, streaming `ReadableStream`, and `presign()` transfers.
+- [**Signal SDK**](sdk/signal.md): `c.signal.send`, `consumer()` queue handlers, and automatic idempotency (`Q-4`).
+- [**Complete SDK Reference**](reference/sdk.md): Full method signatures, `HandlerContext`, `ConsumerContext`, and reliability helpers.
+- [**Canonical SDK Guide**](sdk-guide.md): Comprehensive developer guide with worked-example.
 
 ---
 
-## 4. Configuration Reference
+## 3. Architecture Composition
 
-Authoritative guides to configuring RailFog applications:
+Constructing real-world distributed backends from the four primitives:
 
-- [**Configuration Overview**](configuration/overview.md): Declarative TOML
-  manifest structure and JSON schema setup.
-- [**Manifest Reference**](configuration/manifest.md): Exhaustive reference for
-  every key, limit, trigger, and permission in `railfog.toml`.
-- [**Route Matching & Specificity**](configuration/routes.md): The deterministic
-  `PLAT-11` scoring formula
-  ($2 \times \text{literal} + 1 \times \text{wildcard}$).
+- [**Composition Overview**](composition/overview.md): Four primitives dependency direction and architecture doctrine.
+- [**Composition Patterns**](composition/patterns.md): Caching, background jobs, streaming media, and event-driven workflows.
+- [**Worked Example**](contracts/worked-example.md): Canonical multi-stage ingest $\to$ transform $\to$ record $\to$ export pipeline.
 
 ---
 
-## 5. TypeScript SDK (`@railfog/sdk`)
+## 4. Pluggable Providers (`providers/`)
 
-Writing functions, consumers, and services:
+Infrastructure drivers executing computation and storage behind SPI contracts (`PLAT-16`):
 
-- [**SDK Overview**](sdk/overview.md): Package installation, zero-dependency
-  design, and ergonomic handlers (`handle`, `api`).
-- [**Context & Capability Bindings**](sdk/context.md): `RailFogContext`,
-  execution budget tracking (`timeRemaining()`), and scoped bindings.
-- [**Reliability Helpers**](sdk/reliability.md): Exactly-once processing with
-  `withIdempotency` and backoff with `withRetry`.
-- [**Error Handling & Taxonomy**](sdk/errors.md): Catching and normalizing
-  errors across the 10 machine-readable `PLAT-12` codes.
+- [**Provider Overview**](providers/overview.md): Dependency inversion hierarchy, `TenantGuard` (`PLAT-4`), and local/cloud parity.
+- [**Compute Providers**](providers/compute.md): Sandboxed execution (`ProcessIsolationProvider`, `GvisorIsolationProvider`) and limits enforcement.
+- [**State Providers**](providers/state.md): Key-Value storage drivers (SQLite, PostgreSQL, Redis, Cloudflare KV).
+- [**Data Providers**](providers/data.md): Object storage drivers (Local filesystem, Cloudflare R2, AWS S3).
+- [**Signal Providers**](providers/signal.md): Asynchronous queue drivers (SQLite, Redis, Cloudflare Queues, AWS SQS).
 
 ---
 
-## 6. Command-Line Interface (`rail`)
+## 5. Getting Started
 
-Operating and managing RailFog projects:
-
-- [**CLI Overview**](cli/overview.md): Installation, diagnostics with
-  `rail doctor`, and self-upgrades with `rail upgrade`.
-- [**Command Reference**](cli/commands.md): Complete alphabetical reference for
-  all CLI commands (`init`, `dev`, `check`, `deploy`, `rollback`, `logs`,
-  `secrets`, etc.).
+- [**Installation & Setup**](get-started/installation.md): Deno install, compiled native binary, and shell completions.
+- [**5-Minute Quickstart**](get-started/quickstart.md): Install the CLI, scaffold a project, and run local dev.
+- [**Standard Project Structure**](get-started/project-structure.md): File layout, `railfog.toml`, and entrypoint conventions.
+- [**Platform Overview**](get-started/overview.md): Core philosophy and architectural tenets.
 
 ---
 
-## 7. Platform Reference & Standards
+## 6. Developer Guides
 
-- [**Architectural Constitution**](reference/constitution.md): The Boundary
-  Rule—SOLID + OOP at boundaries, Data-Oriented Design in the hot path.
-- [**Platform Glossary**](reference/glossary.md): Canonical terms, definitions,
-  and domain vocabulary.
-- [**Error Codes Reference**](reference/error-codes.md): Complete catalog of
-  `PLAT-12` error codes and HTTP mappings.
-- [**Formal LTS Specifications**](contracts/): The authoritative specification
-  contracts (`PLAT`, `FN`, `KV`, `OBJ`, `Q`).
-- [**Architecture Decision Records**](adr/): Historical index of architectural
-  decisions and trade-offs.
+- [**Local Development**](guides/local-development.md): Developing locally with `rail dev` and developer dashboard.
+- [**Writing Functions**](guides/functions.md): Handlers, typed signatures, context accessors, and triggers.
+- [**Key-Value Storage**](guides/kv.md): Structured state, hierarchical tuple keys, and atomic CAS.
+- [**Object Storage**](guides/objects.md): Durable binary storage, direct transfers (`OBJ-3`), and zero-proxy rule.
+- [**Asynchronous Queues**](guides/queues.md): Sending, consuming, retry policies, and dead-letter queues (`dlq`).
+- [**URL Routing & Specificity**](guides/routing.md): Route declarations and `PLAT-11` specificity scoring.
+- [**Secrets Management**](guides/secrets.md): Capability-scoped encrypted secrets and zero plaintext leakage.
+- [**Testing Functions**](guides/testing.md): In-memory testing with `@railfog/sdk/testing` and `createMockContext`.
+- [**Deployment Pipeline**](guides/deployment.md): Pre-deploy checks (`rail check`), packaging, and `rail deploy`.
+- [**Instant Rollbacks**](guides/rollback.md): Zero-rebuild atomic pointer flips with `rail rollback`.
+- [**WebAssembly Polyglot**](guides/wasm.md): High-performance Rust/C/Go execution inside V8 isolates.
+- [**Troubleshooting & Diagnostics**](guides/troubleshooting.md): Platform diagnostics (`rail doctor`), error codes, and log filtering.
+
+---
+
+## 7. Reference Manuals
+
+- [**CLI Reference**](reference/cli.md): Alphabetical reference for all 22 commands, options, and defaults.
+- [**Configuration Reference**](reference/configuration.md) & [**Authoritative Manifest**](configuration-reference.md): Complete `railfog.toml` schema rules.
+- [**TypeScript SDK Reference**](reference/sdk.md): Complete API reference for `@railfog/sdk`.
+- [**Error Codes Taxonomy**](reference/error-codes.md): Exhaustive 10 machine-readable error codes (`PLAT-12`).
+- [**Resource Limits & Ceilings**](reference/limits.md): Hard execution ceilings, CPU/memory quotas, and timeouts (`FN-5`).
+- [**Environment Variables**](reference/environment.md): Platform server daemon and CLI environment variables.
+
+---
+
+## 8. System Architecture & Internals
+
+- [**Process Topology Overview**](architecture/overview.md): Two-process deployment boundary (`PLAT-1`).
+- [**Runtime Internals**](architecture/runtime.md): Sandboxed execution pipeline and limits enforcer.
+- [**Control Plane Internals**](architecture/control-plane.md): Deployment compiler and revision registry.
+- [**Data Plane Internals**](architecture/data-plane.md): Data-Oriented Design in hot path and snapshot caching.
+- [**Provider SPI Architecture**](architecture/providers.md): Provider contracts, DIP/ISP/LSP rules, and `TenantGuard`.
+- [**Multi-Region & Edge Topology**](architecture/multi-region-edge.md): Autonomous edge nodes and global anycast.
+- [**Hot-Path Performance**](architecture/performance.md): Memory allocation avoidance and UDS transport.
+
+---
+
+## 9. Contracts, ADRs & Governance
+
+- [**Canonical Glossary**](glossary.md): Mandatory domain vocabulary and definitions.
+- [**Architectural Constitution**](CONSTITUTION.md): The Boundary Rule (SOLID at boundaries, DOD in hot paths).
+- [**Architecture Decision Records**](adr/): ADR-0001, ADR-0002, and [ADR-0005](adr/ADR-0005-unified-four-primitives.md).
+- [**Formal Contracts**](contracts/): [Concepts (`CONCEPT`)](contracts/concepts.contract.md), [Platform (`PLAT`)](contracts/platform.contract.md), [Functions (`FN`)](contracts/functions.contract.md), [KV (`KV`)](contracts/kv.contract.md), [Objects (`OBJ`)](contracts/objects.contract.md), [Queues (`Q`)](contracts/queues.contract.md), and [Worked Example](contracts/worked-example.md).

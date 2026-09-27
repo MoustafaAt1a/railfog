@@ -1,8 +1,8 @@
 # Contract — Queues
 
-Source: `railfog-v1_0_0-lts.md` §4.4, §6.2–6.3, Appendix A. Audit Findings
-#4, #5, #6 all live here — this is the highest-bug-density part of the
-original draft, so treat every clause below as load-bearing.
+Source: `railfog-v1_0_0-lts.md` §4.4, §6.2–6.3, Appendix A. Audit Findings #4,
+#5, #6 all live here — this is the highest-bug-density part of the original
+draft, so treat every clause below as load-bearing.
 
 ## Q-1 — Guarantee
 
@@ -22,8 +22,8 @@ export default async function consume(message: QueueMessage, ctx: RailFogContext
 ```
 
 Max message size 128 KB. Larger payloads go in Objects; the queue message
-carries the Object key, not the bytes — composition (Principle 2), not a
-bigger queue.
+carries the Object key, not the bytes — composition (Principle 2), not a bigger
+queue.
 
 ## Q-3 — Redelivery model (this did not exist in the original draft)
 
@@ -37,23 +37,26 @@ Message sent → Visible in queue
           yes → Dead-letter queue
 ```
 
-| Setting | Default |
-|---|---|
-| `visibility_timeout_ms` | 30,000 |
-| `max_receives` before DLQ | 5 |
-| `retention_days` | 4 (max 14) |
+| Setting                   | Default    |
+| ------------------------- | ---------- |
+| `visibility_timeout_ms`   | 30,000     |
+| `max_receives` before DLQ | 5          |
+| `retention_days`          | 4 (max 14) |
 
-Any consumer implementation with no visibility timeout, no max-receive count,
-or no DLQ trigger is Audit Finding #6 reopened.
+Any consumer implementation with no visibility timeout, no max-receive count, or
+no DLQ trigger is Audit Finding #6 reopened.
 
 ## Q-4 — Idempotency (composed from KV, not a platform feature)
 
 ```typescript
-export default async function consume(message: QueueMessage, ctx: RailFogContext) {
+export default async function consume(
+  message: QueueMessage,
+  ctx: RailFogContext,
+) {
   const dedupeKey = ["processed", message.id];
-  if (await ctx.kv.get(dedupeKey)) return;                          // already handled
+  if (await ctx.state.get(dedupeKey)) return; // already handled (State primitive)
   await process(message);
-  await ctx.kv.set(dedupeKey, true, { ttl: 14 * 24 * 3600 });       // matches max retention_days — never grows unbounded
+  await ctx.state.set(dedupeKey, true, { ttl: 14 * 24 * 3600 }); // matches max retention_days — never grows unbounded
 }
 ```
 
@@ -69,25 +72,25 @@ sleep_0 = base
 sleep_n = min(cap, random_uniform(base, sleep_(n-1) × 3))
 ```
 
-| Setting | Default |
-|---|---|
-| base | 100 ms |
-| cap | 20 s |
+| Setting      | Default                        |
+| ------------ | ------------------------------ |
+| base         | 100 ms                         |
+| cap          | 20 s                           |
 | max attempts | 5, then DLQ / surfaced failure |
 
 Infinite retries are never implemented. Only operations with a defined
 idempotency strategy are safe to retry automatically: `GET`/`HEAD`, `PUT` with
 an `Idempotency-Key`, and queue consumption (idempotent by construction via
-Q-4). A bare `POST` without an idempotency key is retried by the *caller's*
+Q-4). A bare `POST` without an idempotency key is retried by the _caller's_
 choice only, never silently by RailFog.
 
 ## Q-6 — Composed reliability patterns are library code, not platform features
 
-Circuit breakers, backoff, and idempotency are ~10-line Function patterns
-built entirely on `kv.atomic()` (kv.contract.md KV-3) — proof, not assertion,
-that composition beats adding a fifth primitive. If a task seems to need a
-new platform-level "reliability primitive," it almost certainly means "write
-this pattern as library code over KV instead," not "add a service."
+Circuit breakers, backoff, and idempotency are ~10-line Function patterns built
+entirely on `kv.atomic()` (kv.contract.md KV-3) — proof, not assertion, that
+composition beats adding a fifth primitive. If a task seems to need a new
+platform-level "reliability primitive," it almost certainly means "write this
+pattern as library code over KV instead," not "add a service."
 
 ## Banned patterns
 

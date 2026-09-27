@@ -5,17 +5,17 @@
 # RailFog
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Specification: LTS 1.0 Strict](https://img.shields.io/badge/Specification-LTS%201.0%20Strict-brightgreen.svg)](docs/contracts/platform.contract.md)
+[![Specification: LTS Strict](https://img.shields.io/badge/Specification-LTS%20Strict-brightgreen.svg)](docs/contracts/platform.contract.md)
 [![Runtime: Deno v2](https://img.shields.io/badge/Runtime-Deno%20v2%2B-black.svg)](https://deno.land)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/Architecture-Modular%20Monolith-orange.svg)](docs/architecture/overview.md)
 
-**RailFog** is a lightweight, high-performance edge compute and application
-platform built entirely on native Web Standards (`Request`, `Response`,
-`ReadableStream`, Web Crypto, `URLPattern`). It provides strict capability-based
-isolation and four fundamental primitives: **Functions**, **KV**, **Objects**,
-and **Queues**.
+**RailFog** is a lightweight application infrastructure platform built on
+native Web Standards (`Request`, `Response`, `ReadableStream`, Web Crypto,
+`URLPattern`). It reduces application architecture to four fundamental concepts:
+**Compute**, **State**, **Data**, and **Signal**, mapped to four infrastructure
+primitives: **Functions**, **KV**, **Objects**, and **Queues**.
 
-$$\text{Workload} = \text{Trigger} \longrightarrow \text{Function} \longrightarrow \{\text{KV}, \text{Objects}, \text{Queues}\}$$
+$$\mathbf{Compute} \ (\text{Function}) \longleftrightarrow \mathbf{State} \ (\text{KV}) \longleftrightarrow \mathbf{Data} \ (\text{Object}) \longleftrightarrow \mathbf{Signal} \ (\text{Queue})$$
 
 ---
 
@@ -73,13 +73,13 @@ physical deployment topology**
    traffic strictly from memory snapshots and atomic disk caches.
 3. **Capability Injection
    ([`PLAT-6`](docs/contracts/platform.contract.md#PLAT-6),
-   [`PLAT-15`](docs/contracts/platform.contract.md#PLAT-15))**: Functions
-   receive zero ambient authority (`Deno.env` is restricted). Injected bindings
-   (`ctx.kv`, `ctx.objects`, `ctx.queues`, `ctx.env`) are physically scoped at
-   deploy time.
+   [`PLAT-15`](docs/contracts/platform.contract.md#PLAT-15),
+   [`CONCEPT-6`](docs/contracts/concepts.contract.md#CONCEPT-6))**: Functions
+   receive zero ambient authority (`Deno.env` is restricted). Injected capabilities
+   (`ctx.state`, `ctx.data`, `ctx.signal`, `ctx.env`) are scoped at deploy time.
 4. **Direct Storage Transfers
    ([`OBJ-3`](docs/contracts/objects.contract.md#OBJ-3))**: Functions generate
-   SigV4 presigned URLs via `ctx.objects.presign(...)`, enabling clients to
+   SigV4 presigned URLs via `ctx.data.presign(...)`, enabling clients to
    upload and download directly to S3/R2 storage without bandwidth proxying.
 5. **Local / Production Parity
    ([`PLAT-17`](docs/contracts/platform.contract.md#PLAT-17))**: Local
@@ -98,15 +98,13 @@ physical deployment topology**
 deno run -A https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/scripts/install.ts
 ```
 
-Or clone the repository and run:
+Or from a local cloned repository:
 
 ```bash
 deno task install
 ```
 
 #### Standalone Native Binary (Zero Prerequisites)
-
-Compile a self-contained executable for your platform:
 
 ```bash
 deno compile -A -o rail cli/main.ts
@@ -146,8 +144,6 @@ and operational tooling
 
 - **`rail init`**: Scaffolds a new project with starter function handlers,
   TypeScript configuration, and `railfog.toml`.
-- **`rail add`**: Adds SDK bindings or storage dependencies (`sdk`, `kv`,
-  `objects`, `queues`) to `deno.json`.
 - **`rail status`**: Inspects deployed functions, active revisions, and
   configured route mappings.
 - **`rail check`**: Statically analyzes `railfog.toml`, entrypoint files, and
@@ -157,6 +153,8 @@ and operational tooling
   connectivity.
 - **`rail simulate`**: Dry-runs HTTP requests against route specificity
   resolution offline.
+- **`rail add`**: Adds SDK bindings or storage dependencies (`sdk`, `kv`,
+  `objects`, `queues`) to `deno.json`.
 
 ### Local Development
 
@@ -196,148 +194,130 @@ and operational tooling
 - **`rail import`**: Restores project configuration, revisions, and state from a
   backup archive.
 
-### CLI Self-Upgrade
+### Maintenance & Telemetry
 
-- **`rail --version`** / **`rail -v`**: Displays current semantic CLI version.
-- **`rail update`** / **`rail upgrade`**: Upgrades the CLI in-place to the
-  latest release, git ref, or compiles a native binary.
+- **`rail usage`**: Displays resource consumption and itemized cost
+  calculations.
+- **`rail compare`**: Displays architectural comparisons against other platforms
+  in the terminal.
+- **`rail upgrade`**: Upgrades the CLI in-place to the latest release or
+  compiles from a git ref.
 
 ---
 
-## Why RailFog Beats AWS Lambda & Cloudflare Workers
+## Architectural Comparison
 
-RailFog eliminates the infrastructure sprawl, IAM complexity, and cold starts of
-legacy cloud platforms:
-
-| Architectural Dimension  | RailFog (v0.9.0 Beta)                       | AWS Lambda                              | Cloudflare Workers         |
-| ------------------------ | ------------------------------------------- | --------------------------------------- | -------------------------- |
-| **Cold Start Latency**   | **< 0.20ms (V8 Isolates)**                  | 150ms – 1,500ms (MicroVMs)              | 5ms – 50ms (Workers)       |
-| **Security Model**       | **Zero-IAM (3 lines TOML)**                 | 50+ lines IAM JSON & ARNs               | Proprietary Bindings       |
-| **Local Offline Parity** | **100% Digital Twin (SQLite/FS)**           | Broken (Heavy 4GB LocalStack)           | Partial (Miniflare mock)   |
-| **Primitives & Sprawl**  | **4 Primitives (Zero Sprawl)**              | 200+ Disjoint AWS Services              | 8+ Disparate Storage Types |
-| **Routing Determinism**  | **PLAT-11 Mathematical Specificity**        | API Gateway Regex Traps                 | Manual Imperative Code     |
-| **Developer SDK**        | **Zero-Dependency Unified Context**         | Heavy `@aws-sdk/*` Packages             | Disjoint Global Objects    |
-| **Unit Testing DX**      | **Instant In-Memory (`createMockContext`)** | Complex Mocking (`aws-sdk-client-mock`) | Heavy Background Daemons   |
-
-Run `rail compare` directly in your terminal to view the live competitive
-analysis.
+| Architectural Dimension      | RailFog (v0.9.2)                                      | AWS Lambda                                               | Cloudflare Workers                      |
+| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------- | --------------------------------------- |
+| **Execution Sandbox**        | V8 Execution Isolates                                 | MicroVMs (Firecracker)                                   | V8 Isolates                             |
+| **Security Model**           | Capability Injection (3-line TOML manifest)           | IAM Roles, ARNs & JSON Policies                          | Proprietary Resource Bindings           |
+| **Local Development Parity** | Embedded SQLite & Filesystem digital-twin (`PLAT-17`) | LocalStack emulation container                           | Miniflare local emulator                |
+| **Storage Architecture**     | 4 Unified Primitives (Compute, State, Data, Signal)   | Disjoint service matrix (S3, DynamoDB, SQS, ElastiCache) | Disparate services (KV, R2, Queues, D1) |
+| **Routing Model**            | Deterministic Mathematical Specificity (`PLAT-11`)    | API Gateway route regex rules                            | Manual request router in customer code  |
+| **SDK Runtime Dependencies** | Zero external dependencies (Native Web Standards)     | Multi-package `@aws-sdk/*` distributions                 | Custom global service bindings          |
+| **Unit Testing Model**       | In-memory mock context (`createMockContext`)          | Client mocking libraries (`aws-sdk-client-mock`)         | Local runtime daemons                   |
 
 ---
 
 ## Writing Functions with `@railfog/sdk`
 
-### 1. Fluent Micro-Router with Universal Schema Validation
-
-Validate incoming payloads using [Standard Schema](https://standardschema.dev)
-(`~standard`), Zod, or Valibot with zero SDK dependencies:
+### 1. Minimal Compute Handler (`compute` / `handle`)
 
 ```typescript
-import { router } from "@railfog/sdk";
-import { z } from "npm:zod";
+import { compute, type HandlerContext } from "@railfog/sdk";
 
-const UserSchema = z.object({
-  username: z.string().min(3),
-  role: z.enum(["admin", "member"]),
-});
+export default compute(async (c: HandlerContext) => {
+  const count = ((await c.state.get<number>(["stats", "visitors"])) ?? 0) + 1;
+  await c.state.set(["stats", "visitors"], count);
 
-type User = z.infer<typeof UserSchema>;
-
-const app = router()
-  .use(async (c, next) => {
-    const res = await next();
-    res.headers.set("x-request-id", c.requestId);
-    return res;
-  })
-  .get("/users/:id", async ({ params, kv, notFound, json }) => {
-    const id = params?.id;
-    if (!id) notFound("User ID required");
-    const user = await kv.get<User>(["users", id]);
-    if (!user) notFound("User not found");
-    return json(user);
-  })
-  .post("/users", async ({ body, kv, json }) => {
-    // Validates body and throws canonical ValidationFailedError (HTTP 400) on error
-    const user = await body(UserSchema);
-    await kv.set(["users", user.username], user);
-    return json({ created: true, user }, 201);
-  });
-
-export default app;
-```
-
-### 2. Declarative Queue Consumer with Idempotency
-
-Handle background queue jobs with automatic 14-day KV deduplication (`Q-4`):
-
-```typescript
-import { consumer } from "@railfog/sdk";
-
-export default consumer<{ orderId: string }>(
-  async (message, ctx) => {
-    const { orderId } = message.body;
-    await ctx.kv.set(["orders", orderId], { status: "processed" });
-  },
-  { idempotent: true }, // Automatic deduplication with 14-day TTL
-);
-```
-
-### 3. Zero-Config Unit Testing
-
-Test your handlers in microseconds with zero Docker containers and zero mock
-servers:
-
-```typescript
-import { assertEquals } from "@std/assert";
-import { createMockContext } from "@railfog/sdk";
-import handler from "./functions/api.ts";
-
-Deno.test("creates user and updates KV", async () => {
-  const ctx = createMockContext({ env: { API_KEY: "secret" } });
-  const req = new Request("https://app.railfog.net/users", {
-    method: "POST",
-    body: JSON.stringify({ username: "alice", role: "admin" }),
-  });
-
-  const res = await handler(req, ctx);
-  assertEquals(res.status, 201);
-  assertEquals(await ctx.kv.get(["users", "alice"]), {
-    username: "alice",
-    role: "admin",
+  return c.json({
+    message: "Hello from RailFog!",
+    visitors: count,
   });
 });
 ```
 
 ---
 
-## Documentation Hub
+### 2. Multi-Route Handler (`api`)
 
-Explore the full documentation suite organized in Cloudflare / AWS documentation
-architecture:
+```typescript
+import { api, type HandlerContext } from "@railfog/sdk";
 
-- [**Documentation Master Portal**](docs/README.md) — Documentation index and
-  category overview.
-- [**5-Minute Quickstart**](docs/get-started/quickstart.md) — Scaffolding, local
-  development, and deploying your first project.
-- [**System Architecture & Internals**](docs/architecture/overview.md) — Deep
-  architectural blueprint, fail-static snapshots, pre-warmed isolates, and UDS
-  IPC.
-- [**Configuration Reference (`railfog.toml`)**](docs/configuration/manifest.md)
-  — Full manifest specification for functions, limits, permissions, and routes.
-- [**TypeScript SDK Developer Guide**](docs/sdk/overview.md) — Guide to
-  developing with `@railfog/sdk`, storage primitives, and reliability helpers.
-- [**Command-Line Interface Reference**](docs/cli/commands.md) — Complete manual
-  for all `rail` commands and flags.
-- [**Platform Constitution**](docs/reference/constitution.md) — Architectural
-  doctrine: SOLID + OOP at boundaries vs DOD in hot paths.
-- [**Canonical Glossary**](docs/reference/glossary.md) — Domain terminology and
-  acronym definitions.
-- [**Formal LTS Specifications**](docs/contracts/) — Mathematical platform
-  specifications and invariants.
-- [**Architecture Decision Records**](docs/adr/) — Historical record of platform
-  architecture decisions.
+export default api({
+  "GET /users": async (c: HandlerContext) => {
+    const users = (await c.state.get(["users"])) ?? [];
+    return c.json({ users });
+  },
+
+  "POST /users": async (c: HandlerContext) => {
+    const user = await c.body<{ name: string }>();
+    const id = crypto.randomUUID();
+    await c.state.set(["users", id], { id, name: user.name });
+    // Emit asynchronous signal via Signal primitive
+    await c.signal.send({ event: "user_created", id });
+    return c.json({ id, name: user.name }, 201);
+  },
+});
+```
+
+---
+
+### 3. Background Queue Consumer (`consumer`)
+
+```typescript
+import {
+  consumer,
+  type ConsumerContext,
+  type QueueMessage,
+  withIdempotency,
+} from "@railfog/sdk";
+
+interface JobPayload {
+  orderId: string;
+}
+
+export default consumer<JobPayload>(
+  async (message: QueueMessage<JobPayload>, ctx: ConsumerContext) => {
+    const { orderId } = message.body;
+
+    // Deduplicate against redeliveries using mandatory 14-day retention TTL (Q-4) via State primitive
+    await withIdempotency(
+      ctx.state,
+      ["processed_orders", orderId],
+      async () => {
+        console.log(`Processing order: ${orderId}`);
+        await ctx.state.set(["orders", orderId], { status: "completed" });
+      },
+      { ttlSeconds: 14 * 24 * 3600 },
+    );
+  },
+);
+```
+
+---
+
+## Documentation
+
+Full platform documentation is organized in [`docs/`](docs/README.md):
+
+- [**Documentation Portal**](docs/README.md)
+- [**Core Concepts (Compute, State, Data, Signal)**](docs/concepts/compute.md)
+- [**TypeScript SDK (`@railfog/sdk`)**](docs/sdk/overview.md)
+- [**Architecture Composition**](docs/composition/overview.md)
+- [**Pluggable Providers**](docs/providers/overview.md)
+- [**5-Minute Quickstart**](docs/get-started/quickstart.md)
+- [**Developer Guides**](docs/guides/local-development.md)
+- [**CLI Reference**](docs/reference/cli.md)
+- [**Configuration Reference (`railfog.toml`)**](docs/configuration-reference.md)
+- [**TypeScript SDK Guide**](docs/sdk-guide.md)
+- [**Error Codes Reference (`PLAT-12`)**](docs/reference/error-codes.md)
+- [**Platform Glossary**](docs/glossary.md)
+- [**Architectural Constitution**](docs/CONSTITUTION.md)
+- [**Formal LTS Specifications**](docs/contracts/platform.contract.md)
 
 ---
 
 ## License
 
-MIT License. Copyright (c) 2026 Moustafa At1a.
+RailFog is open-source software licensed under the [MIT License](LICENSE).

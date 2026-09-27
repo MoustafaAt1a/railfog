@@ -103,5 +103,5 @@ before receiving customer requests:
 
 ## Next Steps
 
-- Review the [Platform Constitution](../reference/constitution.md).
-- Learn about the [KV Primitive](../primitives/kv/overview.md).
+- Review the [Platform Constitution](../CONSTITUTION.md).
+- Learn about the [Key-Value Storage Guide](../guides/kv.md).

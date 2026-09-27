@@ -43,6 +43,6 @@ As mandated by [`docs/reference/constitution.md`](../docs/reference/constitution
 
 ## 3. Sandboxing Invariants
 
-1. **Warm Reuse Isolation ([`FN-6`](../docs/contracts/functions.contract.md#FN-6))**: Isolates are reused ONLY within the exact same `Function + Revision` pair. Bindings (`ctx.kv`, `ctx.objects`, `ctx.queues`, `ctx.env`) are re-injected freshly on every invocation.
+1. **Warm Reuse Isolation ([`FN-6`](../docs/contracts/functions.contract.md#FN-6))**: Isolates are reused ONLY within the exact same `Function + Revision` pair. Bindings (`ctx.state`, `ctx.data`, `ctx.signal`, `ctx.env`) are re-injected freshly on every invocation.
 2. **Call-Depth Guard ([`FN-7`](../docs/contracts/functions.contract.md#FN-7))**: Functions propagating downstream calls attach `x-railfog-call-depth`. If the depth exceeds 8, the runtime returns `429 CALL_DEPTH_EXCEEDED` to prevent infinite recursion.
 3. **Hard Deadlines ([`FN-5`](../docs/contracts/functions.contract.md#FN-5))**: When `timeout_ms` expires, the execution promise is rejected with a standardized `504 TIMEOUT` error and the isolate is terminated.

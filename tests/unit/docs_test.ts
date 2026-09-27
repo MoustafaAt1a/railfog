@@ -22,7 +22,7 @@
 // spec: tasks/milestone-0.5-developer-experience/T-0510-developer-documentation-and-schema.md
 
 import { assert } from "@std/assert";
-import { join, resolve, toFileUrl } from "@std/path";
+import { dirname, join, resolve, toFileUrl } from "@std/path";
 import { parse as parseToml } from "@std/toml";
 
 const repoRoot = resolve(import.meta.dirname ?? ".", "../..");
@@ -36,6 +36,18 @@ async function fileExists(path: string): Promise<boolean> {
   try {
     const stat = await Deno.stat(path);
     return stat.isFile;
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      return false;
+    }
+    throw err;
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await Deno.stat(path);
+    return true;
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       return false;
@@ -97,8 +109,19 @@ function prepareSnippetForCheck(snippet: string, sdkModUrl: string): string {
       "KVAtomicOperation",
       "AtomicOperation",
       "RailFogErrorCode",
+      "StateBinding",
+      "DataBinding",
+      "SignalBinding",
+      "ConsumerContext",
     ];
     const sdkValueNames = [
+      "compute",
+      "consumer",
+      "handle",
+      "api",
+      "router",
+      "mutate",
+      "scopedKV",
       "withIdempotency",
       "withRetry",
       "normalizeError",
@@ -152,45 +175,82 @@ function prepareSnippetForCheck(snippet: string, sdkModUrl: string): string {
   }
 
   // Declare ambient variables if used as free variables in expressions/statements
+  const codeWithoutComments = prepared.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
   const ambientDeclarations: string[] = [];
   if (
-    /\bctx\b/.test(prepared) &&
-    !/\bctx\s*[:=,]|\(\s*[^)]*\bctx\b/.test(prepared)
+    /(?<![\.\w])\bctx\b/.test(codeWithoutComments) &&
+    !/\bctx\s*[:=,]|\(\s*[^)]*\bctx\b/.test(codeWithoutComments)
   ) {
     ambientDeclarations.push("declare const ctx: RailFogContext;");
   }
   if (
-    /\bkv\b/.test(prepared) && !/\bkv\s*[:=,]|\(\s*[^)]*\bkv\b/.test(prepared)
+    /(?<![\.\w])\bkv\b/.test(codeWithoutComments) &&
+    !/\bkv\s*[:=,]|\(\s*[^)]*\bkv\b/.test(codeWithoutComments)
   ) {
     ambientDeclarations.push("declare const kv: KVBinding;");
   }
   if (
-    /\bobjects\b/.test(prepared) &&
-    !/\bobjects\s*[:=,]|\(\s*[^)]*\bobjects\b/.test(prepared)
+    /(?<![\.\w])\bstate\b/.test(codeWithoutComments) &&
+    !/\bstate\s*[:=,]|\(\s*[^)]*\bstate\b/.test(codeWithoutComments)
+  ) {
+    ambientDeclarations.push("declare const state: StateBinding;");
+  }
+  if (
+    /(?<![\.\w])\bobjects\b/.test(codeWithoutComments) &&
+    !/\bobjects\s*[:=,]|\(\s*[^)]*\bobjects\b/.test(codeWithoutComments)
   ) {
     ambientDeclarations.push("declare const objects: ObjectBinding;");
   }
   if (
-    /\bqueues\b/.test(prepared) &&
-    !/\bqueues\s*[:=,]|\(\s*[^)]*\bqueues\b/.test(prepared)
+    /(?<![\.\w])\bdata\b/.test(codeWithoutComments) &&
+    !/\bdata\s*[:=,]|\(\s*[^)]*\bdata\b/.test(codeWithoutComments)
+  ) {
+    ambientDeclarations.push("declare const data: DataBinding;");
+  }
+  if (
+    /(?<![\.\w])\bqueues\b/.test(codeWithoutComments) &&
+    !/\bqueues\s*[:=,]|\(\s*[^)]*\bqueues\b/.test(codeWithoutComments)
   ) {
     ambientDeclarations.push("declare const queues: QueueBinding;");
   }
   if (
-    /\bkey\b/.test(prepared) &&
-    !/\bkey\s*[:=,]|\(\s*[^)]*\bkey\b/.test(prepared)
+    /(?<![\.\w])\bsignal\b/.test(codeWithoutComments) &&
+    !/\bsignal\s*[:=,]|\(\s*[^)]*\bsignal\b/.test(codeWithoutComments)
+  ) {
+    ambientDeclarations.push("declare const signal: SignalBinding;");
+  }
+  if (
+    /(?<![\.\w])\bkey\b/.test(codeWithoutComments) &&
+    !/\bkey\s*[:=,]|\(\s*[^)]*\bkey\b/.test(codeWithoutComments)
   ) {
     ambientDeclarations.push("declare const key: string;");
   }
   if (
-    /\bmessage\b/.test(prepared) &&
-    !/\bmessage\s*[:=,]|\(\s*[^)]*\bmessage\b/.test(prepared)
+    /(?<![\.\w])\bmessage\b/.test(codeWithoutComments) &&
+    !/\bmessage\s*[:=,]|\(\s*[^)]*\bmessage\b/.test(codeWithoutComments)
   ) {
     ambientDeclarations.push("declare const message: QueueMessage;");
   }
 
   if (ambientDeclarations.length > 0) {
-    prepared = ambientDeclarations.join("\n") + "\n" + prepared;
+    const ambientTypes = [
+      "RailFogContext",
+      "KVBinding",
+      "StateBinding",
+      "ObjectBinding",
+      "DataBinding",
+      "QueueBinding",
+      "SignalBinding",
+      "QueueMessage",
+    ].filter((name) =>
+      ambientDeclarations.some((decl) => decl.includes(name)) &&
+      !new RegExp(`\\bimport\\b[^{]*{[^}]*\\b${name}\\b`).test(prepared)
+    );
+    let ambientTypesImport = "";
+    if (ambientTypes.length > 0) {
+      ambientTypesImport = `import type { ${ambientTypes.join(", ")} } from "${sdkModUrl}";\n`;
+    }
+    prepared = ambientTypesImport + ambientDeclarations.join("\n") + "\n" + prepared;
   }
 
   return prepared;
@@ -620,4 +680,71 @@ Deno.test("TOML snippets in docs/configuration-reference.md parse successfully",
       );
     }
   }
+});
+
+// ============================================================================
+// Test 9: All local markdown links in docs/, README.md, and SECURITY.md resolve
+// ============================================================================
+Deno.test("All local markdown links in docs/, README.md, and SECURITY.md resolve", async () => {
+  async function walk(dir: string): Promise<string[]> {
+    const files: string[] = [];
+    for await (const entry of Deno.readDir(dir)) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory) {
+        if (
+          entry.name !== ".git" && entry.name !== ".agents" &&
+          entry.name !== "node_modules"
+        ) {
+          files.push(...await walk(full));
+        }
+      } else if (entry.isFile && entry.name.endsWith(".md")) {
+        files.push(full);
+      }
+    }
+    return files;
+  }
+
+  const mdFiles = await walk(join(repoRoot, "docs"));
+  mdFiles.push(join(repoRoot, "README.md"));
+  const securityPath = join(repoRoot, "SECURITY.md");
+  if (await fileExists(securityPath)) {
+    mdFiles.push(securityPath);
+  }
+
+  const brokenLinks: string[] = [];
+  for (const file of mdFiles) {
+    const content = await Deno.readTextFile(file);
+    const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content)) !== null) {
+      const rawTarget = match[2].trim();
+      if (
+        rawTarget.startsWith("http://") ||
+        rawTarget.startsWith("https://") ||
+        rawTarget.startsWith("mailto:") ||
+        rawTarget.startsWith("#")
+      ) {
+        continue;
+      }
+      const pathOnly = rawTarget.split("#")[0];
+      if (!pathOnly) continue;
+
+      const resolved = resolve(dirname(file), pathOnly);
+      const exists = await pathExists(resolved);
+      if (!exists) {
+        brokenLinks.push(
+          `${file.replace(repoRoot, "")}: [${
+            match[1]
+          }](${rawTarget}) -> ${resolved}`,
+        );
+      }
+    }
+  }
+
+  assert(
+    brokenLinks.length === 0,
+    `Found ${brokenLinks.length} broken markdown links:\n${
+      brokenLinks.join("\n")
+    }`,
+  );
 });

@@ -1624,6 +1624,15 @@ Deno.test("FN-4, PLAT-6 & PLAT-12: wrapContext wraps all capabilities with error
     objects: mockObj,
     queues: mockQueue,
     env: mockEnv,
+    get state() {
+      return this.kv;
+    },
+    get data() {
+      return this.objects;
+    },
+    get signal() {
+      return this.queues;
+    },
   };
 
   const wrappedCtx = wrapContext(rawCtx);
@@ -1650,8 +1659,14 @@ Deno.test("FN-4, PLAT-6 & PLAT-12: wrapContext wraps all capabilities with error
   assertEquals(wrappedCtx.env.get("TOKEN"), "tok_123");
   assertEquals(wrappedCtx.env.require("TOKEN"), "tok_123");
 
+  // CONCEPT-2: Canonical conceptual aliases match infrastructure bindings
+  assertEquals(wrappedCtx.state, wrappedCtx.kv);
+  assertEquals(wrappedCtx.data, wrappedCtx.objects);
+  assertEquals(wrappedCtx.signal, wrappedCtx.queues);
+
   // Adversarial: ensure no ambient host handles leaked on wrappedCtx
   const allowedCtxKeys = [
+    "data",
     "deadline",
     "env",
     "function",
@@ -1661,6 +1676,8 @@ Deno.test("FN-4, PLAT-6 & PLAT-12: wrapContext wraps all capabilities with error
     "queues",
     "requestId",
     "revision",
+    "signal",
+    "state",
     "timeRemaining",
   ].sort();
   assertEquals(Object.keys(wrappedCtx).sort(), allowedCtxKeys);

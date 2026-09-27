@@ -148,5 +148,5 @@ flip to the new revision.
 
 - Explore the [Project Structure Guide](project-structure.md).
 - Learn about the
-  [Declarative Manifest (`railfog.toml`)](../configuration/manifest.md).
-- Dive into the [TypeScript SDK Guide](../sdk/overview.md).
+  [Declarative Manifest (`railfog.toml`)](../configuration-reference.md).
+- Dive into the [TypeScript SDK Guide](../sdk-guide.md).

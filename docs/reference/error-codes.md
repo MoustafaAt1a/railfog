@@ -42,6 +42,6 @@ Error responses return a nested JSON envelope (`PLAT-12`):
 ```
 
 The `request_id` is a sortable ULID (`PLAT-14`) that correlates across Gateway
-access logs, Data Plane execution traces, and background metrics. Clients
-should branch on `error.code` only — `error.message` is human-readable prose
-and may change between releases.
+access logs, Data Plane execution traces, and background metrics. Clients should
+branch on `error.code` only — `error.message` is human-readable prose and may
+change between releases.

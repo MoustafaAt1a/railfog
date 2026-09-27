@@ -1,0 +1,20 @@
+# RailFog Code Ownership
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default repository maintainer
+* @MoustafaAt1a
+
+# Core architecture and formal specifications
+/docs/contracts/ @MoustafaAt1a
+/docs/CONSTITUTION.md @MoustafaAt1a
+/docs/adr/ @MoustafaAt1a
+
+# Runtime and security primitives
+/runtime/ @MoustafaAt1a
+/primitives/ @MoustafaAt1a
+/providers/ @MoustafaAt1a
+/tests/security/ @MoustafaAt1a
+
+# CLI and developer tooling
+/cli/ @MoustafaAt1a
+/sdk/ @MoustafaAt1a

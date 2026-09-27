@@ -586,6 +586,15 @@ export function handle(fn: HandlerFn): FunctionHandler {
   };
 }
 
+/**
+ * Canonical developer concept alias for handle() (CONCEPT-2).
+ * Establishes Compute as the fundamental unit of execution.
+ *
+ * @spec contracts/concepts.contract.md#CONCEPT-2
+ * @spec contracts/functions.contract.md#FN-1
+ */
+export const compute = handle;
+
 const LITERAL_SEGMENT_WEIGHT = 2;
 const WILDCARD_OR_NAMED_SEGMENT_WEIGHT = 1;
 
@@ -709,6 +718,19 @@ export function api(routes: ApiRouteMap): FunctionHandler {
 }
 
 /**
+ * Augmented context provided to ergonomic queue consumer functions.
+ * Extends RailFogContext with non-optional conceptual bindings.
+ *
+ * @spec contracts/concepts.contract.md#CONCEPT-2 — Conceptual aliases
+ * @spec contracts/queues.contract.md#Q-2 — Queue binding API
+ */
+export interface ConsumerContext extends RailFogContext {
+  readonly state: StateBinding;
+  readonly data: DataBinding;
+  readonly signal: SignalBinding;
+}
+
+/**
  * Creates an ergonomic QueueConsumerHandler with optional automatic idempotency deduplication.
  *
  * @spec contracts/functions.contract.md#FN-2 — Queue trigger entrypoint
@@ -716,25 +738,38 @@ export function api(routes: ApiRouteMap): FunctionHandler {
  * @spec contracts/queues.contract.md#Q-4 — Idempotency deduplication with mandatory TTL
  */
 export function consumer<T = unknown>(
-  fn: (message: QueueMessage<T>, ctx: RailFogContext) => Promise<void> | void,
+  fn: (message: QueueMessage<T>, ctx: ConsumerContext) => Promise<void> | void,
   options?: ConsumerOptions,
 ): QueueConsumerHandler<T> {
   return async (
     message: QueueMessage<T>,
     ctx: RailFogContext,
   ): Promise<void> => {
+    // spec: contracts/concepts.contract.md#CONCEPT-2 — Conceptual aliases (state, data, signal)
+    const conceptualCtx: ConsumerContext = {
+      ...ctx,
+      get state() {
+        return ctx.kv;
+      },
+      get data() {
+        return ctx.objects;
+      },
+      get signal() {
+        return ctx.queues;
+      },
+    };
     if (options?.idempotent) {
       const key = options.dedupeKey
         ? options.dedupeKey(message as QueueMessage)
         : ["railfog_dedupe", message.id];
       await withIdempotency(
-        ctx.kv,
+        conceptualCtx.kv,
         key,
-        () => fn(message, ctx),
+        () => fn(message, conceptualCtx),
         { ttlSeconds: options.ttlSeconds },
       );
     } else {
-      await fn(message, ctx);
+      await fn(message, conceptualCtx);
     }
   };
 }

@@ -12,7 +12,12 @@ import { assertEquals, assertExists, assertThrows } from "@std/assert";
 import { ValidationFailedError } from "../../packages/errors/mod.ts";
 
 // Public SDK entrypoint import per PLAT-19 and task T-0501
-import "../../sdk/typescript/mod.ts";
+import {
+  compute,
+  createMockContext as createSdkMockContext,
+  handle,
+  wrapContext,
+} from "../../sdk/typescript/mod.ts";
 import type {
   ComputeHandler,
   CookieOptions,
@@ -687,6 +692,15 @@ function createMockContext(): RailFogContext {
         throw new ValidationFailedError("Missing secret");
       },
     },
+    get state() {
+      return this.kv;
+    },
+    get data() {
+      return this.objects;
+    },
+    get signal() {
+      return this.queues;
+    },
   };
 }
 
@@ -736,3 +750,30 @@ Deno.test("CookieOptions: sameSite is normalized to RFC standard casing ('Strict
   const _sameSiteValid: Equal<StrictSameSite, "Strict" | "Lax" | "None"> = true;
   assertEquals(_sameSiteValid, true);
 });
+
+// ---------------------------------------------------------------------------
+// 11. SDK compute export and conceptual context fixtures (CONCEPT-1, CONCEPT-2)
+// ---------------------------------------------------------------------------
+
+Deno.test("CONCEPT-2: SDK exports compute() alias and context helpers supply state, data, signal", async () => {
+  // 1. compute export equals handle
+  assertEquals(compute, handle);
+
+  // 2. createMockContext supplies conceptual getters
+  const mockCtx = createSdkMockContext({
+    initialKv: { "users/u1": { name: "Test" } },
+  });
+  assertEquals(mockCtx.state, mockCtx.kv);
+  assertEquals(mockCtx.data, mockCtx.objects);
+  assertEquals(mockCtx.signal, mockCtx.queues);
+
+  const user = await mockCtx.state!.get(["users", "u1"]);
+  assertEquals(user, { name: "Test" });
+
+  // 3. wrapContext supplies conceptual getters
+  const wrapped = wrapContext(mockCtx);
+  assertEquals(wrapped.state, wrapped.kv);
+  assertEquals(wrapped.data, wrapped.objects);
+  assertEquals(wrapped.signal, wrapped.queues);
+});
+

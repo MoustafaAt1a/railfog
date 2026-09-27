@@ -144,6 +144,24 @@ export interface RailFogContext {
   objects: ObjectBinding;
   queues: QueueBinding;
   env: EnvBinding;
+
+  /**
+   * Canonical conceptual alias for kv (CONCEPT-2).
+   * @spec contracts/concepts.contract.md#CONCEPT-2
+   */
+  readonly state: StateBinding;
+
+  /**
+   * Canonical conceptual alias for objects (CONCEPT-2).
+   * @spec contracts/concepts.contract.md#CONCEPT-2
+   */
+  readonly data: DataBinding;
+
+  /**
+   * Canonical conceptual alias for queues (CONCEPT-2).
+   * @spec contracts/concepts.contract.md#CONCEPT-2
+   */
+  readonly signal: SignalBinding;
 }
 
 /**

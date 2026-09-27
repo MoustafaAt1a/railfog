@@ -1,15 +1,15 @@
 # Contract — KV
 
-Source: `railfog-v1_0_0-lts.md` §4.2 and Appendix A (CAS formula). Audit
-Finding #1 and #5 both live here — read the "Banned patterns" section at the
-bottom before implementing anything.
+Source: `railfog-v1_0_0-lts.md` §4.2 and Appendix A (CAS formula). Audit Finding
+#1 and #5 both live here — read the "Banned patterns" section at the bottom
+before implementing anything.
 
 ## KV-1 — Purpose and non-purpose
 
-For: configuration, sessions, feature flags, counters, small indexes.
-Not for: relational data, analytics, a document database. Value limit is
-256 KB precisely so it can't drift into being those things by accident —
-anything bigger belongs in Objects, referenced by key.
+For: configuration, sessions, feature flags, counters, small indexes. Not for:
+relational data, analytics, a document database. Value limit is 256 KB precisely
+so it can't drift into being those things by accident — anything bigger belongs
+in Objects, referenced by key.
 
 ## KV-2 — API
 
@@ -46,16 +46,16 @@ consensus protocol is needed or should be built.
 
 Hierarchical, e.g. `["users", "123"]`. Internally namespaced per
 `platform.contract.md` PLAT-7 as
-`{org_id}/{project_id}/{resource_name}/{caller_key}`. Max key length 512
-bytes, max 32 segments. A Function never sees or constructs this physical
-prefix — `ctx.kv` closes over it at injection time.
+`{org_id}/{project_id}/{resource_name}/{caller_key}`. Max key length 512 bytes,
+max 32 segments. A Function never sees or constructs this physical prefix —
+`ctx.state` (or legacy `ctx.kv`) closes over it at injection time.
 
 ## KV-5 — Consistency tiers (provider-verified, not aspirational)
 
-| Tier | Guarantee | Backing provider (MVP) | Use for |
-|---|---|---|---|
-| `strong` | Linearizable per key, CAS-backed | Deno Deploy KV (`consistency: "strong"`) or a Durable-Object/Postgres-CAS adapter | sessions, counters, locks, idempotency keys, circuit-breaker state |
-| `eventual` | Propagates within seconds, no ordering guarantee | Cloudflare Workers KV | feature flags, config cache, read-heavy staleness-tolerant data |
+| Tier       | Guarantee                                        | Backing provider (MVP)                                                            | Use for                                                            |
+| ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `strong`   | Linearizable per key, CAS-backed                 | Deno Deploy KV (`consistency: "strong"`) or a Durable-Object/Postgres-CAS adapter | sessions, counters, locks, idempotency keys, circuit-breaker state |
+| `eventual` | Propagates within seconds, no ordering guarantee | Cloudflare Workers KV                                                             | feature flags, config cache, read-heavy staleness-tolerant data    |
 
 Requesting `strong` against an `eventual`-backed namespace is a **deploy-time
 validation error** — never a silent downgrade. Never implement a fallback that

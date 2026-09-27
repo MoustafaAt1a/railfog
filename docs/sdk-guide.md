@@ -25,12 +25,12 @@ Functions do not import a global ambient SDK client. Instead, each invocation
 receives an isolated `RailFogContext` (`ctx`) carrying capability bindings
 physically scoped to the manifest declarations in `railfog.toml`:
 
-- `ctx.kv`: Key-Value storage scoped to the declared namespace
-  ([`KV-2`](contracts/kv.contract.md#KV-2)).
-- `ctx.objects`: Object storage scoped to the declared bucket
-  ([`OBJ-2`](contracts/objects.contract.md#OBJ-2)).
-- `ctx.queues`: Queue sender scoped to the declared target queue
-  ([`Q-2`](contracts/queues.contract.md#Q-2)).
+- `ctx.state` / `ctx.kv`: State storage scoped to the declared namespace
+  ([`KV-2`](contracts/kv.contract.md#KV-2), [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2)).
+- `ctx.data` / `ctx.objects`: Durable Data storage scoped to the declared bucket
+  ([`OBJ-2`](contracts/objects.contract.md#OBJ-2), [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2)).
+- `ctx.signal` / `ctx.queues`: Signal sender scoped to the declared target queue
+  ([`Q-2`](contracts/queues.contract.md#Q-2), [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2)).
 - `ctx.env`: Environment secrets scoped to declared secret keys
   ([`PLAT-15`](contracts/platform.contract.md#PLAT-15)).
 
@@ -89,18 +89,21 @@ export default async function handler(
 | `ctx.revision`        | `string`        | [`PLAT-3`](contracts/platform.contract.md#PLAT-3)   | Immutable deployment revision identifier.                                              |
 | `ctx.deadline`        | `number`        | [`FN-5`](contracts/functions.contract.md#FN-5)      | Epoch millisecond timestamp of the hard termination deadline.                          |
 | `ctx.timeRemaining()` | `() => number`  | [`FN-4`](contracts/functions.contract.md#FN-4)      | Returns milliseconds remaining before hard termination.                                |
-| `ctx.kv`              | `KVBinding`     | [`KV-2`](contracts/kv.contract.md#KV-2)             | Capability-scoped Key-Value storage handle.                                            |
-| `ctx.objects`         | `ObjectBinding` | [`OBJ-2`](contracts/objects.contract.md#OBJ-2)      | Capability-scoped Object storage handle.                                               |
-| `ctx.queues`          | `QueueBinding`  | [`Q-2`](contracts/queues.contract.md#Q-2)           | Capability-scoped Queue sender handle.                                                 |
+| `ctx.kv`              | `KVBinding`     | [`KV-2`](contracts/kv.contract.md#KV-2)             | Capability-scoped Key-Value storage handle (State implementation).                     |
+| `ctx.state`           | `StateBinding`  | [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2) | Canonical conceptual alias for Key-Value State (`ctx.kv`).                            |
+| `ctx.objects`         | `ObjectBinding` | [`OBJ-2`](contracts/objects.contract.md#OBJ-2)      | Capability-scoped Object storage handle (Data implementation).                         |
+| `ctx.data`            | `DataBinding`   | [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2) | Canonical conceptual alias for bulk Object Data (`ctx.objects`).                       |
+| `ctx.queues`          | `QueueBinding`  | [`Q-2`](contracts/queues.contract.md#Q-2)           | Capability-scoped Queue sender handle (Signal implementation).                         |
+| `ctx.signal`          | `SignalBinding` | [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2) | Canonical conceptual alias for asynchronous Signal (`ctx.queues`).                     |
 | `ctx.env`             | `EnvBinding`    | [`PLAT-15`](contracts/platform.contract.md#PLAT-15) | Capability-scoped encrypted secret resolver.                                           |
 
 ---
 
-## 3. Storage Primitives
+## 3. Storage & Communication Primitives
 
-### 3.1 Key-Value Storage (`ctx.kv` / `KVBinding`) ([`KV-2`](contracts/kv.contract.md#KV-2), [`KV-5`](contracts/kv.contract.md#KV-5))
+### 3.1 State Storage (`ctx.state` / `StateBinding` / `ctx.kv`) ([`KV-2`](contracts/kv.contract.md#KV-2), [`KV-5`](contracts/kv.contract.md#KV-5), [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2))
 
-The KV primitive provides structured state management up to 256 KB per entry
+The State primitive (implemented via Key-Value storage) provides structured state management up to 256 KB per entry
 ([`KV-1`](contracts/kv.contract.md#KV-1)) using hierarchical string tuple keys
 and atomic Check-And-Set transactions ([`KV-3`](contracts/kv.contract.md#KV-3)).
 
@@ -111,22 +114,23 @@ import type {
   QueueBinding,
   QueueMessage,
   RailFogContext,
+  StateBinding,
 } from "@railfog/sdk";
 
-export async function demonstrateKV(kv: KVBinding): Promise<void> {
+export async function demonstrateState(state: StateBinding): Promise<void> {
   // Set value with optional TTL in seconds (KV-2)
-  await kv.set(["sessions", "user-123"], { authenticated: true }, {
+  await state.set(["sessions", "user-123"], { authenticated: true }, {
     ttl: 3600,
   });
 
   // Retrieve typed value
-  const session = await kv.get<{ authenticated: boolean }>([
+  const session = await state.get<{ authenticated: boolean }>([
     "sessions",
     "user-123",
   ]);
 
   // Atomic Check-And-Set (CAS) transaction (KV-2, KV-3)
-  const atomic = kv.atomic();
+  const atomic = state.atomic();
   atomic
     .check(["counters", "hits"], 10)
     .set(["counters", "hits"], 11);
@@ -137,18 +141,18 @@ export async function demonstrateKV(kv: KVBinding): Promise<void> {
   }
 
   // Prefix scan over hierarchical keys
-  const { entries } = await kv.list(["sessions"], { limit: 50 });
+  const { entries } = await state.list(["sessions"], { limit: 50 });
 
   // Delete key
-  await kv.delete(["sessions", "user-123"]);
+  await state.delete(["sessions", "user-123"]);
 }
 ```
 
 ---
 
-### 3.2 Object Storage (`ctx.objects` / `ObjectBinding`) ([`OBJ-2`](contracts/objects.contract.md#OBJ-2), [`OBJ-3`](contracts/objects.contract.md#OBJ-3))
+### 3.2 Durable Data Storage (`ctx.data` / `DataBinding` / `ctx.objects`) ([`OBJ-2`](contracts/objects.contract.md#OBJ-2), [`OBJ-3`](contracts/objects.contract.md#OBJ-3), [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2))
 
-The Object primitive stores durable binary assets such as file uploads, media,
+The Data primitive (implemented via Object storage) stores durable binary assets such as file uploads, media,
 and datasets ([`OBJ-1`](contracts/objects.contract.md#OBJ-1)).
 
 #### Direct Client-to-Storage Transfer ([`OBJ-3`](contracts/objects.contract.md#OBJ-3) — Never a Bandwidth Proxy)
@@ -158,10 +162,11 @@ payloads through serverless functions consumes isolate memory, CPU cycles, and
 network bandwidth while degrading concurrency.
 
 Instead, functions generate time-limited SigV4 presigned URLs via
-`ctx.objects.presign`, allowing clients to stream bytes directly to storage:
+`ctx.data.presign` (or `ctx.objects.presign`), allowing clients to stream bytes directly to storage:
 
 ```typescript
 import type {
+  DataBinding,
   KVBinding,
   ObjectBinding,
   QueueBinding,
@@ -175,8 +180,8 @@ export default async function handler(
 ): Promise<Response> {
   const uploadKey = crypto.randomUUID();
 
-  // Generate presigned PUT URL for direct client upload (OBJ-3)
-  const { url } = await ctx.objects.presign(uploadKey, {
+  // Generate presigned PUT URL for direct client upload (OBJ-3) via Data primitive
+  const { url } = await ctx.data.presign(uploadKey, {
     method: "PUT",
     expiresIn: 900, // 15 minutes expiration
   });
@@ -195,9 +200,9 @@ Client ───────(3) PUT Binary Bytes Direct───► S3 / R2 Buck
 
 ---
 
-### 3.3 Asynchronous Queues (`ctx.queues` / `QueueBinding`) ([`Q-2`](contracts/queues.contract.md#Q-2), [`Q-3`](contracts/queues.contract.md#Q-3))
+### 3.3 Asynchronous Signal (`ctx.signal` / `SignalBinding` / `ctx.queues`) ([`Q-2`](contracts/queues.contract.md#Q-2), [`Q-3`](contracts/queues.contract.md#Q-3), [`CONCEPT-2`](contracts/concepts.contract.md#CONCEPT-2))
 
-Queues provide decoupled message processing with at-least-once delivery
+Signal (implemented via Queues) provides decoupled message processing with at-least-once delivery
 ([`Q-1`](contracts/queues.contract.md#Q-1)). Payloads are capped at 128 KB
 ([`Q-2`](contracts/queues.contract.md#Q-2)).
 
@@ -208,16 +213,17 @@ import type {
   QueueBinding,
   QueueMessage,
   RailFogContext,
+  SignalBinding,
 } from "@railfog/sdk";
 
-export async function dispatchJobs(queues: QueueBinding): Promise<void> {
+export async function dispatchSignals(signal: SignalBinding): Promise<void> {
   // Send single message with optional delivery delay up to 15 minutes (Q-2)
-  const { id } = await queues.send({ taskId: "task_456", action: "index" }, {
+  const { id } = await signal.send({ taskId: "task_456", action: "index" }, {
     delay: 60,
   });
 
   // Send batch of messages atomically
-  const results = await queues.sendBatch([
+  const results = await signal.sendBatch([
     { taskId: "task_789", action: "thumbnail" },
     { taskId: "task_790", action: "transcode" },
   ]);
@@ -375,10 +381,10 @@ export default async function handler(
   ctx: RailFogContext,
 ): Promise<Response> {
   const key = crypto.randomUUID();
-  // Generate presigned PUT URL for direct client-to-storage transfer (OBJ-2, OBJ-3)
-  const { url } = await ctx.objects.presign(key, { method: "PUT" });
-  // Enqueue async job message (Q-2)
-  await ctx.queues.send({ key, uploadedAt: Date.now() });
+  // Generate presigned PUT URL for direct client-to-storage transfer (OBJ-2, OBJ-3) via Data primitive
+  const { url } = await ctx.data.presign(key, { method: "PUT" });
+  // Enqueue async job message via Signal primitive (Q-2)
+  await ctx.signal.send({ key, uploadedAt: Date.now() });
   return Response.json({ uploadUrl: url, key });
 }
 ```
@@ -400,17 +406,17 @@ export default async function consume(
 ): Promise<void> {
   const { key } = message.body as { key: string };
 
-  // Deduplication check with mandatory 14-day retention TTL (Q-4)
+  // Deduplication check with mandatory 14-day retention TTL (Q-4) via State primitive
   const dedupeKey = ["processed", key];
-  if (await ctx.kv.get(dedupeKey)) return;
+  if (await ctx.state.get(dedupeKey)) return;
 
-  // Retrieve object stream from storage (OBJ-2)
-  const stream = await ctx.objects.get(key);
+  // Retrieve object stream from storage (OBJ-2) via Data primitive
+  const stream = await ctx.data.get(key);
   if (!stream) return; // Not yet uploaded; safe no-op for redelivery (Q-3)
 
-  // Commit processing status to KV (KV-2) and record deduplication marker
-  await ctx.kv.set(["files", key], { status: "processed" });
-  await ctx.kv.set(dedupeKey, true, { ttl: 14 * 24 * 3600 });
+  // Commit processing status to State (KV-2) and record deduplication marker
+  await ctx.state.set(["files", key], { status: "processed" });
+  await ctx.state.set(dedupeKey, true, { ttl: 14 * 24 * 3600 });
 }
 ```
 
@@ -418,17 +424,19 @@ export default async function consume(
 
 ## 7. Ergonomic Handlers & Utilities
 
-### 7.1 Minimalist HTTP Handler (`handle`)
+### 7.1 Minimalist Compute Handler (`compute` / `handle`)
 
 Eliminates boilerplate with auto-destructured context and automatic JSON
-response serialization:
+response serialization. In v0.9.1, `compute` is the canonical conceptual entrypoint,
+aliasing `handle`:
 
 ```typescript
-import { handle } from "@railfog/sdk";
+import { compute } from "@railfog/sdk";
 
-export default handle(async ({ kv }) => {
-  const count = (await kv.get<number>(["visitor_counter"])) ?? 0;
-  await kv.set(["visitor_counter"], count + 1);
+export default compute(async ({ state, kv }) => {
+  // Access via conceptual state binding or traditional kv binding
+  const count = (await (state ?? kv).get<number>(["visitor_counter"])) ?? 0;
+  await (state ?? kv).set(["visitor_counter"], count + 1);
   return { visitors: count + 1 };
 });
 ```
@@ -562,12 +570,12 @@ Wraps queue message handlers with optional automatic 14-day KV idempotency
 deduplication (`Q-4`):
 
 ```typescript
-import { consumer, type KVBinding } from "@railfog/sdk";
+import { consumer, type ConsumerContext } from "@railfog/sdk";
 
 export default consumer<{ orderId: string }>(
-  async (message, ctx) => {
+  async (message, ctx: ConsumerContext) => {
     const { orderId } = message.body;
-    await ctx.kv.set(["orders", orderId], { processed: true });
+    await ctx.state.set(["orders", orderId], { processed: true });
   },
   { idempotent: true }, // Automatically deduplicates via KV with 14-day TTL
 );
@@ -662,29 +670,29 @@ Deno.test("creates user and verifies KV", async () => {
   const res = await apiHandler(req, ctx);
   assertEquals(res.status, 200);
 
-  // Inspect storage directly
-  assertEquals(await ctx.kv.get(["users", "alice"]), { username: "alice" });
+  // Inspect storage directly via State primitive
+  assertEquals(await ctx.state.get(["users", "alice"]), { username: "alice" });
 });
 ```
 
-### 7.13 Zero-Boilerplate Object Stream Readers (`readBytes`, `readText`, `readJson`)
+### 7.13 Zero-Boilerplate Data & Object Stream Readers (`readBytes`, `readText`, `readJson`)
 
 Safely consume binary and text object streams returned from
-`c.objects.get(key)`:
+`c.data.get(key)` (with `c.objects.get(key)` supported for backwards compatibility):
 
 ```typescript
-import { handle, readBytes, readJson, readText } from "@railfog/sdk";
+import { compute, readBytes, readJson, readText } from "@railfog/sdk";
 
 interface AppConfig {
   theme: string;
 }
 
-export default handle(async ({ objects }) => {
-  const stream = await objects.get("notes.txt");
+export default compute(async ({ data }) => {
+  const stream = await data.get("notes.txt");
   const text = await readText(stream);
 
-  const config = await readJson<AppConfig>(await objects.get("config.json"));
-  const rawBytes = await readBytes(await objects.get("avatar.png"));
+  const config = await readJson<AppConfig>(await data.get("config.json"));
+  const rawBytes = await readBytes(await data.get("avatar.png"));
 
   return { text, config, bytes: rawBytes.byteLength };
 });

@@ -1,16 +1,16 @@
 # Global Multi-Region & Edge Deployment Blueprint
 
 > [!NOTE]
-> **Documentation**: [Architecture Home](overview.md) &nbsp;|&nbsp; **Specification**:
+> **Documentation**: [Architecture Home](overview.md) &nbsp;|&nbsp;
+> **Specification**:
 > [PLAT-1 (Modular Monolith)](../contracts/platform.contract.md#PLAT-1),
 > [PLAT-8 (Fail-Static)](../contracts/platform.contract.md#PLAT-8),
 > [PLAT-10 (High Availability)](../contracts/platform.contract.md#PLAT-10)
 
-RailFog's lightweight, standalone runtime daemon (`apps/runtime`) is designed for
-effortless global geo-distribution. Unlike monolithic cloud platforms requiring
-hundreds of proprietary AWS or Cloudflare services, RailFog can be deployed
-globally in minutes using any standard container or cloud host (Railway, Fly.io,
-AWS Fargate, or Bare Metal).
+RailFog's standalone runtime daemon (`apps/runtime`) can be deployed across
+multiple geographical regions. Each regional edge node runs independently,
+serving local traffic using a local configuration snapshot while synchronizing
+with a shared control plane and distributed persistence layer.
 
 ---
 
@@ -75,6 +75,7 @@ flowchart TD
 ### 2.1 Fail-Static Autonomous Survivability (`PLAT-8`)
 
 Each edge station caches the latest verified snapshot on disk and in frozen RAM:
+
 - If the central PostgreSQL database or Control Plane API becomes temporarily
   unreachable or experiences a network partition, **edge data planes continue
   serving read and write traffic without interruption**.
@@ -84,6 +85,7 @@ Each edge station caches the latest verified snapshot on disk and in frozen RAM:
 ### 2.2 Sub-Millisecond Isolate Hot-Reload
 
 When a new revision is deployed via `rail deploy`:
+
 - The Control Plane signs the deployment manifest with SHA-256 and flips the
   atomic revision pointer in PostgreSQL.
 - Distributed edge daemons detect the new revision on their periodic poll
@@ -101,16 +103,19 @@ geographically closest S3 / Cloudflare R2 bucket endpoints.
 ## 3. Recommended Edge Hosting Providers
 
 ### Option A: Railway (Fastest Setup)
+
 - **Control Plane**: Deploy `apps/api` with PostgreSQL and Redis plugins.
 - **Edge Data Planes**: Deploy `apps/runtime` in multiple Railway regions (e.g.
   `us-east4`, `europe-west4`, `asia-southeast1`).
 - **Domain Routing**: Assign custom domains with Railway Anycast routing.
 
 ### Option B: Fly.io (Native Multi-Region Anycast)
-- Use `fly.toml` with `primary_region = "iad"` and scale machines across
-  `iad`, `fra`, `sin`. Fly automatically routes users to the nearest machine
-  via BGP Anycast.
+
+- Use `fly.toml` with `primary_region = "iad"` and scale machines across `iad`,
+  `fra`, `sin`. Fly automatically routes users to the nearest machine via BGP
+  Anycast.
 
 ### Option C: Bare Metal / Hybrid Cloud
+
 - Deploy containerized `railfog-runtime` instances behind HAProxy or NGINX with
   GeoDNS (Amazon Route 53 Geolocation routing or Cloudflare Load Balancing).

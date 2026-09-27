@@ -351,12 +351,27 @@ export function wrapEnvBinding(env: EnvBinding): EnvBinding {
  * @spec contracts/platform.contract.md#PLAT-12 — Error model normalization
  */
 export function wrapContext(ctx: RailFogContext): RailFogContext {
+  const wrappedKv = wrapKVBinding(ctx.kv);
+  const wrappedObjects = wrapObjectBinding(ctx.objects);
+  const wrappedQueues = wrapQueueBinding(ctx.queues);
+  const wrappedEnv = wrapEnvBinding(ctx.env);
+
   return {
     ...ctx,
-    kv: wrapKVBinding(ctx.kv),
-    objects: wrapObjectBinding(ctx.objects),
-    queues: wrapQueueBinding(ctx.queues),
-    env: wrapEnvBinding(ctx.env),
+    kv: wrappedKv,
+    objects: wrappedObjects,
+    queues: wrappedQueues,
+    env: wrappedEnv,
+    // spec: contracts/concepts.contract.md#CONCEPT-2 — Conceptual aliases
+    get state() {
+      return wrappedKv;
+    },
+    get data() {
+      return wrappedObjects;
+    },
+    get signal() {
+      return wrappedQueues;
+    },
   };
 }
 

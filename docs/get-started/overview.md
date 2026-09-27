@@ -5,9 +5,11 @@
 > [LTS 1.0 (PLAT-2, FN-1, FN-2)](../contracts/platform.contract.md)
 > &nbsp;|&nbsp; **Runtime**: Deno v2.0+ Native Web Standards
 
-RailFog is a minimalist, high-performance edge compute platform designed around
-four fundamental primitives—**Functions**, **KV**, **Objects**, and
-**Queues**—and one unified execution runtime.
+RailFog is a minimalist, high-performance application infrastructure platform designed around
+four fundamental concepts—**Compute**, **State**, **Data**, and **Signal**—mapped to four
+underlying infrastructure primitives—**Functions**, **KV**, **Objects**, and **Queues**—and one unified execution runtime.
+
+$$\mathbf{RailFog} = \{\mathbf{Compute},\, \mathbf{State},\, \mathbf{Data},\, \mathbf{Signal}\}$$
 
 ---
 
@@ -19,12 +21,19 @@ distributed caches, and blob stores.
 
 RailFog reduces this complexity to its simplest mathematical minimum:
 
-$$\text{Workload} = \text{Trigger} \longrightarrow \text{Function} \longrightarrow \{\text{KV}, \text{Objects}, \text{Queues}\}$$
+$$\text{Workload} = \text{Trigger} \longrightarrow \mathbf{Compute} \longrightarrow \{\mathbf{State}, \mathbf{Data}, \mathbf{Signal}\}$$
+
+$$\begin{aligned}
+\mathbf{Compute} &\longrightarrow \text{Function} && (\text{Execute / } \textit{transform}) \\
+\mathbf{State} &\longrightarrow \text{KV} && (\text{Remember / } \textit{remember}) \\
+\mathbf{Data} &\longrightarrow \text{Object} && (\text{Persist / } \textit{persist}) \\
+\mathbf{Signal} &\longrightarrow \text{Queue} && (\text{Communicate / } \textit{communicate})
+\end{aligned}$$
 
 There are no separate worker daemons, background schedulers, or cron
 microservices. Every workload in RailFog—whether an incoming HTTP request, a
 webhook, an asynchronous queue message, or a scheduled cron tick—is modeled as a
-**Trigger** targeting an isolated **Function** (`PLAT-2`, `FN-1`, `FN-2`).
+**Trigger** targeting an isolated **Compute** unit (`PLAT-2`, `FN-1`, `FN-2`, [`CONCEPT-1`](../contracts/concepts.contract.md#CONCEPT-1)).
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -34,44 +43,43 @@ webhook, an asynchronous queue message, or a scheduled cron tick—is modeled as
                        │
                        ▼
 ┌──────────────────────────────────────────────┐
-│               FUNCTION (FN-1)                │
+│          COMPUTE / FUNCTION (FN-1)           │
 │   Isolated TypeScript Handler in Sandbox     │
 │   Scoped RailFogContext (FN-4) Injected      │
 └──────┬───────────────┼───────────────┬───────┘
        │               │               │
        ▼               ▼               ▼
 ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│     KV      │ │   OBJECTS   │ │   QUEUES    │
+│ STATE / KV  │ │ DATA/OBJECT │ │SIGNAL/QUEUE │
 │ (KV-1..5)   │ │ (OBJ-1..4)  │ │  (Q-1..5)   │
 └─────────────┘ └─────────────┘ └─────────────┘
 ```
 
 ---
 
-## 2. The Four Primitives
+## 2. The Four Concepts & Infrastructure Primitives
 
-### 1. Functions (`FN-1` to `FN-7`)
+### 1. Compute & Functions ([`Compute Concept`](../concepts/compute.md), [`FN-1` to `FN-7`](../contracts/functions.contract.md))
 
-Stateless TypeScript execution units running in isolated V8 sandboxes. Functions
-export standard Web API handlers
-(`(req: Request, ctx: RailFogContext) => Promise<Response>`), receive
+Stateless execution units (`transform`) running in isolated sandboxes. Compute units
+export standard Web API handlers or SDK wrappers (`compute()`, `handle()`), receive
 capability-scoped bindings, and execute under hard resource ceilings.
 
-### 2. Key-Value Storage (`KV-1` to `KV-5`)
+### 2. State & Key-Value Storage ([`State Concept`](../concepts/state.md), [`KV-1` to `KV-5`](../contracts/kv.contract.md))
 
-Low-latency structured storage supporting hierarchical string tuple keys (e.g.
+Low-latency structured mutable state (`remember`) supporting hierarchical string tuple keys (e.g.
 `["users", "123", "profile"]`), atomic Check-And-Set (`CAS`) transactions, and
 explicit consistency tiers (`strong` vs `eventual`).
 
-### 3. Object Storage (`OBJ-1` to `OBJ-4`)
+### 3. Data & Object Storage ([`Data Concept`](../concepts/data.md), [`OBJ-1` to `OBJ-4`](../contracts/objects.contract.md))
 
-Durable, S3-compatible binary storage for files, media, and datasets. Functions
+Durable binary bulk storage (`persist`) for files, media, and datasets. Functions
 generate SigV4 presigned URLs, allowing clients to transfer bytes directly to
-storage without proxying through compute isolates.
+storage without proxying through compute isolates (`OBJ-3`).
 
-### 4. Asynchronous Queues (`Q-1` to `Q-6`)
+### 4. Signal & Asynchronous Queues ([`Signal Concept`](../concepts/signal.md), [`Q-1` to `Q-6`](../contracts/queues.contract.md))
 
-Decoupled message pipelines providing at-least-once delivery, configurable
+Decoupled asynchronous message pipelines (`communicate`) providing at-least-once delivery, configurable
 visibility timeouts, automatic dead-letter queue (DLQ) routing, and exponential
 backoff with decorrelated jitter.
 
@@ -83,7 +91,7 @@ backoff with decorrelated jitter.
    APIs (`Request`, `Response`, `Headers`, `ReadableStream`, `fetch`,
    `crypto.subtle`). There are no proprietary runtime SDK abstractions.
 2. **Capability Injection (`PLAT-6`)**: Functions possess zero ambient
-   authority. All external access (`ctx.kv`, `ctx.objects`, `ctx.queues`,
+   authority. All external access (`ctx.state`, `ctx.data`, `ctx.signal`,
    `ctx.env`) is explicitly declared in `railfog.toml` and injected at deploy
    time.
 3. **Fail-Static Architecture (`PLAT-8`)**: Data plane runtime nodes operate

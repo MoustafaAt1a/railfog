@@ -107,5 +107,5 @@ export default handler;
 ## Next Steps
 
 - Explore the complete
-  [`railfog.toml` Configuration Reference](../configuration/manifest.md).
-- Learn about the [Functions Primitive](../primitives/functions/overview.md).
+  [`railfog.toml` Configuration Reference](../configuration-reference.md).
+- Learn about [Writing Functions](../guides/functions.md).

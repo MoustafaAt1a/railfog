@@ -102,6 +102,15 @@ function createMockContext(
     objects: bindings.objects as ObjectBinding,
     queues: bindings.queues as QueueBinding,
     env: bindings.env ?? dummyEnv,
+    get state() {
+      return (overrides?.state ?? bindings.kv) as StateBinding;
+    },
+    get data() {
+      return (overrides?.data ?? bindings.objects) as DataBinding;
+    },
+    get signal() {
+      return (overrides?.signal ?? bindings.queues) as SignalBinding;
+    },
     ...overrides,
   };
 }

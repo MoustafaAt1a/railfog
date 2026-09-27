@@ -16,6 +16,7 @@ import {
 import {
   api,
   type ApiRouteMap,
+  compute,
   consumer,
   handle,
   type HandlerContext,
@@ -133,6 +134,15 @@ function createMockRailFogContext(
     objects: overrides?.objects ?? mockObjects,
     queues: overrides?.queues ?? mockQueues,
     env: overrides?.env ?? mockEnv,
+    get state() {
+      return this.kv;
+    },
+    get data() {
+      return this.objects;
+    },
+    get signal() {
+      return this.queues;
+    },
     ...overrides,
   };
 }
@@ -1575,3 +1585,47 @@ Deno.test("CONCEPT-2: api() routes propagate c.state, c.data, and c.signal seaml
     hasSignal: true,
   });
 });
+
+Deno.test("CONCEPT-2: compute() is an exact functional alias for handle() establishing Compute as execution primitive", async () => {
+  assertEquals(compute, handle);
+
+  const handler = compute(async ({ state, data, signal, json }) => {
+    await state.set(["item", "1"], "apple");
+    const val = await state.get(["item", "1"]);
+    return json({ val, hasData: data !== undefined, hasSignal: signal !== undefined });
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/compute-test");
+  const res = await handler(req, ctx);
+
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body, { val: "apple", hasData: true, hasSignal: true });
+});
+
+Deno.test("CONCEPT-2 & Q-2: consumer() provides c.state, c.data, and c.signal to consumer handler", async () => {
+  let executed = false;
+
+  const consumerHandler = consumer(async (msg, ctx) => {
+    executed = true;
+    assertEquals(ctx.state, ctx.kv);
+    assertEquals(ctx.data, ctx.objects);
+    assertEquals(ctx.signal, ctx.queues);
+
+    await ctx.state.set(["processed", msg.id], true);
+  });
+
+  const ctx = createMockRailFogContext();
+  const msg: QueueMessage = {
+    id: "msg_conceptual_001",
+    body: { hello: "world" },
+    attempts: 1,
+    timestamp: Date.now(),
+  };
+
+  await consumerHandler(msg, ctx);
+  assertEquals(executed, true);
+  assertEquals(await ctx.kv.get(["processed", "msg_conceptual_001"]), true);
+});
+

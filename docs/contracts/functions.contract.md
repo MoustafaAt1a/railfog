@@ -7,15 +7,15 @@ memory of the prose spec.
 ## FN-1 — Definition
 
 A Function is a versioned, isolated unit of code that receives an input and
-produces an output, built on standard Web APIs (`Request`, `Response`,
-`fetch`, `ReadableStream`, Web Crypto, `URLPattern`) so code stays portable off
-the platform.
+produces an output, built on standard Web APIs (`Request`, `Response`, `fetch`,
+`ReadableStream`, Web Crypto, `URLPattern`) so code stays portable off the
+platform.
 
 ```typescript
 export default async function handler(
   request: Request,
   ctx: RailFogContext,
-): Promise<Response> { /* ... */ }
+): Promise<Response> {/* ... */}
 ```
 
 ## FN-2 — Triggers (no fifth primitive)
@@ -37,49 +37,49 @@ Created → Building → Ready → Deployed → { Active | Suspended | Failed }
 Building → Failed (build failure)
 ```
 
-Deployments are immutable. A Function accumulates Revisions; traffic points
-at exactly one Revision; rollback is a pointer flip (`Revision 3 → Revision 2`
+Deployments are immutable. A Function accumulates Revisions; traffic points at
+exactly one Revision; rollback is a pointer flip (`Revision 3 → Revision 2`
 active), never a rebuild.
 
 ## FN-4 — RailFogContext (the entire RailFog-specific surface)
 
 ```typescript
 interface RailFogContext {
-  requestId: string;            // ULID
+  requestId: string; // ULID
   project: string;
   function: string;
   revision: string;
-  deadline: number;             // epoch ms; hard kill time
-  timeRemaining(): number;      // ms left; size downstream AbortSignal.timeout() from this
-  kv: KVBinding;                // pre-scoped — see KV-1, PLAT-6 (capability injection)
-  objects: ObjectBinding;       // pre-scoped
-  queues: QueueBinding;         // pre-scoped
-  env: EnvBinding;               // only secrets explicitly assigned to this Function
+  deadline: number; // epoch ms; hard kill time
+  timeRemaining(): number; // ms left; size downstream AbortSignal.timeout() from this
+  kv: KVBinding; // pre-scoped — see KV-1, PLAT-6 (capability injection)
+  objects: ObjectBinding; // pre-scoped
+  queues: QueueBinding; // pre-scoped
+  env: EnvBinding; // only secrets explicitly assigned to this Function
 }
 ```
 
-There is no global `kv.get(anyKey)`. `ctx.kv`/`ctx.objects`/`ctx.queues` are
-closures created at injection time over exactly what `railfog.toml` grants —
-see `platform.contract.md` PLAT-6. A Function has no code path to construct or
-address a key/object/queue outside its granted scope.
+There is no global `kv.get(anyKey)`. `ctx.state`/`ctx.data`/`ctx.signal` (and legacy
+`ctx.kv`/`ctx.objects`/`ctx.queues`) are closures created at injection time over
+exactly what `railfog.toml` grants — see `platform.contract.md` PLAT-6. A Function
+has no code path to construct or address a key/object/queue outside its granted scope.
 
 ## FN-5 — Resource limits (MVP defaults, hard kills, not warnings)
 
-| Limit | Default | Enforcement |
-|---|---|---|
-| `cpu_ms` | 200 | Kill at CPU time consumed ≥ limit, independent of wall clock |
-| `timeout_ms` | 30,000 (HTTP) / 900,000 (queue & schedule triggers) | Kill at `deadline` |
-| `memory_mb` | 128 (max 1024) | cgroup / isolate memory ceiling |
-| `concurrency` | 50 | Token bucket (see `platform.contract.md` PLAT-9); `429 RATE_LIMITED` + `Retry-After` beyond it |
-| `request_body_mb` / `response_body_mb` | 10 / 10 | Streamed responses exempt from full buffering, capped at 512 MB total emitted bytes; reject with `413 PAYLOAD_TOO_LARGE` |
-| `network.connections` | 6 concurrent | Enforced at egress proxy |
-| `logs.bytes_per_invocation` | 64,000 | Truncate + emit `LOG_TRUNCATED` marker |
-| `kv` ops per invocation | 1,000 | Reject further ops with `429` inside the same invocation |
-| `objects` ops per invocation | 100 | Same |
-| `queue` ops per invocation | 100 | Same |
-| `call_depth_max` | 8 | See FN-7 |
+| Limit                                  | Default                                             | Enforcement                                                                                                              |
+| -------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `cpu_ms`                               | 200                                                 | Kill at CPU time consumed ≥ limit, independent of wall clock                                                             |
+| `timeout_ms`                           | 30,000 (HTTP) / 900,000 (queue & schedule triggers) | Kill at `deadline`                                                                                                       |
+| `memory_mb`                            | 128 (max 1024)                                      | cgroup / isolate memory ceiling                                                                                          |
+| `concurrency`                          | 50                                                  | Token bucket (see `platform.contract.md` PLAT-9); `429 RATE_LIMITED` + `Retry-After` beyond it                           |
+| `request_body_mb` / `response_body_mb` | 10 / 10                                             | Streamed responses exempt from full buffering, capped at 512 MB total emitted bytes; reject with `413 PAYLOAD_TOO_LARGE` |
+| `network.connections`                  | 6 concurrent                                        | Enforced at egress proxy                                                                                                 |
+| `logs.bytes_per_invocation`            | 64,000                                              | Truncate + emit `LOG_TRUNCATED` marker                                                                                   |
+| `kv` ops per invocation                | 1,000                                               | Reject further ops with `429` inside the same invocation                                                                 |
+| `objects` ops per invocation           | 100                                                 | Same                                                                                                                     |
+| `queue` ops per invocation             | 100                                                 | Same                                                                                                                     |
+| `call_depth_max`                       | 8                                                   | See FN-7                                                                                                                 |
 
-These are cost *and* security boundaries simultaneously. A limit that exists
+These are cost _and_ security boundaries simultaneously. A limit that exists
 only for billing is a limit an attacker can ignore — never implement one as
 "soft."
 
@@ -87,7 +87,7 @@ only for billing is a limit an attacker can ignore — never implement one as
 
 An isolate may be reused across invocations of the **same Function + Revision
 only** — never across different Functions, Projects, or tenants, regardless of
-load. Bindings (`ctx.kv`/`ctx.objects`/`ctx.queues`/`ctx.env`) are re-injected
+load. Bindings (`ctx.state`/`ctx.data`/`ctx.signal`/`ctx.env`) are re-injected
 on **every** invocation, never trusted to persist across invocations. Any
 surviving module-level state in a warm isolate is a best-effort cache, never a
 security boundary. This closes the single most common real-world FaaS

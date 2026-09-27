@@ -33,8 +33,8 @@ Client → (3) PUT directly → Object Storage
 
 Never implement an upload/download path that streams file bytes through a
 Function or through the control plane — this is exactly the "RailFog as
-bandwidth proxy" anti-pattern the spec rejects (bandwidth, latency, CPU,
-memory, failure surface, and cost all get worse for no benefit).
+bandwidth proxy" anti-pattern the spec rejects (bandwidth, latency, CPU, memory,
+failure surface, and cost all get worse for no benefit).
 
 ## OBJ-4 — Content addressing
 
@@ -49,8 +49,8 @@ function, one encoding convention, not two.
 
 ## Banned patterns
 
-- Proxying object bytes through a Function or the control-plane API for
-  ordinary upload/download (OBJ-3 exists specifically to prevent this).
+- Proxying object bytes through a Function or the control-plane API for ordinary
+  upload/download (OBJ-3 exists specifically to prevent this).
 - Inventing a custom URL-signing scheme instead of SigV4-style presigning.
 - Using a hash function or encoding other than SHA-256 / hex / base64 for
   content addressing, "for performance" or otherwise, without an ADR.
