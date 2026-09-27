@@ -38,6 +38,7 @@ const MANDATORY_BLOCKED_IPV4_CIDRS: readonly string[] = [
   "192.168.0.0/16", // RFC1918 private network
   "127.0.0.0/8", // Loopback IPv4
   "0.0.0.0/8", // Unspecified / current network
+  "100.64.0.0/10", // RFC6598 Carrier-Grade NAT / internal cloud VPC
   "224.0.0.0/4", // Multicast
   "240.0.0.0/4", // Reserved / Class E
 ];
@@ -45,6 +46,7 @@ const MANDATORY_BLOCKED_IPV4_CIDRS: readonly string[] = [
 // spec: contracts/platform.contract.md#PLAT-5 — Mandatory-block ranges enforced at egress proxy
 const MANDATORY_BLOCKED_IPV6_CIDRS: readonly string[] = [
   "fd00:ec2::/8", // AWS IPv6 cloud metadata
+  "fc00::/7", // RFC4193 Unique Local Addresses (ULA private IPv6)
   "::1/128", // Loopback IPv6
   "fe80::/10", // Link-local IPv6
   "ff00::/8", // Multicast IPv6

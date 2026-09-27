@@ -957,13 +957,16 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
           pluralType: string,
         ) => {
           const val = (permissions as Record<string, unknown>)[capKey];
-          if (val === undefined) return;
+          if (val === undefined) {
+            return;
+          }
           if (!Array.isArray(val)) {
             errors.push({
               severity: "error",
               code: "PLAT-6",
               path: `functions.${fnName}.permissions.${capKey}`,
-              message: `${label} permissions must be an array of strings (PLAT-6)`,
+              message:
+                `${label} permissions must be an array of strings (PLAT-6)`,
             });
           } else if (val.length > 1) {
             errors.push({

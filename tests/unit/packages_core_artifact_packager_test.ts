@@ -2,8 +2,8 @@ import { assertEquals, assertRejects } from "@std/assert";
 import {
   type Manifest,
   type PackagedArtifact,
-  type PackagePermissionsOptions,
   packageFunctionArtifact,
+  type PackagePermissionsOptions,
 } from "../../packages/core/artifact/packager.ts";
 import { ValidationFailedError } from "../../packages/errors/mod.ts";
 import { computeIntegrity } from "../../packages/core/crypto/content-address.ts";
@@ -320,4 +320,3 @@ Deno.test("Security (PLAT-7): packageFunctionArtifact rejects path traversal and
     );
   }
 });
-

@@ -12,12 +12,20 @@ import { assert } from "@std/assert";
 import { join } from "@std/path";
 
 Deno.test("T-0911 / CONCEPT-1..8: concepts.contract.md exists and defines all 8 formal clauses", async () => {
-  const contractPath = join(Deno.cwd(), "docs", "contracts", "concepts.contract.md");
+  const contractPath = join(
+    Deno.cwd(),
+    "docs",
+    "contracts",
+    "concepts.contract.md",
+  );
   let content = "";
   try {
     content = await Deno.readTextFile(contractPath);
   } catch (err) {
-    assert(false, `docs/contracts/concepts.contract.md must exist on disk: ${err}`);
+    assert(
+      false,
+      `docs/contracts/concepts.contract.md must exist on disk: ${err}`,
+    );
   }
 
   // Verify all 8 clauses exist as markdown headers
@@ -46,7 +54,10 @@ Deno.test("T-0911 / CONCEPT-1..8: concepts.contract.md exists and defines all 8 
   assert(content.includes("Signal"), "CONCEPT-1 must define Signal");
 
   // Verify mapping in CONCEPT-2
-  assert(content.includes("Function"), "CONCEPT-2 must map Compute to Function");
+  assert(
+    content.includes("Function"),
+    "CONCEPT-2 must map Compute to Function",
+  );
   assert(content.includes("KV"), "CONCEPT-2 must map State to KV");
   assert(content.includes("Object"), "CONCEPT-2 must map Data to Object");
   assert(content.includes("Queue"), "CONCEPT-2 must map Signal to Queue");
@@ -55,7 +66,10 @@ Deno.test("T-0911 / CONCEPT-1..8: concepts.contract.md exists and defines all 8 
   assert(content.includes("transform"), "CONCEPT-3 must define verb transform");
   assert(content.includes("remember"), "CONCEPT-3 must define verb remember");
   assert(content.includes("persist"), "CONCEPT-3 must define verb persist");
-  assert(content.includes("communicate"), "CONCEPT-3 must define verb communicate");
+  assert(
+    content.includes("communicate"),
+    "CONCEPT-3 must define verb communicate",
+  );
 });
 
 Deno.test("T-0911 / Glossary: docs/glossary.md defines Compute, State, Data, Signal as canonical nouns", async () => {
@@ -82,29 +96,39 @@ Deno.test("T-0911 / Glossary: docs/glossary.md defines Compute, State, Data, Sig
 
   // Check that definitions reference the infrastructure primitives
   assert(
-    content.includes("Function") && content.includes("developer-facing concept for execution"),
+    content.includes("Function") &&
+      content.includes("developer-facing concept for execution"),
     "docs/glossary.md Compute definition must map to Function",
   );
   assert(
-    content.includes("**KV**") && content.includes("small, addressable, mutable state"),
+    content.includes("**KV**") &&
+      content.includes("small, addressable, mutable state"),
     "docs/glossary.md State definition must map to KV",
   );
   assert(
-    content.includes("**Object**") && content.includes("durable or bulk persistence"),
+    content.includes("**Object**") &&
+      content.includes("durable or bulk persistence"),
     "docs/glossary.md Data definition must map to Object",
   );
   assert(
-    content.includes("**Queue**") && content.includes("asynchronous communication"),
+    content.includes("**Queue**") &&
+      content.includes("asynchronous communication"),
     "docs/glossary.md Signal definition must map to Queue",
   );
 });
 
 Deno.test("T-0911 / Spec-Lock: docs/contracts/platform.contract.md reference to CONCEPT-1 resolves", async () => {
-  const platformPath = join(Deno.cwd(), "docs", "contracts", "platform.contract.md");
+  const platformPath = join(
+    Deno.cwd(),
+    "docs",
+    "contracts",
+    "platform.contract.md",
+  );
   const platformContent = await Deno.readTextFile(platformPath);
 
   assert(
-    platformContent.includes("concepts.contract.md") && platformContent.includes("CONCEPT-1"),
+    platformContent.includes("concepts.contract.md") &&
+      platformContent.includes("CONCEPT-1"),
     "docs/contracts/platform.contract.md must cite concepts.contract.md CONCEPT-1",
   );
 });

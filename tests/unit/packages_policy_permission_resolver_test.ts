@@ -1,8 +1,8 @@
 import { assertEquals, assertExists, assertThrows } from "@std/assert";
 import {
+  type DeclaredPermissions,
   normalizeDeclaredCapabilities,
   resolvePermissions,
-  type DeclaredPermissions,
 } from "../../packages/policy/permission-resolver.ts";
 import { ValidationFailedError } from "../../packages/errors/mod.ts";
 import { SQLiteKVProvider } from "../../providers/kv/sqlite-provider.ts";
@@ -362,10 +362,14 @@ Deno.test("Unit: normalizeDeclaredCapabilities normalizes conceptual aliases to 
   const normalizedState = normalizeDeclaredCapabilities(stateInput);
   assertEquals(normalizedState, { kv: ["app:sessions"] });
 
-  const normalizedData = normalizeDeclaredCapabilities({ data: ["app_uploads"] });
+  const normalizedData = normalizeDeclaredCapabilities({
+    data: ["app_uploads"],
+  });
   assertEquals(normalizedData, { objects: ["app_uploads"] });
 
-  const normalizedSignal = normalizeDeclaredCapabilities({ signal: ["app:jobs"] });
+  const normalizedSignal = normalizeDeclaredCapabilities({
+    signal: ["app:jobs"],
+  });
   assertEquals(normalizedSignal, { queues: ["app:jobs"] });
 
   const normalizedAll = normalizeDeclaredCapabilities({
@@ -397,17 +401,29 @@ Deno.test("Unit: normalizeDeclaredCapabilities normalizes conceptual aliases to 
 
 Deno.test("Security (PLAT-6): normalizeDeclaredCapabilities strictly rejects dual declarations", () => {
   assertThrows(
-    () => normalizeDeclaredCapabilities({ kv: ["app:sessions"], state: ["app:sessions"] }),
+    () =>
+      normalizeDeclaredCapabilities({
+        kv: ["app:sessions"],
+        state: ["app:sessions"],
+      }),
     ValidationFailedError,
     "PLAT-6",
   );
   assertThrows(
-    () => normalizeDeclaredCapabilities({ objects: ["app_uploads"], data: ["app_uploads"] }),
+    () =>
+      normalizeDeclaredCapabilities({
+        objects: ["app_uploads"],
+        data: ["app_uploads"],
+      }),
     ValidationFailedError,
     "PLAT-6",
   );
   assertThrows(
-    () => normalizeDeclaredCapabilities({ queues: ["app:jobs"], signal: ["app:jobs"] }),
+    () =>
+      normalizeDeclaredCapabilities({
+        queues: ["app:jobs"],
+        signal: ["app:jobs"],
+      }),
     ValidationFailedError,
     "PLAT-6",
   );
@@ -512,27 +528,32 @@ Deno.test("Security (PLAT-7): resolvePermissions rejects path traversal and null
       "PLAT-7",
     );
     assertThrows(
-      () => resolvePermissions({ state: [bad] }, "org1", "proj1", emptyProviders),
+      () =>
+        resolvePermissions({ state: [bad] }, "org1", "proj1", emptyProviders),
       ValidationFailedError,
       "PLAT-7",
     );
     assertThrows(
-      () => resolvePermissions({ objects: [bad] }, "org1", "proj1", emptyProviders),
+      () =>
+        resolvePermissions({ objects: [bad] }, "org1", "proj1", emptyProviders),
       ValidationFailedError,
       "PLAT-7",
     );
     assertThrows(
-      () => resolvePermissions({ data: [bad] }, "org1", "proj1", emptyProviders),
+      () =>
+        resolvePermissions({ data: [bad] }, "org1", "proj1", emptyProviders),
       ValidationFailedError,
       "PLAT-7",
     );
     assertThrows(
-      () => resolvePermissions({ queues: [bad] }, "org1", "proj1", emptyProviders),
+      () =>
+        resolvePermissions({ queues: [bad] }, "org1", "proj1", emptyProviders),
       ValidationFailedError,
       "PLAT-7",
     );
     assertThrows(
-      () => resolvePermissions({ signal: [bad] }, "org1", "proj1", emptyProviders),
+      () =>
+        resolvePermissions({ signal: [bad] }, "org1", "proj1", emptyProviders),
       ValidationFailedError,
       "PLAT-7",
     );
@@ -540,7 +561,8 @@ Deno.test("Security (PLAT-7): resolvePermissions rejects path traversal and null
 
   // Also check orgId and projectId
   assertThrows(
-    () => resolvePermissions({ kv: ["app"] }, "../org", "proj1", emptyProviders),
+    () =>
+      resolvePermissions({ kv: ["app"] }, "../org", "proj1", emptyProviders),
     ValidationFailedError,
     "PLAT-7",
   );

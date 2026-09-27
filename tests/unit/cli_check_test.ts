@@ -1865,4 +1865,3 @@ ${cap} = [${JSON.stringify(val)}]
     }
   }
 });
-

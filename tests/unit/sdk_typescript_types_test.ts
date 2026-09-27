@@ -192,7 +192,6 @@ Deno.test("FN-2 & Q-2: QueueConsumerHandler accepts (message: QueueMessage, ctx:
 // ---------------------------------------------------------------------------
 
 Deno.test("KV-2: KVBinding shape and KVAtomicOperation method chaining", async () => {
-
   // Verify KVAtomicOperation fluent interface
   let checkCalled = false;
   let setCalled = false;
@@ -701,7 +700,10 @@ Deno.test("CONCEPT-2: Canonical conceptual type aliases are completely assignabl
   const _dataValid: Equal<DataBinding, ObjectBinding> = true;
   const _signalValid: Equal<SignalBinding, QueueBinding> = true;
   const _computeValid: Equal<ComputeHandler, FunctionHandler> = true;
-  assertEquals(_stateValid && _dataValid && _signalValid && _computeValid, true);
+  assertEquals(
+    _stateValid && _dataValid && _signalValid && _computeValid,
+    true,
+  );
 
   // Bidirectional assignability checks
   const mockKV = {} as KVBinding;
@@ -734,4 +736,3 @@ Deno.test("CookieOptions: sameSite is normalized to RFC standard casing ('Strict
   const _sameSiteValid: Equal<StrictSameSite, "Strict" | "Lax" | "None"> = true;
   assertEquals(_sameSiteValid, true);
 });
-

@@ -1522,7 +1522,10 @@ Deno.test("Security (FN-5 & CONCEPT-2): req.signal is decoupled from c.signal an
   const handler = handle((c: HandlerContext) => {
     executed = true;
     // c.req.signal must be the standard WHATWG AbortSignal
-    assert(c.req.signal instanceof AbortSignal, "c.req.signal must be an instance of AbortSignal");
+    assert(
+      c.req.signal instanceof AbortSignal,
+      "c.req.signal must be an instance of AbortSignal",
+    );
     assertFalse(c.req.signal.aborted, "Signal should initially not be aborted");
 
     // c.signal must be the SignalBinding (QueueBinding)
@@ -1572,4 +1575,3 @@ Deno.test("CONCEPT-2: api() routes propagate c.state, c.data, and c.signal seaml
     hasSignal: true,
   });
 });
-

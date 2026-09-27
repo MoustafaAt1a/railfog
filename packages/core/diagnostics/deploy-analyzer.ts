@@ -53,11 +53,11 @@ interface SourceFileEntry {
   bytes: Uint8Array;
 }
 
-// Regex for extracting referenced secrets: ctx.env.get("..."), ctx.env.require("..."), env.get("...")
+// Regex for extracting referenced secrets: ctx.env.get("..."), c.env.get("..."), Deno.env.get("..."), env.get("...")
 // Robust against optional chaining (?.), whitespace around dots/parens, quotes (', ", `), and direct env.get/require calls
 // spec: contracts/platform.contract.md#PLAT-6, PLAT-15
 const SECRET_ACCESS_REGEX =
-  /(?:\b(?:ctx|Deno)\s*(?:\?\.|\.)\s*)?\b(?:env|secrets)\s*(?:\?\.|\.)\s*(?:get|require)\s*\(\s*(["'`])([A-Za-z0-9_]+)\1\s*\)/g;
+  /(?:\b(?:ctx|Deno|c)\s*(?:\?\.|\.)\s*)?\b(?:env|secrets)\s*(?:\?\.|\.)\s*(?:get|require)\s*\(\s*(["'`])([A-Za-z0-9_]+)\1\s*\)/g;
 
 // Regex for scanning outbound URL targets in source code (case-insensitive for scheme)
 // spec: contracts/platform.contract.md#PLAT-5
@@ -252,7 +252,27 @@ export function checkSsrfBlock(
     }
   }
 
-  // 4. RailFog internal service address / internal domains per PLAT-5
+  // 4. Carrier-Grade NAT per RFC 6598 (100.64.0.0/10)
+  const match100 = host.match(/^100\.(\d+)\./);
+  if (match100) {
+    const secondOctet = parseInt(match100[1], 10);
+    if (secondOctet >= 64 && secondOctet <= 127) {
+      return {
+        blocked: true,
+        reason: "RFC6598 Carrier-Grade NAT / internal VPC (100.64.0.0/10)",
+      };
+    }
+  }
+
+  // 5. IPv6 Unique Local Addresses per RFC 4193 (fc00::/7)
+  if (host.startsWith("fc") || host.startsWith("fd")) {
+    return {
+      blocked: true,
+      reason: "RFC4193 Unique Local Address (fc00::/7)",
+    };
+  }
+
+  // 6. RailFog internal service address / internal domains per PLAT-5
   if (
     host.endsWith(".internal") ||
     host.endsWith(".local") ||

@@ -48,6 +48,107 @@ interface MockServerOptions {
   simulateError?: { status: number; message: string };
 }
 
+// WHATWG Fetch blocked ports list — prevents intermittent fetch failures on dynamic port collisions (e.g. NFS 2049, sane-port 6566)
+const FORBIDDEN_FETCH_PORTS = new Set([
+  1,
+  7,
+  9,
+  11,
+  13,
+  15,
+  17,
+  19,
+  20,
+  21,
+  22,
+  23,
+  25,
+  37,
+  42,
+  43,
+  53,
+  69,
+  77,
+  79,
+  87,
+  95,
+  101,
+  102,
+  103,
+  104,
+  109,
+  110,
+  111,
+  113,
+  115,
+  117,
+  119,
+  123,
+  135,
+  137,
+  139,
+  143,
+  161,
+  179,
+  389,
+  427,
+  465,
+  512,
+  513,
+  514,
+  515,
+  526,
+  530,
+  531,
+  532,
+  540,
+  548,
+  554,
+  556,
+  563,
+  587,
+  601,
+  636,
+  989,
+  990,
+  993,
+  995,
+  1719,
+  1720,
+  1723,
+  2049,
+  3659,
+  4045,
+  5060,
+  5061,
+  6000,
+  6566,
+  6665,
+  6666,
+  6667,
+  6668,
+  6669,
+  6697,
+  10080,
+]);
+
+async function serveSafePort(
+  handler: (req: Request) => Promise<Response> | Response,
+): Promise<Deno.HttpServer> {
+  let server = Deno.serve(
+    { port: 0, hostname: "127.0.0.1", onListen: () => {} },
+    handler,
+  );
+  while (FORBIDDEN_FETCH_PORTS.has((server.addr as Deno.NetAddr).port)) {
+    await server.shutdown();
+    server = Deno.serve(
+      { port: 0, hostname: "127.0.0.1", onListen: () => {} },
+      handler,
+    );
+  }
+  return server;
+}
+
 async function withMockServer(
   fn: (context: {
     baseUrl: string;
@@ -64,214 +165,213 @@ async function withMockServer(
   let simulateError = serverOpts?.simulateError ?? null;
   const expectedToken = serverOpts?.expectedToken ?? "mock-api-token-12345";
 
-  const server = Deno.serve(
-    { port: 0, onListen: () => {} },
-    async (req: Request) => {
-      const url = new URL(req.url);
-      const authHeader = req.headers.get("authorization");
-      const bodyText = await req.text();
+  const handler = async (req: Request) => {
+    const url = new URL(req.url);
+    const authHeader = req.headers.get("authorization");
+    const bodyText = await req.text();
 
-      let parsedBody: unknown = undefined;
-      if (bodyText) {
-        try {
-          parsedBody = JSON.parse(bodyText);
-        } catch {
-          parsedBody = bodyText;
-        }
+    let parsedBody: unknown = undefined;
+    if (bodyText) {
+      try {
+        parsedBody = JSON.parse(bodyText);
+      } catch {
+        parsedBody = bodyText;
       }
+    }
 
-      recordedRequests.push({
-        method: req.method,
-        url: req.url,
-        pathname: url.pathname,
-        headers: req.headers,
-        bodyText,
-        parsedBody,
+    recordedRequests.push({
+      method: req.method,
+      url: req.url,
+      pathname: url.pathname,
+      headers: req.headers,
+      bodyText,
+      parsedBody,
+    });
+
+    if (simulateError) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          errors: [
+            { code: simulateError.status, message: simulateError.message },
+          ],
+          messages: [],
+          result: null,
+        }),
+        {
+          status: simulateError.status,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    // Check Bearer authorization header per Cloudflare Queues REST API
+    if (authHeader !== `Bearer ${expectedToken}`) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          errors: [{ code: 10000, message: "Authentication error" }],
+          messages: [],
+          result: null,
+        }),
+        {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    // Route pattern for Cloudflare Queues API:
+    // (?:/client/v4)?/accounts/:accountId/queues/:queueId/messages(?:\/(batch|pull|ack))?
+    const match = url.pathname.match(
+      /(?:\/client\/v4)?\/accounts\/([^/]+)\/queues\/([^/]+)\/messages(?:\/(batch|pull|ack))?$/,
+    );
+
+    if (!match) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          errors: [{ code: 7000, message: "No route matched" }],
+          messages: [],
+          result: null,
+        }),
+        { status: 404, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    const [, , , action] = match;
+
+    // 1. Send single message: POST /accounts/:accountId/queues/:queueId/messages
+    if (!action && req.method === "POST") {
+      const bodyObj = parsedBody as {
+        body?: unknown;
+        delay_seconds?: number;
+      };
+      const msgBody = bodyObj?.body;
+      const delaySeconds = bodyObj?.delay_seconds ?? 0;
+      const id = `msg_${crypto.randomUUID()}`;
+      const visibleAfter = Date.now() + delaySeconds * 1000;
+
+      queueMessages.push({
+        id,
+        body: msgBody,
+        visibleAfter,
+        attempts: 0,
+        acked: false,
       });
 
-      if (simulateError) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            errors: [
-              { code: simulateError.status, message: simulateError.message },
-            ],
-            messages: [],
-            result: null,
-          }),
-          {
-            status: simulateError.status,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }
-
-      // Check Bearer authorization header per Cloudflare Queues REST API
-      if (authHeader !== `Bearer ${expectedToken}`) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            errors: [{ code: 10000, message: "Authentication error" }],
-            messages: [],
-            result: null,
-          }),
-          {
-            status: 401,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }
-
-      // Route pattern for Cloudflare Queues API:
-      // (?:/client/v4)?/accounts/:accountId/queues/:queueId/messages(?:\/(batch|pull|ack))?
-      const match = url.pathname.match(
-        /(?:\/client\/v4)?\/accounts\/([^/]+)\/queues\/([^/]+)\/messages(?:\/(batch|pull|ack))?$/,
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result: { id },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
       );
+    }
 
-      if (!match) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            errors: [{ code: 7000, message: "No route matched" }],
-            messages: [],
-            result: null,
-          }),
-          { status: 404, headers: { "content-type": "application/json" } },
-        );
-      }
+    // 2. Send batch: POST /accounts/:accountId/queues/:queueId/messages/batch
+    if (action === "batch" && req.method === "POST") {
+      const batchObj = parsedBody as {
+        messages?: Array<{ body: unknown; delay_seconds?: number }>;
+      };
+      const rawMessages = batchObj?.messages ?? [];
+      const result: Array<{ id: string }> = [];
 
-      const [, , , action] = match;
-
-      // 1. Send single message: POST /accounts/:accountId/queues/:queueId/messages
-      if (!action && req.method === "POST") {
-        const bodyObj = parsedBody as {
-          body?: unknown;
-          delay_seconds?: number;
-        };
-        const msgBody = bodyObj?.body;
-        const delaySeconds = bodyObj?.delay_seconds ?? 0;
+      for (const item of rawMessages) {
         const id = `msg_${crypto.randomUUID()}`;
+        const delaySeconds = item.delay_seconds ?? 0;
         const visibleAfter = Date.now() + delaySeconds * 1000;
 
         queueMessages.push({
           id,
-          body: msgBody,
+          body: item.body,
           visibleAfter,
           attempts: 0,
           acked: false,
         });
 
-        return new Response(
-          JSON.stringify({
-            success: true,
-            result: { id },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
+        result.push({ id });
       }
 
-      // 2. Send batch: POST /accounts/:accountId/queues/:queueId/messages/batch
-      if (action === "batch" && req.method === "POST") {
-        const batchObj = parsedBody as {
-          messages?: Array<{ body: unknown; delay_seconds?: number }>;
-        };
-        const rawMessages = batchObj?.messages ?? [];
-        const result: Array<{ id: string }> = [];
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
 
-        for (const item of rawMessages) {
-          const id = `msg_${crypto.randomUUID()}`;
-          const delaySeconds = item.delay_seconds ?? 0;
-          const visibleAfter = Date.now() + delaySeconds * 1000;
+    // 3. Pull/Receive: POST /accounts/:accountId/queues/:queueId/messages/pull
+    if (action === "pull" && req.method === "POST") {
+      const pullObj = parsedBody as {
+        visibility_timeout_ms?: number;
+        batch_size?: number;
+      };
+      const visibilityTimeoutMs = pullObj?.visibility_timeout_ms ?? 30000;
+      const batchSize = pullObj?.batch_size ?? 1;
+      const now = Date.now();
 
-          queueMessages.push({
-            id,
-            body: item.body,
-            visibleAfter,
-            attempts: 0,
-            acked: false,
-          });
+      const available = queueMessages.filter(
+        (m) => !m.acked && m.visibleAfter <= now,
+      );
+      const selected = available.slice(0, batchSize);
 
-          result.push({ id });
+      const resultMessages: Array<{
+        id: string;
+        body: unknown;
+        attempts: number;
+      }> = [];
+      for (const m of selected) {
+        m.attempts += 1;
+        m.visibleAfter = now + visibilityTimeoutMs;
+        resultMessages.push({
+          id: m.id,
+          body: m.body,
+          attempts: m.attempts,
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result: { messages: resultMessages },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    // 4. Ack: POST /accounts/:accountId/queues/:queueId/messages/ack
+    if (action === "ack" && req.method === "POST") {
+      const ackObj = parsedBody as { acks?: Array<{ id: string }> };
+      const acks = ackObj?.acks ?? [];
+      let ackCount = 0;
+
+      for (const { id } of acks) {
+        const found = queueMessages.find((m) => m.id === id);
+        if (found) {
+          found.acked = true;
+          ackCount += 1;
         }
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            result,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
       }
 
-      // 3. Pull/Receive: POST /accounts/:accountId/queues/:queueId/messages/pull
-      if (action === "pull" && req.method === "POST") {
-        const pullObj = parsedBody as {
-          visibility_timeout_ms?: number;
-          batch_size?: number;
-        };
-        const visibilityTimeoutMs = pullObj?.visibility_timeout_ms ?? 30000;
-        const batchSize = pullObj?.batch_size ?? 1;
-        const now = Date.now();
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result: { count: ackCount },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
 
-        const available = queueMessages.filter(
-          (m) => !m.acked && m.visibleAfter <= now,
-        );
-        const selected = available.slice(0, batchSize);
+    return new Response("Method not allowed", { status: 405 });
+  };
 
-        const resultMessages: Array<{
-          id: string;
-          body: unknown;
-          attempts: number;
-        }> = [];
-        for (const m of selected) {
-          m.attempts += 1;
-          m.visibleAfter = now + visibilityTimeoutMs;
-          resultMessages.push({
-            id: m.id,
-            body: m.body,
-            attempts: m.attempts,
-          });
-        }
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            result: { messages: resultMessages },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      // 4. Ack: POST /accounts/:accountId/queues/:queueId/messages/ack
-      if (action === "ack" && req.method === "POST") {
-        const ackObj = parsedBody as { acks?: Array<{ id: string }> };
-        const acks = ackObj?.acks ?? [];
-        let ackCount = 0;
-
-        for (const { id } of acks) {
-          const found = queueMessages.find((m) => m.id === id);
-          if (found) {
-            found.acked = true;
-            ackCount += 1;
-          }
-        }
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            result: { count: ackCount },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      return new Response("Method not allowed", { status: 405 });
-    },
-  );
+  const server = await serveSafePort(handler);
 
   try {
-    const port = server.addr.port;
-    const baseUrl = `http://localhost:${port}`;
+    const port = (server.addr as Deno.NetAddr).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
     await fn({
       baseUrl,
       recordedRequests,
@@ -855,24 +955,21 @@ Deno.test("CloudflareQueueProvider - security: naive object inspection via Deno.
 // Security: Upstream malformed JSON responses are redacted and mapped to InternalError (PLAT-15, PLAT-12)
 Deno.test("CloudflareQueueProvider - security: malformed JSON response is redacted and mapped to InternalError (PLAT-15, PLAT-12)", async () => {
   const secretToken = "secret-token-in-queue-json-err";
-  const server = Deno.serve(
-    { port: 0, onListen: () => {} },
-    () => {
-      // Simulate upstream 200 with invalid JSON containing the secret token
-      return new Response(`{"result": ${secretToken}}`, {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    },
-  );
+  const server = await serveSafePort(() => {
+    // Simulate upstream 200 with invalid JSON containing the secret token
+    return new Response(`{"result": ${secretToken}}`, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  });
 
   try {
-    const port = server.addr.port;
+    const port = (server.addr as Deno.NetAddr).port;
     const provider = new CloudflareQueueProvider({
       accountId: "acc-1",
       queueId: "queue-1",
       apiToken: secretToken,
-      baseUrl: `http://localhost:${port}`,
+      baseUrl: `http://127.0.0.1:${port}`,
     });
 
     let caught: unknown = null;

@@ -31,7 +31,7 @@ console.log(
   `\n${colors.bold}${colors.cyan}════════════════════════════════════════════════════════════════${colors.reset}`,
 );
 console.log(
-  `  ${colors.bold}RAILFOG v0.9.0 BETA — PRE-RELEASE CERTIFICATION GATE${colors.reset}`,
+  `  ${colors.bold}RAILFOG v0.9.2 — PRE-RELEASE CERTIFICATION GATE${colors.reset}`,
 );
 console.log(
   `${colors.bold}${colors.cyan}════════════════════════════════════════════════════════════════${colors.reset}\n`,
@@ -96,7 +96,7 @@ console.log(
   `${colors.bold}${colors.green}│  [+] ALL ${passedCount} RELEASE GATES PASSED WITHOUT WARNING OR FAILURE   │${colors.reset}`,
 );
 console.log(
-  `${colors.bold}${colors.green}│  [+] RAILFOG v0.9.0-BETA IS 10/10 CERTIFIED FOR PUBLISHING   │${colors.reset}`,
+  `${colors.bold}${colors.green}│  [+] RAILFOG v0.9.2 IS 10/10 CERTIFIED FOR PUBLISHING        │${colors.reset}`,
 );
 console.log(
   `${colors.bold}${colors.green}│                                                              │${colors.reset}`,

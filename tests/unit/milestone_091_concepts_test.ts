@@ -38,9 +38,9 @@ import type {
   StateBinding,
 } from "../../sdk/typescript/mod.ts";
 import {
+  type DeclaredPermissions,
   normalizeDeclaredCapabilities,
   resolvePermissions,
-  type DeclaredPermissions,
 } from "../../packages/policy/permission-resolver.ts";
 import { packageFunctionArtifact } from "../../packages/core/artifact/packager.ts";
 import { checkProject, type ValidationIssue } from "../../cli/check.ts";
@@ -227,7 +227,9 @@ Deno.test("Milestone 0.9.1 - Composition: Compute -> Data", async () => {
     );
 
     const handler: ComputeHandler = handle(async (c: HandlerContext) => {
-      const reportBytes = new TextEncoder().encode("Year,Revenue\n2025,1000000\n2026,2500000\n");
+      const reportBytes = new TextEncoder().encode(
+        "Year,Revenue\n2025,1000000\n2026,2500000\n",
+      );
 
       // Compute persists bulk data
       await c.data.put("financials/2026.csv", reportBytes);
@@ -329,8 +331,13 @@ Deno.test("Milestone 0.9.1 - Composition: Signal -> Compute", async () => {
 
   const processedMessages: string[] = [];
 
-  const consumerHandler: QueueConsumerHandler<{ orderId: string; amount: number }> =
-    consumer(async (message: QueueMessage<{ orderId: string; amount: number }>, ctx: RailFogContext) => {
+  const consumerHandler: QueueConsumerHandler<
+    { orderId: string; amount: number }
+  > = consumer(
+    async (
+      message: QueueMessage<{ orderId: string; amount: number }>,
+      ctx: RailFogContext,
+    ) => {
       // Signal triggers compute execution
       processedMessages.push(message.id);
 
@@ -340,7 +347,8 @@ Deno.test("Milestone 0.9.1 - Composition: Signal -> Compute", async () => {
         amount: message.body.amount,
         processedAt: Date.now(),
       });
-    });
+    },
+  );
 
   const ctx = createMockContext({ kv: resolvedState.kv });
   const msg: QueueMessage<{ orderId: string; amount: number }> = {
@@ -380,8 +388,13 @@ Deno.test("Milestone 0.9.1 - Composition: Data -> Compute", async () => {
     );
 
     // Seed test log stream
-    const lines = ["line1: start", "line2: processing", "line3: finished"].join("\n");
-    await resolved.objects!.put("app.log", new TextEncoder().encode(lines).buffer);
+    const lines = ["line1: start", "line2: processing", "line3: finished"].join(
+      "\n",
+    );
+    await resolved.objects!.put(
+      "app.log",
+      new TextEncoder().encode(lines).buffer,
+    );
 
     const handler: ComputeHandler = handle(async (c: HandlerContext) => {
       // Stream bulk data directly into compute
@@ -442,7 +455,10 @@ Deno.test("Milestone 0.9.1 - Composition: State -> Compute", async () => {
     const circuitState = await c.state.get<string>(["circuit", "payment_gw"]);
 
     if (circuitState === "OPEN") {
-      throw new UnavailableError("Payment gateway circuit is OPEN; requests throttled", c.requestId);
+      throw new UnavailableError(
+        "Payment gateway circuit is OPEN; requests throttled",
+        c.requestId,
+      );
     }
 
     return {
@@ -508,9 +524,20 @@ Deno.test("Milestone 0.9.1 - Policy: Declared conceptual aliases normalized corr
     },
   );
 
-  assertExists(resolved.kv, "Declared 'state' must resolve to scoped kv binding");
-  assertEquals(resolved.objects, undefined, "Undeclared 'data' must be undefined");
-  assertEquals(resolved.queues, undefined, "Undeclared 'signal' must be undefined");
+  assertExists(
+    resolved.kv,
+    "Declared 'state' must resolve to scoped kv binding",
+  );
+  assertEquals(
+    resolved.objects,
+    undefined,
+    "Undeclared 'data' must be undefined",
+  );
+  assertEquals(
+    resolved.queues,
+    undefined,
+    "Undeclared 'signal' must be undefined",
+  );
 });
 
 // ============================================================================
@@ -560,12 +587,16 @@ Deno.test("Milestone 0.9.1 - SDK: Context getters provide non-breaking access", 
 
   assertEquals(res.status, 200);
   assert(verifiedGetters, "Conceptual context getters must be verified");
-  assert(signalSentWhileReqAborted, "c.signal must function normally even when c.req.signal is aborted");
+  assert(
+    signalSentWhileReqAborted,
+    "c.signal must function normally even when c.req.signal is aborted",
+  );
 
   // 3. Type-level compatibility test (CONCEPT-2)
   const _stateTypeCheck: StateBinding = resolved.kv as unknown as StateBinding;
   const _dataTypeCheck: DataBinding = {} as unknown as DataBinding;
-  const _signalTypeCheck: SignalBinding = resolved.queues as unknown as SignalBinding;
+  const _signalTypeCheck: SignalBinding = resolved
+    .queues as unknown as SignalBinding;
   const _computeTypeCheck: ComputeHandler = handler as FunctionHandler;
   assertExists(_stateTypeCheck);
   assertExists(_dataTypeCheck);
@@ -626,7 +657,10 @@ Deno.test("Milestone 0.9.1 - Security: Cross-tenant isolation with conceptual al
     );
 
     await betaBindings.kv!.set(["auth", "session_token"], "beta-secret-111");
-    const alphaStateVerify = await alphaBindings.kv!.get(["auth", "session_token"]);
+    const alphaStateVerify = await alphaBindings.kv!.get([
+      "auth",
+      "session_token",
+    ]);
     assertEquals(
       alphaStateVerify,
       "alpha-secret-999",
@@ -713,12 +747,18 @@ Deno.test("Milestone 0.9.1 - Security: Mutual exclusivity rejects dual declarati
   // 1. Schema Verification (schemas/railfog.schema.json)
   const schemaPath = join(Deno.cwd(), "schemas", "railfog.schema.json");
   const schema = JSON.parse(await Deno.readTextFile(schemaPath));
-  const permissionsRules = schema.properties.functions.additionalProperties.properties.permissions.allOf as SchemaConstraintRule[];
-  assertExists(permissionsRules, "Schema must enforce mutual exclusivity in allOf");
+  const permissionsRules = schema.properties.functions.additionalProperties
+    .properties.permissions.allOf as SchemaConstraintRule[];
+  assertExists(
+    permissionsRules,
+    "Schema must enforce mutual exclusivity in allOf",
+  );
 
   const forbiddenPairs = permissionsRules
     .filter((r: SchemaConstraintRule) => r.not && Array.isArray(r.not.required))
-    .map((r: SchemaConstraintRule) => r.not!.required!.slice().sort().join(","));
+    .map((r: SchemaConstraintRule) =>
+      r.not!.required!.slice().sort().join(",")
+    );
 
   assert(forbiddenPairs.includes(["kv", "state"].sort().join(",")));
   assert(forbiddenPairs.includes(["data", "objects"].sort().join(",")));
@@ -742,7 +782,9 @@ Deno.test("Milestone 0.9.1 - Security: Mutual exclusivity rejects dual declarati
   );
 
   // 3. Artifact Packager Verification (packages/core/artifact/packager.ts)
-  const code = new TextEncoder().encode("export default () => new Response('OK');");
+  const code = new TextEncoder().encode(
+    "export default () => new Response('OK');",
+  );
   await assertRejects(
     async () => {
       await packageFunctionArtifact("api.ts", code, {
@@ -796,7 +838,10 @@ state = ["sessions"]
         e.code === "PLAT-6" &&
         e.message.includes("cannot declare both 'kv' and 'state'"),
     );
-    assertExists(err, "CLI check must fail with PLAT-6 error on dual capability declaration");
+    assertExists(
+      err,
+      "CLI check must fail with PLAT-6 error on dual capability declaration",
+    );
   } finally {
     await Deno.remove(projectDir, { recursive: true });
   }
