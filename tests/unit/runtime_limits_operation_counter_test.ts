@@ -879,11 +879,11 @@ Deno.test("FN-4 / FN-5 (Integration): Wrapping QueueBinding with InvocationTrack
     },
     receive: (opts) => {
       tracker.recordQueueOp();
-      return mockQueues.receive(opts);
+      return mockQueues.receive?.(opts) ?? Promise.resolve(null);
     },
     ack: (id) => {
       tracker.recordQueueOp();
-      return mockQueues.ack(id);
+      return mockQueues.ack?.(id) ?? Promise.resolve();
     },
   };
 

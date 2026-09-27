@@ -14,7 +14,9 @@ import { ValidationFailedError } from "../../packages/errors/mod.ts";
 // Public SDK entrypoint import per PLAT-19 and task T-0501
 import "../../sdk/typescript/mod.ts";
 import type {
-  AtomicOperation,
+  ComputeHandler,
+  CookieOptions,
+  DataBinding,
   EnvBinding,
   FunctionHandler,
   KVAtomicOperation,
@@ -26,6 +28,8 @@ import type {
   QueueConsumerHandler,
   QueueMessage,
   RailFogContext,
+  SignalBinding,
+  StateBinding,
 } from "../../sdk/typescript/mod.ts";
 
 // Type utilities for compile-time assertion
@@ -188,9 +192,6 @@ Deno.test("FN-2 & Q-2: QueueConsumerHandler accepts (message: QueueMessage, ctx:
 // ---------------------------------------------------------------------------
 
 Deno.test("KV-2: KVBinding shape and KVAtomicOperation method chaining", async () => {
-  // Static type check: AtomicOperation is an alias or identical to KVAtomicOperation
-  const _atomicAliasValid: Equal<AtomicOperation, KVAtomicOperation> = true;
-  assertEquals(_atomicAliasValid, true);
 
   // Verify KVAtomicOperation fluent interface
   let checkCalled = false;
@@ -689,3 +690,48 @@ function createMockContext(): RailFogContext {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// 9. Canonical Conceptual Type Aliases (CONCEPT-1, CONCEPT-2, CONCEPT-6)
+// ---------------------------------------------------------------------------
+
+Deno.test("CONCEPT-2: Canonical conceptual type aliases are completely assignable with primitive interfaces", () => {
+  // Static type checks: exact type equality
+  const _stateValid: Equal<StateBinding, KVBinding> = true;
+  const _dataValid: Equal<DataBinding, ObjectBinding> = true;
+  const _signalValid: Equal<SignalBinding, QueueBinding> = true;
+  const _computeValid: Equal<ComputeHandler, FunctionHandler> = true;
+  assertEquals(_stateValid && _dataValid && _signalValid && _computeValid, true);
+
+  // Bidirectional assignability checks
+  const mockKV = {} as KVBinding;
+  const stateBinding: StateBinding = mockKV;
+  const kvBack: KVBinding = stateBinding;
+  assertEquals(kvBack !== undefined, true);
+
+  const mockObj = {} as ObjectBinding;
+  const dataBinding: DataBinding = mockObj;
+  const objBack: ObjectBinding = dataBinding;
+  assertEquals(objBack !== undefined, true);
+
+  const mockQueue = {} as QueueBinding;
+  const signalBinding: SignalBinding = mockQueue;
+  const queueBack: QueueBinding = signalBinding;
+  assertEquals(queueBack !== undefined, true);
+
+  const mockHandler: FunctionHandler = (_req, _ctx) => new Response("ok");
+  const computeHandler: ComputeHandler = mockHandler;
+  const handlerBack: FunctionHandler = computeHandler;
+  assertEquals(handlerBack !== undefined, true);
+});
+
+// ---------------------------------------------------------------------------
+// 10. CookieOptions sameSite normalization (RFC 6265)
+// ---------------------------------------------------------------------------
+
+Deno.test("CookieOptions: sameSite is normalized to RFC standard casing ('Strict' | 'Lax' | 'None')", () => {
+  type StrictSameSite = NonNullable<CookieOptions["sameSite"]>;
+  const _sameSiteValid: Equal<StrictSameSite, "Strict" | "Lax" | "None"> = true;
+  assertEquals(_sameSiteValid, true);
+});
+

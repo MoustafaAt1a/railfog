@@ -33,12 +33,6 @@ export interface KVAtomicOperation {
 }
 
 /**
- * Alias for KVAtomicOperation.
- * @spec contracts/kv.contract.md#KV-2
- */
-export type AtomicOperation = KVAtomicOperation;
-
-/**
  * Key-Value storage capability binding pre-scoped to the function's declared namespace.
  * @spec contracts/kv.contract.md#KV-2
  * @spec contracts/functions.contract.md#FN-4
@@ -160,6 +154,34 @@ export type FunctionHandler = (
   req: Request,
   ctx: RailFogContext,
 ) => Promise<Response> | Response;
+
+/**
+ * Canonical developer concept alias for KVBinding (CONCEPT-2).
+ * @spec contracts/concepts.contract.md#CONCEPT-2
+ * @spec contracts/kv.contract.md#KV-2
+ */
+export type StateBinding = KVBinding;
+
+/**
+ * Canonical developer concept alias for ObjectBinding (CONCEPT-2).
+ * @spec contracts/concepts.contract.md#CONCEPT-2
+ * @spec contracts/objects.contract.md#OBJ-2
+ */
+export type DataBinding = ObjectBinding;
+
+/**
+ * Canonical developer concept alias for QueueBinding (CONCEPT-2).
+ * @spec contracts/concepts.contract.md#CONCEPT-2
+ * @spec contracts/queues.contract.md#Q-2
+ */
+export type SignalBinding = QueueBinding;
+
+/**
+ * Canonical developer concept alias for FunctionHandler (CONCEPT-2).
+ * @spec contracts/concepts.contract.md#CONCEPT-2
+ * @spec contracts/functions.contract.md#FN-1
+ */
+export type ComputeHandler = FunctionHandler;
 
 /**
  * Entrypoint handler signature for Queue-triggered consumer functions.
@@ -284,6 +306,6 @@ export interface CookieOptions {
   httpOnly?: boolean;
   maxAge?: number;
   path?: string;
-  sameSite?: "Strict" | "Lax" | "None" | "strict" | "lax" | "none";
+  sameSite?: "Strict" | "Lax" | "None";
   secure?: boolean;
 }

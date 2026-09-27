@@ -9,15 +9,17 @@ import type {
   ConsumerOptions,
   ContextLogger,
   CookieOptions,
+  DataBinding,
   FunctionHandler,
   QueueConsumerHandler,
   QueueMessage,
   RailFogContext,
   SchemaValidator,
+  SignalBinding,
   StandardSchemaV1,
+  StateBinding,
 } from "./types.ts";
 import {
-  type RailFogErrorCode,
   ResourceNotFoundError,
   statusFromErrorCode,
   toErrorResponseBody,
@@ -86,6 +88,25 @@ export interface HandlerContext extends RailFogContext {
     fn: (sse: SseWriter) => Promise<void> | void,
     options?: { status?: number; headers?: HeadersInit },
   ): Response;
+
+  /**
+   * Conceptual alias for kv (CONCEPT-2).
+   * @spec contracts/concepts.contract.md#CONCEPT-2
+   */
+  readonly state: StateBinding;
+
+  /**
+   * Conceptual alias for objects (CONCEPT-2).
+   * @spec contracts/concepts.contract.md#CONCEPT-2
+   */
+  readonly data: DataBinding;
+
+  /**
+   * Conceptual alias for queues (CONCEPT-2).
+   * Note: This is asynchronous messaging. For request cancellation, use req.signal.
+   * @spec contracts/concepts.contract.md#CONCEPT-2
+   */
+  readonly signal: SignalBinding;
 }
 
 /**
@@ -212,8 +233,18 @@ export function handle(fn: HandlerFn): FunctionHandler {
     }
 
     // spec: contracts/functions.contract.md#FN-4 — Capability and context injection
+    // spec: contracts/concepts.contract.md#CONCEPT-2 — Conceptual aliases (state, data, signal)
     const c: HandlerContext = {
       ...ctx,
+      get state() {
+        return ctx.kv;
+      },
+      get data() {
+        return ctx.objects;
+      },
+      get signal() {
+        return ctx.queues;
+      },
       timeRemaining: () => ctx.timeRemaining(),
       req,
       url: parsedUrl,

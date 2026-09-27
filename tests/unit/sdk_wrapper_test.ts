@@ -1490,3 +1490,86 @@ Deno.test("T-0810 / PLAT-11: router().use() middleware executes in order and dec
   const data = await res.json();
   assertEquals(data, { hello: "world" });
 });
+
+Deno.test("CONCEPT-2 & FN-4: c.state, c.data, c.signal are exposed on HandlerContext and point to c.kv, c.objects, c.queues", async () => {
+  let executed = false;
+  const handler = handle(async (c: HandlerContext) => {
+    executed = true;
+    // Identity checks
+    assertEquals(c.state, c.kv);
+    assertEquals(c.data, c.objects);
+    assertEquals(c.signal, c.queues);
+
+    // Functional interaction check through conceptual alias
+    await c.state.set(["user", "42"], { name: "Alice" });
+    const user = await c.kv.get(["user", "42"]);
+    assertEquals(user, { name: "Alice" });
+
+    return c.json({ ok: true });
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/test");
+  const res = await handler(req, ctx);
+  assertEquals(res.status, 200);
+  assertEquals(executed, true);
+});
+
+Deno.test("Security (FN-5 & CONCEPT-2): req.signal is decoupled from c.signal and preserves AbortSignal cancellation", async () => {
+  let executed = false;
+  const controller = new AbortController();
+
+  const handler = handle((c: HandlerContext) => {
+    executed = true;
+    // c.req.signal must be the standard WHATWG AbortSignal
+    assert(c.req.signal instanceof AbortSignal, "c.req.signal must be an instance of AbortSignal");
+    assertFalse(c.req.signal.aborted, "Signal should initially not be aborted");
+
+    // c.signal must be the SignalBinding (QueueBinding)
+    assertEquals(typeof c.signal.send, "function");
+    assertNotEquals(c.signal as unknown, c.req.signal);
+
+    // Abort the request
+    controller.abort();
+    assert(c.req.signal.aborted, "c.req.signal must reflect abort event");
+
+    // c.signal must remain intact and functional
+    assertEquals(typeof c.signal.send, "function");
+
+    return c.text("aborted-checked");
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/abort-test", {
+    signal: controller.signal,
+  });
+
+  const res = await handler(req, ctx);
+  assertEquals(res.status, 200);
+  assertEquals(executed, true);
+});
+
+Deno.test("CONCEPT-2: api() routes propagate c.state, c.data, and c.signal seamlessly", async () => {
+  const app = api({
+    "/conceptual": (c: HandlerContext) => {
+      return {
+        hasState: c.state === c.kv,
+        hasData: c.data === c.objects,
+        hasSignal: c.signal === c.queues,
+      };
+    },
+  });
+
+  const ctx = createMockRailFogContext();
+  const req = new Request("https://example.railfog.internal/conceptual");
+  const res = await app(req, ctx);
+
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body, {
+    hasState: true,
+    hasData: true,
+    hasSignal: true,
+  });
+});
+
