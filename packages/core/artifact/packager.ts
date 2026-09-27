@@ -54,23 +54,54 @@ export interface PackagedArtifact {
 }
 
 /**
+ * Permissions declaration options when packaging an artifact.
+ * Supports canonical primitive names (kv, objects, queues) as well as
+ * developer conceptual aliases (state, data, signal) per CONCEPT-2 and CONCEPT-6.
+ */
+export interface PackagePermissionsOptions {
+  kv?: string[];
+  state?: string[];
+  objects?: string[];
+  data?: string[];
+  queues?: string[];
+  signal?: string[];
+  secrets?: string[];
+  network?: string[];
+}
+
+function validatePermissionIdentifier(id: string, capability: string): void {
+  if (!id || id.trim() === "") {
+    throw new ValidationFailedError(
+      `VALIDATION_FAILED: Invalid empty permission identifier for ${capability} (PLAT-6); permission identifiers must be non-empty strings`,
+    );
+  }
+  if (
+    id.includes("..") ||
+    id.includes("/") ||
+    id.includes("\\") ||
+    id.includes("\0")
+  ) {
+    throw new ValidationFailedError(
+      `VALIDATION_FAILED: Invalid permission identifier "${id}" for ${capability}: path traversal characters and null bytes are forbidden (PLAT-7)`,
+    );
+  }
+}
+
+/**
  * Builds a packaged deployment artifact bundle and manifest from entrypoint and source code bytes.
  *
  * Spec-anchor: docs/contracts/platform.contract.md PLAT-3 (Deployment pipeline & manifest shape)
  * Spec-anchor: docs/contracts/objects.contract.md OBJ-4 (Content addressing)
  * Spec-anchor: docs/contracts/functions.contract.md FN-5 (Default resource limits)
+ * Spec-anchor: docs/contracts/platform.contract.md PLAT-6 (Mutual exclusivity enforcement)
+ * Spec-anchor: docs/contracts/platform.contract.md PLAT-7 (Path traversal prevention)
+ * Spec-anchor: docs/contracts/concepts.contract.md CONCEPT-2 & CONCEPT-6 (Conceptual aliases)
  */
 export async function packageFunctionArtifact(
   entrypoint: string,
   codeBytes: Uint8Array,
   options?: {
-    permissions?: {
-      kv?: string[];
-      objects?: string[];
-      queues?: string[];
-      secrets?: string[];
-      network?: string[];
-    };
+    permissions?: PackagePermissionsOptions;
     limits?: { cpu_ms?: number; timeout_ms?: number; memory_mb?: number };
     lockfileBytes?: Uint8Array;
   },
@@ -109,6 +140,54 @@ export async function packageFunctionArtifact(
     }
   }
 
+  // Spec: PLAT-6 Mutual exclusivity & alias normalization (CONCEPT-2, CONCEPT-6)
+  let normalizedKv: string[] | undefined = undefined;
+  let normalizedObjects: string[] | undefined = undefined;
+  let normalizedQueues: string[] | undefined = undefined;
+
+  if (options?.permissions) {
+    const p = options.permissions;
+    if (p.kv !== undefined && p.state !== undefined) {
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Cannot declare both 'kv' and 'state' permissions (PLAT-6 mutual exclusivity violation)",
+      );
+    }
+    if (p.objects !== undefined && p.data !== undefined) {
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Cannot declare both 'objects' and 'data' permissions (PLAT-6 mutual exclusivity violation)",
+      );
+    }
+    if (p.queues !== undefined && p.signal !== undefined) {
+      throw new ValidationFailedError(
+        "VALIDATION_FAILED: Cannot declare both 'queues' and 'signal' permissions (PLAT-6 mutual exclusivity violation)",
+      );
+    }
+
+    const rawKv = p.state ?? p.kv;
+    if (rawKv) {
+      for (const id of rawKv) {
+        validatePermissionIdentifier(id, p.state ? "state" : "kv");
+      }
+      normalizedKv = [...rawKv];
+    }
+
+    const rawObjects = p.data ?? p.objects;
+    if (rawObjects) {
+      for (const id of rawObjects) {
+        validatePermissionIdentifier(id, p.data ? "data" : "objects");
+      }
+      normalizedObjects = [...rawObjects];
+    }
+
+    const rawQueues = p.signal ?? p.queues;
+    if (rawQueues) {
+      for (const id of rawQueues) {
+        validatePermissionIdentifier(id, p.signal ? "signal" : "queues");
+      }
+      normalizedQueues = [...rawQueues];
+    }
+  }
+
   // Spec: OBJ-4 content addressing calculation
   const id = await computeArtifactId(codeBytes);
   const integrity = await computeIntegrity(codeBytes);
@@ -131,13 +210,9 @@ export async function packageFunctionArtifact(
     entrypoint: entrypoint.trim(),
     integrity,
     permissions: {
-      ...(options?.permissions?.kv ? { kv: [...options.permissions.kv] } : {}),
-      ...(options?.permissions?.objects
-        ? { objects: [...options.permissions.objects] }
-        : {}),
-      ...(options?.permissions?.queues
-        ? { queues: [...options.permissions.queues] }
-        : {}),
+      ...(normalizedKv ? { kv: normalizedKv } : {}),
+      ...(normalizedObjects ? { objects: normalizedObjects } : {}),
+      ...(normalizedQueues ? { queues: normalizedQueues } : {}),
       ...(options?.permissions?.secrets
         ? { secrets: [...options.permissions.secrets] }
         : {}),

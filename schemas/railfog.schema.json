@@ -41,22 +41,37 @@
           },
           "permissions": {
             "type": "object",
-            "description": "Strictly scoped capabilities injected at deployment time (PLAT-6). Functions have zero ambient access beyond declared permissions.",
+            "description": "Strictly scoped capabilities injected at deployment time (PLAT-6, CONCEPT-6). Functions have zero ambient access beyond declared permissions.",
             "properties": {
               "kv": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "List of scoped KV namespace identifiers accessible to this function (KV-2)."
+                "description": "List of scoped KV namespace identifiers accessible to this function (KV-2, CONCEPT-2)."
+              },
+              "state": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Canonical developer concept alias for kv (CONCEPT-2, CONCEPT-6)."
               },
               "objects": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "List of object storage buckets accessible to this function (OBJ-2)."
+                "description": "List of object storage buckets accessible to this function (OBJ-2, CONCEPT-2)."
+              },
+              "data": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Canonical developer concept alias for objects (CONCEPT-2, CONCEPT-6)."
               },
               "queues": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "List of message queues this function can publish messages to (Q-2)."
+                "description": "List of message queues this function can publish messages to (Q-2, CONCEPT-2)."
+              },
+              "signal": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Canonical developer concept alias for queues (CONCEPT-2, CONCEPT-6)."
               },
               "network": {
                 "type": "array",
@@ -69,6 +84,11 @@
                 "description": "List of encrypted environment secrets injected via ctx.env (PLAT-15)."
               }
             },
+            "allOf": [
+              { "not": { "required": ["kv", "state"] } },
+              { "not": { "required": ["objects", "data"] } },
+              { "not": { "required": ["queues", "signal"] } }
+            ],
             "additionalProperties": false
           },
           "triggers": {

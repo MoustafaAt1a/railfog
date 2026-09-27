@@ -15,7 +15,63 @@ import type {
  *           There are NO runtime `if (hasPermission(...))` checks. The closures enforce access by structurally prepending the prefix.
  * - PLAT-7: Scoping & physical prefixing. physical_key = {org_id}/{project_id}/{resource_name}/{caller_key}.
  * - KV-4: KV keys are arrays of strings. Max key length/segments limits are assumed checked in the provider.
+ * - CONCEPT-2 / CONCEPT-6: Canonical developer conceptual aliases (state -> kv, data -> objects, signal -> queues).
+ * - Q-2: Client-facing QueueBinding attenuates internal worker-only methods (receive, ack).
  */
+
+export interface DeclaredPermissions {
+  kv?: string[];
+  state?: string[];
+  objects?: string[];
+  data?: string[];
+  queues?: string[];
+  signal?: string[];
+  network?: string[];
+  secrets?: string[];
+}
+
+/**
+ * Normalizes conceptual capability aliases to canonical infrastructure primitives (CONCEPT-2, CONCEPT-6).
+ * Enforces strict mutual exclusivity: declaring both alias and primitive throws ValidationFailedError (PLAT-6).
+ */
+export function normalizeDeclaredCapabilities(
+  declared: DeclaredPermissions,
+): {
+  kv?: string[];
+  objects?: string[];
+  queues?: string[];
+  network?: string[];
+  secrets?: string[];
+} {
+  // PLAT-6: Mutual exclusivity enforcement
+  if (declared.kv !== undefined && declared.state !== undefined) {
+    throw new ValidationFailedError(
+      "Cannot declare both 'kv' and 'state' capabilities (PLAT-6 mutual exclusivity violation)",
+    );
+  }
+  if (declared.objects !== undefined && declared.data !== undefined) {
+    throw new ValidationFailedError(
+      "Cannot declare both 'objects' and 'data' capabilities (PLAT-6 mutual exclusivity violation)",
+    );
+  }
+  if (declared.queues !== undefined && declared.signal !== undefined) {
+    throw new ValidationFailedError(
+      "Cannot declare both 'queues' and 'signal' capabilities (PLAT-6 mutual exclusivity violation)",
+    );
+  }
+
+  const kv = declared.state ?? declared.kv;
+  const objects = declared.data ?? declared.objects;
+  const queues = declared.signal ?? declared.queues;
+
+  return {
+    ...(kv !== undefined ? { kv } : {}),
+    ...(objects !== undefined ? { objects } : {}),
+    ...(queues !== undefined ? { queues } : {}),
+    ...(declared.network !== undefined ? { network: declared.network } : {}),
+    ...(declared.secrets !== undefined ? { secrets: declared.secrets } : {}),
+  };
+}
 
 export interface KVBinding {
   get(key: string[]): Promise<unknown>;
@@ -24,7 +80,11 @@ export interface KVBinding {
   list(
     prefix: string[],
     opts?: { limit?: number; cursor?: string },
-  ): Promise<{ keys: { key: string[]; value: unknown }[]; cursor?: string }>;
+  ): Promise<{
+    keys: { key: string[]; value: unknown }[];
+    entries?: { key: string[]; value: unknown; version?: number }[];
+    cursor?: string;
+  }>;
   atomic(): KVAtomicBuilder;
 }
 
@@ -50,11 +110,21 @@ export interface ObjectBinding {
 export interface QueueBinding {
   send(body: unknown, opts?: { delay?: number }): Promise<{ id: string }>;
   sendBatch(bodies: unknown[]): Promise<{ id: string }[]>;
-  receive(
+  /**
+   * Internal worker consumption method. Purged from client-scoped capability bindings (Q-2).
+   */
+  receive?(
     opts?: { visibilityTimeoutMs?: number },
   ): Promise<QueueMessage | null>;
-  ack(id: string): Promise<void>;
+  /**
+   * Internal worker acknowledgment method. Purged from client-scoped capability bindings (Q-2).
+   */
+  ack?(id: string): Promise<void>;
 }
+
+export type StateBinding = KVBinding;
+export type DataBinding = ObjectBinding;
+export type SignalBinding = QueueBinding;
 
 export interface ResolvedBindings {
   kv?: KVBinding;
@@ -62,8 +132,24 @@ export interface ResolvedBindings {
   queues?: QueueBinding;
 }
 
+function validateIdentifier(id: string, name: string): void {
+  if (!id || id.trim() === "") {
+    throw new ValidationFailedError(`Invalid empty resource name for ${name}`);
+  }
+  if (
+    id.includes("..") ||
+    id.includes("/") ||
+    id.includes("\\") ||
+    id.includes("\0")
+  ) {
+    throw new ValidationFailedError(
+      `Invalid identifier "${id}" for ${name}: path traversal characters ('..', '/', '\\') and null bytes are forbidden (PLAT-7)`,
+    );
+  }
+}
+
 export function resolvePermissions(
-  declared: { kv?: string[]; objects?: string[]; queues?: string[] },
+  declared: DeclaredPermissions,
   orgId: string,
   projectId: string,
   providers: {
@@ -75,25 +161,42 @@ export function resolvePermissions(
   if (!orgId || !projectId) {
     throw new ValidationFailedError("orgId and projectId are required");
   }
+  if (
+    orgId.includes("..") ||
+    orgId.includes("/") ||
+    orgId.includes("\\") ||
+    orgId.includes("\0")
+  ) {
+    throw new ValidationFailedError(
+      `Invalid identifier "${orgId}" for orgId: path traversal characters ('..', '/', '\\') and null bytes are forbidden (PLAT-7)`,
+    );
+  }
+  if (
+    projectId.includes("..") ||
+    projectId.includes("/") ||
+    projectId.includes("\\") ||
+    projectId.includes("\0")
+  ) {
+    throw new ValidationFailedError(
+      `Invalid identifier "${projectId}" for projectId: path traversal characters ('..', '/', '\\') and null bytes are forbidden (PLAT-7)`,
+    );
+  }
 
+  const normalized = normalizeDeclaredCapabilities(declared);
   const bindings: ResolvedBindings = {};
 
   const validateResourceName = (resName: string, type: string) => {
-    if (!resName || resName.trim() === "") {
-      throw new ValidationFailedError(
-        `Invalid empty resource name for ${type}`,
-      );
-    }
+    validateIdentifier(resName, type);
   };
 
-  if (declared.kv) {
-    if (declared.kv.length > 1) {
+  if (normalized.kv) {
+    if (normalized.kv.length > 1) {
       throw new ValidationFailedError(
         "Ambiguous scope: Multiple KV namespaces requested",
       );
     }
-    if (declared.kv.length === 1) {
-      const resName = declared.kv[0];
+    if (normalized.kv.length === 1) {
+      const resName = normalized.kv[0];
       validateResourceName(resName, "kv");
       const prefix = [orgId, projectId, resName];
       bindings.kv = {
@@ -109,11 +212,17 @@ export function resolvePermissions(
             [...prefix, ...queryPrefix],
             opts,
           );
+          const mappedKeys = res.keys.map((item) => ({
+            ...item,
+            key: item.key.slice(prefix.length),
+          }));
           return {
             ...res,
-            keys: res.keys.map((item) => ({
-              ...item,
-              key: item.key.slice(prefix.length),
+            keys: mappedKeys,
+            entries: mappedKeys.map((item) => ({
+              key: item.key,
+              value: item.value,
+              version: (item as { version?: number }).version ?? 1,
             })),
           };
         },
@@ -140,14 +249,14 @@ export function resolvePermissions(
     }
   }
 
-  if (declared.objects) {
-    if (declared.objects.length > 1) {
+  if (normalized.objects) {
+    if (normalized.objects.length > 1) {
       throw new ValidationFailedError(
         "Ambiguous scope: Multiple Object buckets requested",
       );
     }
-    if (declared.objects.length === 1) {
-      const resName = declared.objects[0];
+    if (normalized.objects.length === 1) {
+      const resName = normalized.objects[0];
       validateResourceName(resName, "objects");
       const prefix = `${orgId}/${projectId}/${resName}/`;
 
@@ -228,23 +337,20 @@ export function resolvePermissions(
     }
   }
 
-  if (declared.queues) {
-    if (declared.queues.length > 1) {
+  if (normalized.queues) {
+    if (normalized.queues.length > 1) {
       throw new ValidationFailedError(
         "Ambiguous scope: Multiple Queues requested",
       );
     }
-    if (declared.queues.length === 1) {
-      const resName = declared.queues[0];
+    if (normalized.queues.length === 1) {
+      const resName = normalized.queues[0];
       validateResourceName(resName, "queues");
       // Queue provider does not accept a queue ID in the method, it binds to the whole provider
       bindings.queues = {
         send: (body: unknown, opts?: { delay?: number }) =>
           providers.queues.send(body, opts),
         sendBatch: (bodies: unknown[]) => providers.queues.sendBatch(bodies),
-        receive: (opts?: { visibilityTimeoutMs?: number }) =>
-          providers.queues.receive(opts),
-        ack: (msgId: string) => providers.queues.ack(msgId),
       };
     }
   }

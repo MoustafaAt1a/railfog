@@ -1,5 +1,9 @@
 import { assertEquals, assertExists, assertThrows } from "@std/assert";
-import { resolvePermissions } from "../../packages/policy/permission-resolver.ts";
+import {
+  normalizeDeclaredCapabilities,
+  resolvePermissions,
+  type DeclaredPermissions,
+} from "../../packages/policy/permission-resolver.ts";
 import { ValidationFailedError } from "../../packages/errors/mod.ts";
 import { SQLiteKVProvider } from "../../providers/kv/sqlite-provider.ts";
 import { LocalFSProvider } from "../../providers/objects/local-fs-provider.ts";
@@ -326,10 +330,6 @@ Deno.test("Security: PLAT-6 guarantee (structurally impossible to address out-of
     bindings.queues!.send({ msg: "hi" }, {}, "app:other");
     // @ts-expect-error: PLAT-6
     bindings.queues!.sendBatch([{ msg: "hi" }], "app:other");
-    // @ts-expect-error: PLAT-6
-    bindings.queues!.receive({}, "app:other");
-    // @ts-expect-error: PLAT-6
-    bindings.queues!.ack("id123", "app:other");
   };
 
   // Verify parameters count is exactly what the caller needs, no room for resource strings
@@ -355,4 +355,216 @@ Deno.test("Security: No runtime permission check branches", async () => {
     mockProviders,
   );
   await bindings.kv!.get(["user", "123"]);
+});
+
+Deno.test("Unit: normalizeDeclaredCapabilities normalizes conceptual aliases to canonical primitives", () => {
+  const stateInput: DeclaredPermissions = { state: ["app:sessions"] };
+  const normalizedState = normalizeDeclaredCapabilities(stateInput);
+  assertEquals(normalizedState, { kv: ["app:sessions"] });
+
+  const normalizedData = normalizeDeclaredCapabilities({ data: ["app_uploads"] });
+  assertEquals(normalizedData, { objects: ["app_uploads"] });
+
+  const normalizedSignal = normalizeDeclaredCapabilities({ signal: ["app:jobs"] });
+  assertEquals(normalizedSignal, { queues: ["app:jobs"] });
+
+  const normalizedAll = normalizeDeclaredCapabilities({
+    state: ["app:sessions"],
+    data: ["app_uploads"],
+    signal: ["app:jobs"],
+    network: ["api.example.com"],
+    secrets: ["API_KEY"],
+  });
+  assertEquals(normalizedAll, {
+    kv: ["app:sessions"],
+    objects: ["app_uploads"],
+    queues: ["app:jobs"],
+    network: ["api.example.com"],
+    secrets: ["API_KEY"],
+  });
+
+  const canonicalIntact = normalizeDeclaredCapabilities({
+    kv: ["app:sessions"],
+    objects: ["app_uploads"],
+    queues: ["app:jobs"],
+  });
+  assertEquals(canonicalIntact, {
+    kv: ["app:sessions"],
+    objects: ["app_uploads"],
+    queues: ["app:jobs"],
+  });
+});
+
+Deno.test("Security (PLAT-6): normalizeDeclaredCapabilities strictly rejects dual declarations", () => {
+  assertThrows(
+    () => normalizeDeclaredCapabilities({ kv: ["app:sessions"], state: ["app:sessions"] }),
+    ValidationFailedError,
+    "PLAT-6",
+  );
+  assertThrows(
+    () => normalizeDeclaredCapabilities({ objects: ["app_uploads"], data: ["app_uploads"] }),
+    ValidationFailedError,
+    "PLAT-6",
+  );
+  assertThrows(
+    () => normalizeDeclaredCapabilities({ queues: ["app:jobs"], signal: ["app:jobs"] }),
+    ValidationFailedError,
+    "PLAT-6",
+  );
+});
+
+Deno.test("Integration: resolvePermissions resolves conceptual capability aliases (state, data, signal)", async () => {
+  const sharedKV = new SQLiteKVProvider(":memory:");
+  const tempDir = await Deno.makeTempDir();
+  const queue = new SQLiteQueueProvider(":memory:");
+  const providers = {
+    kv: sharedKV,
+    objects: new LocalFSProvider(tempDir),
+    queues: queue,
+  };
+
+  try {
+    const bindings = resolvePermissions(
+      {
+        state: ["app:sessions"],
+        data: ["app_uploads"],
+        signal: ["app:jobs"],
+      },
+      "org1",
+      "proj1",
+      providers,
+    );
+
+    assertExists(bindings.kv);
+    assertExists(bindings.objects);
+    assertExists(bindings.queues);
+
+    // Verify KV (state) binding works
+    await bindings.kv!.set(["token", "abc"], { user: "alice" });
+    const session = await bindings.kv!.get(["token", "abc"]);
+    assertEquals(session, { user: "alice" });
+
+    // Verify Objects (data) binding works
+    const payload = new TextEncoder().encode("file content").buffer;
+    await bindings.objects!.put("doc.txt", payload);
+    const stream = await bindings.objects!.get("doc.txt");
+    const reader = stream!.getReader();
+    const chunk = await reader.read();
+    assertEquals(new TextDecoder().decode(chunk.value), "file content");
+
+    // Verify Queues (signal) binding works
+    const sent = await bindings.queues!.send({ action: "deploy" });
+    assertExists(sent.id);
+  } finally {
+    await Deno.remove(tempDir, { recursive: true });
+  }
+});
+
+Deno.test("Security (PLAT-6): resolvePermissions throws ValidationFailedError on dual declarations", () => {
+  assertThrows(
+    () =>
+      resolvePermissions(
+        { kv: ["app:sessions"], state: ["app:sessions"] },
+        "org1",
+        "proj1",
+        emptyProviders,
+      ),
+    ValidationFailedError,
+    "PLAT-6",
+  );
+  assertThrows(
+    () =>
+      resolvePermissions(
+        { objects: ["app_uploads"], data: ["app_other"] },
+        "org1",
+        "proj1",
+        emptyProviders,
+      ),
+    ValidationFailedError,
+    "PLAT-6",
+  );
+  assertThrows(
+    () =>
+      resolvePermissions(
+        { queues: ["app:jobs"], signal: ["app:jobs"] },
+        "org1",
+        "proj1",
+        emptyProviders,
+      ),
+    ValidationFailedError,
+    "PLAT-6",
+  );
+});
+
+Deno.test("Security (PLAT-7): resolvePermissions rejects path traversal and null bytes in capability names", () => {
+  const badNames = [
+    "../secret",
+    "../../etc/passwd",
+    "foo/bar",
+    "foo\\bar",
+    "app\0sessions",
+  ];
+
+  for (const bad of badNames) {
+    assertThrows(
+      () => resolvePermissions({ kv: [bad] }, "org1", "proj1", emptyProviders),
+      ValidationFailedError,
+      "PLAT-7",
+    );
+    assertThrows(
+      () => resolvePermissions({ state: [bad] }, "org1", "proj1", emptyProviders),
+      ValidationFailedError,
+      "PLAT-7",
+    );
+    assertThrows(
+      () => resolvePermissions({ objects: [bad] }, "org1", "proj1", emptyProviders),
+      ValidationFailedError,
+      "PLAT-7",
+    );
+    assertThrows(
+      () => resolvePermissions({ data: [bad] }, "org1", "proj1", emptyProviders),
+      ValidationFailedError,
+      "PLAT-7",
+    );
+    assertThrows(
+      () => resolvePermissions({ queues: [bad] }, "org1", "proj1", emptyProviders),
+      ValidationFailedError,
+      "PLAT-7",
+    );
+    assertThrows(
+      () => resolvePermissions({ signal: [bad] }, "org1", "proj1", emptyProviders),
+      ValidationFailedError,
+      "PLAT-7",
+    );
+  }
+
+  // Also check orgId and projectId
+  assertThrows(
+    () => resolvePermissions({ kv: ["app"] }, "../org", "proj1", emptyProviders),
+    ValidationFailedError,
+    "PLAT-7",
+  );
+  assertThrows(
+    () => resolvePermissions({ kv: ["app"] }, "org1", "proj/1", emptyProviders),
+    ValidationFailedError,
+    "PLAT-7",
+  );
+});
+
+Deno.test("Security (Q-2): Client QueueBinding attenuates internal receive and ack methods", () => {
+  const queue = new SQLiteQueueProvider(":memory:");
+  const bindings = resolvePermissions(
+    { queues: ["app:jobs"] },
+    "org1",
+    "proj1",
+    { kv: emptyProviders, objects: emptyProviders, queues: queue },
+  );
+
+  assertExists(bindings.queues);
+  assertEquals(typeof bindings.queues!.send, "function");
+  assertEquals(typeof bindings.queues!.sendBatch, "function");
+  assertEquals(bindings.queues!.receive, undefined);
+  assertEquals(bindings.queues!.ack, undefined);
+  assertEquals("receive" in bindings.queues!, false);
+  assertEquals("ack" in bindings.queues!, false);
 });

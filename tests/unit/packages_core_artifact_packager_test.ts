@@ -2,6 +2,7 @@ import { assertEquals, assertRejects } from "@std/assert";
 import {
   type Manifest,
   type PackagedArtifact,
+  type PackagePermissionsOptions,
   packageFunctionArtifact,
 } from "../../packages/core/artifact/packager.ts";
 import { ValidationFailedError } from "../../packages/errors/mod.ts";
@@ -170,3 +171,153 @@ Deno.test("Integration: Package starter function fixture and verify uncorrupted 
   assertEquals(packaged.manifest.integrity, expectedIntegrity);
   assertEquals(packaged.integrity, expectedIntegrity);
 });
+
+Deno.test("Unit: packageFunctionArtifact normalizes conceptual capability aliases into canonical manifest permissions", async () => {
+  const code = new TextEncoder().encode("export default () => {};");
+  const options: { permissions: PackagePermissionsOptions } = {
+    permissions: {
+      state: ["app:sessions"],
+      data: ["app_uploads"],
+      signal: ["app:jobs"],
+      network: ["api.example.com"],
+      secrets: ["APP_KEY"],
+    },
+  };
+
+  const packaged = await packageFunctionArtifact("api.ts", code, options);
+
+  // Manifest must contain normalized canonical names (kv, objects, queues)
+  assertEquals(packaged.manifest.permissions, {
+    kv: ["app:sessions"],
+    objects: ["app_uploads"],
+    queues: ["app:jobs"],
+    network: ["api.example.com"],
+    secrets: ["APP_KEY"],
+  });
+
+  // Raw conceptual aliases must NOT leak into the emitted manifest object
+  const perms = packaged.manifest.permissions as Record<string, unknown>;
+  assertEquals(perms.state, undefined);
+  assertEquals(perms.data, undefined);
+  assertEquals(perms.signal, undefined);
+  assertEquals("state" in perms, false);
+  assertEquals("data" in perms, false);
+  assertEquals("signal" in perms, false);
+});
+
+Deno.test("Security (PLAT-6): packageFunctionArtifact rejects dual declarations of alias and primitive", async () => {
+  const code = new TextEncoder().encode("export default () => {};");
+
+  await assertRejects(
+    async () => {
+      await packageFunctionArtifact("api.ts", code, {
+        permissions: {
+          kv: ["app:sessions"],
+          state: ["app:sessions"],
+        },
+      });
+    },
+    ValidationFailedError,
+    "PLAT-6",
+  );
+
+  await assertRejects(
+    async () => {
+      await packageFunctionArtifact("api.ts", code, {
+        permissions: {
+          objects: ["app_uploads"],
+          data: ["app_other"],
+        },
+      });
+    },
+    ValidationFailedError,
+    "PLAT-6",
+  );
+
+  await assertRejects(
+    async () => {
+      await packageFunctionArtifact("api.ts", code, {
+        permissions: {
+          queues: ["app:jobs"],
+          signal: ["app:jobs"],
+        },
+      });
+    },
+    ValidationFailedError,
+    "PLAT-6",
+  );
+});
+
+Deno.test("Security (PLAT-7): packageFunctionArtifact rejects path traversal and null bytes in permission identifiers", async () => {
+  const code = new TextEncoder().encode("export default () => {};");
+  const badIdentifiers = [
+    "../secret",
+    "../../etc/passwd",
+    "foo/bar",
+    "foo\\bar",
+    "app\0sessions",
+  ];
+
+  for (const bad of badIdentifiers) {
+    await assertRejects(
+      async () => {
+        await packageFunctionArtifact("api.ts", code, {
+          permissions: { kv: [bad] },
+        });
+      },
+      ValidationFailedError,
+      "PLAT-7",
+    );
+
+    await assertRejects(
+      async () => {
+        await packageFunctionArtifact("api.ts", code, {
+          permissions: { state: [bad] },
+        });
+      },
+      ValidationFailedError,
+      "PLAT-7",
+    );
+
+    await assertRejects(
+      async () => {
+        await packageFunctionArtifact("api.ts", code, {
+          permissions: { objects: [bad] },
+        });
+      },
+      ValidationFailedError,
+      "PLAT-7",
+    );
+
+    await assertRejects(
+      async () => {
+        await packageFunctionArtifact("api.ts", code, {
+          permissions: { data: [bad] },
+        });
+      },
+      ValidationFailedError,
+      "PLAT-7",
+    );
+
+    await assertRejects(
+      async () => {
+        await packageFunctionArtifact("api.ts", code, {
+          permissions: { queues: [bad] },
+        });
+      },
+      ValidationFailedError,
+      "PLAT-7",
+    );
+
+    await assertRejects(
+      async () => {
+        await packageFunctionArtifact("api.ts", code, {
+          permissions: { signal: [bad] },
+        });
+      },
+      ValidationFailedError,
+      "PLAT-7",
+    );
+  }
+});
+
