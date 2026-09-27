@@ -1668,3 +1668,87 @@ Deno.test("Adversarial (T-0806): interactive scaffolding with force=true overwri
     await Deno.remove(tempDir, { recursive: true });
   }
 });
+
+// ============================================================================
+// Group: Milestone 0.9.1 / T-0921 Conceptual Primitives in Starter Templates
+// ============================================================================
+
+Deno.test(
+  "T-0921 / AC1 & AC3 (CONCEPT-1..4): Scaffolded worked-example includes conceptual architecture comments and demonstrates c.data & c.signal",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-init-conceptual-worked-",
+    });
+    try {
+      await runInit({
+        directory: tempDir,
+        template: "worked-example",
+        projectName: "conceptual-worked-example",
+      });
+
+      const tomlContent = await Deno.readTextFile(
+        join(tempDir, "railfog.toml"),
+      );
+      assertStringIncludes(tomlContent, "CONCEPT-1..4");
+      assertStringIncludes(tomlContent, "Compute");
+      assertStringIncludes(tomlContent, "State");
+      assertStringIncludes(tomlContent, "Data");
+      assertStringIncludes(tomlContent, "Signal");
+
+      const apiContent = await Deno.readTextFile(
+        join(tempDir, "functions", "api.ts"),
+      );
+      assertStringIncludes(apiContent, "CONCEPT-1");
+      assertStringIncludes(apiContent, "c.data");
+      assertStringIncludes(apiContent, "c.signal");
+
+      const checkRes = await checkProject(tempDir);
+      assertEquals(
+        checkRes.valid,
+        true,
+        "Scaffolded worked-example must pass checkProject validation",
+      );
+      assertEquals(checkRes.errors.length, 0);
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+    }
+  },
+);
+
+Deno.test(
+  "T-0921 / AC2 & AC3 (CONCEPT-1, CONCEPT-2): Scaffolded minimal template includes conceptual guidance and passes checkProject",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-init-conceptual-min-",
+    });
+    try {
+      await runInit({
+        directory: tempDir,
+        template: "minimal",
+        projectName: "conceptual-min-app",
+      });
+
+      const tomlContent = await Deno.readTextFile(
+        join(tempDir, "railfog.toml"),
+      );
+      assertStringIncludes(tomlContent, "CONCEPT-1");
+      assertStringIncludes(tomlContent, "State");
+
+      const apiContent = await Deno.readTextFile(
+        join(tempDir, "functions", "api.ts"),
+      );
+      assertStringIncludes(apiContent, "CONCEPT-1");
+
+      const checkRes = await checkProject(tempDir);
+      assertEquals(
+        checkRes.valid,
+        true,
+        "Scaffolded minimal project must pass checkProject validation",
+      );
+      assertEquals(checkRes.errors.length, 0);
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+    }
+  },
+);
+

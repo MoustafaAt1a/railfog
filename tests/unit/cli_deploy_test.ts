@@ -1373,3 +1373,153 @@ Deno.test(
     }
   },
 );
+
+// ============================================================================
+// Group: Milestone 0.9.1 / T-0920 Conceptual Capability Aliases in CLI Deploy
+// ============================================================================
+
+Deno.test(
+  "T-0920 / AC1 (CONCEPT-2, CONCEPT-6, PLAT-6): rail deploy --dry-run succeeds for functions declaring conceptual capabilities (state, data, signal)",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-conceptual-dryrun-",
+    });
+    try {
+      await createValidProject(tempDir, {
+        appName: "conceptual-deploy-app",
+        routes: [{ pattern: "/api/*", function: "api" }],
+        permissions: {
+          state: ["sessions"],
+          data: ["blobs"],
+          signal: ["events"],
+        },
+      });
+
+      const res = await deployCommand({
+        cwd: tempDir,
+        dryRun: true,
+      });
+
+      assertEquals(res.revisionId, "(dry-run)");
+      assertEquals(res.state, "DryRun");
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+    }
+  },
+);
+
+Deno.test(
+  "T-0920 / AC2 (CONCEPT-2, CONCEPT-6, PLAT-8): rail deploy successfully deploys function declaring state, data, signal to DeploymentService",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-conceptual-deploy-",
+    });
+    const storageDir = await Deno.makeTempDir({
+      prefix: "railfog-conceptual-storage-",
+    });
+    try {
+      await createValidProject(tempDir, {
+        appName: "conceptual-live-app",
+        routes: [{ pattern: "/api/*", function: "api" }],
+        permissions: {
+          state: ["db"],
+          data: ["uploads"],
+          signal: ["notifications"],
+        },
+      });
+
+      let deployedManifestPermissions: Record<string, unknown> | undefined;
+      const { service } = createTestDeploymentService(storageDir);
+      const originalDeploy = service.deploy.bind(service);
+      service.deploy = async (
+        project,
+        functionName,
+        artifact,
+        healthCheck,
+      ) => {
+        deployedManifestPermissions = artifact.manifest
+          ?.permissions as Record<string, unknown>;
+        return await originalDeploy(
+          project,
+          functionName,
+          artifact,
+          healthCheck,
+        );
+      };
+
+      const res = await deployCommand({
+        cwd: tempDir,
+        deploymentService: service,
+      });
+
+      assert(res.revisionId.startsWith("rev_"));
+      assertEquals(res.state, "Deployed");
+      assertExists(deployedManifestPermissions);
+      // Normalized to canonical manifest primitive keys
+      assertEquals(deployedManifestPermissions.kv, ["db"]);
+      assertEquals(deployedManifestPermissions.objects, ["uploads"]);
+      assertEquals(deployedManifestPermissions.queues, ["notifications"]);
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+      await Deno.remove(storageDir, { recursive: true });
+    }
+  },
+);
+
+Deno.test(
+  "T-0920 / AC3 / Security (PLAT-6): rail deploy rejects conflicting dual declaration of primitive and alias (kv and state)",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-conflict-deploy-",
+    });
+    try {
+      await createValidProject(tempDir, {
+        appName: "conflict-app",
+        routes: [{ pattern: "/api/*", function: "api" }],
+        permissions: {
+          kv: ["sessions"],
+          state: ["sessions"],
+        },
+      });
+
+      await assertRejects(
+        async () => {
+          await deployCommand({ cwd: tempDir, dryRun: true });
+        },
+        ValidationFailedError,
+        "Cannot declare both 'kv' and 'state'",
+      );
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+    }
+  },
+);
+
+Deno.test(
+  "T-0920 / AC4 / Security (PLAT-7): rail deploy rejects path traversal in conceptual capability identifiers",
+  async () => {
+    const tempDir = await Deno.makeTempDir({
+      prefix: "railfog-traversal-deploy-",
+    });
+    try {
+      await createValidProject(tempDir, {
+        appName: "traversal-app",
+        routes: [{ pattern: "/api/*", function: "api" }],
+        permissions: {
+          state: ["../escaped_store"],
+        },
+      });
+
+      await assertRejects(
+        async () => {
+          await deployCommand({ cwd: tempDir, dryRun: true });
+        },
+        ValidationFailedError,
+        "path traversal",
+      );
+    } finally {
+      await Deno.remove(tempDir, { recursive: true });
+    }
+  },
+);
+

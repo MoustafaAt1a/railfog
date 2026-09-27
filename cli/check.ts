@@ -37,6 +37,21 @@ export interface CheckResult {
 }
 
 /**
+ * Configuration schema for function permissions / capabilities (PLAT-6, CONCEPT-2, CONCEPT-6).
+ * Supports both infrastructure primitives and conceptual aliases.
+ */
+export interface FunctionPermissionsConfig {
+  kv?: string[];
+  state?: string[];
+  objects?: string[];
+  data?: string[];
+  queues?: string[];
+  signal?: string[];
+  network?: string[];
+  secrets?: string[];
+}
+
+/**
  * Checks whether a network host / IP falls into forbidden SSRF ranges.
  *
  * @spec contracts/platform.contract.md#PLAT-5 — Mandatory-block IP ranges (link-local, cloud metadata, RFC1918, loopback)
@@ -844,6 +859,10 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
           const lower = cap.toLowerCase().trim();
           if (lower.startsWith("kv") || lower === "kv") {
             syntheticPermissions.kv = syntheticPermissions.kv ?? ["default"];
+          } else if (lower.startsWith("state") || lower === "state") {
+            syntheticPermissions.state = syntheticPermissions.state ?? [
+              "default",
+            ];
           } else if (
             lower.startsWith("object") || lower.startsWith("s3") ||
             lower === "objects"
@@ -851,8 +870,16 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
             syntheticPermissions.objects = syntheticPermissions.objects ?? [
               "default",
             ];
+          } else if (lower.startsWith("data") || lower === "data") {
+            syntheticPermissions.data = syntheticPermissions.data ?? [
+              "default",
+            ];
           } else if (lower.startsWith("queue") || lower === "queues") {
             syntheticPermissions.queues = syntheticPermissions.queues ?? [
+              "default",
+            ];
+          } else if (lower.startsWith("signal") || lower === "signal") {
+            syntheticPermissions.signal = syntheticPermissions.signal ?? [
               "default",
             ];
           } else if (
@@ -890,106 +917,99 @@ export async function checkProject(configPath: string): Promise<CheckResult> {
       }
 
       if (permissions) {
-        // KV namespace scoping: exactly one declared namespace allowed (PLAT-6)
-        if (permissions.kv !== undefined) {
-          if (!Array.isArray(permissions.kv)) {
-            errors.push({
-              severity: "error",
-              code: "PLAT-6",
-              path: `functions.${fnName}.permissions.kv`,
-              message: `KV permissions must be an array of strings (PLAT-6)`,
-            });
-          } else if (permissions.kv.length > 1) {
-            errors.push({
-              severity: "error",
-              code: "PLAT-6",
-              path: `functions.${fnName}.permissions.kv`,
-              message:
-                `Ambiguous scope: function cannot declare multiple KV namespaces (PLAT-6)`,
-            });
-          } else {
-            for (let i = 0; i < permissions.kv.length; i++) {
-              const k = permissions.kv[i];
-              if (typeof k !== "string" || k.trim() === "") {
-                errors.push({
-                  severity: "error",
-                  code: "PLAT-6",
-                  path: `functions.${fnName}.permissions.kv[${i}]`,
-                  message:
-                    `KV permission entry must be a non-empty string identifier (PLAT-6)`,
-                });
-              }
-            }
-          }
+        // spec: contracts/platform.contract.md#PLAT-6 — Mutual exclusivity between primitive and conceptual aliases
+        // spec: contracts/concepts.contract.md#CONCEPT-6 — Conceptual capability aliases
+        if (permissions.kv !== undefined && permissions.state !== undefined) {
+          errors.push({
+            severity: "error",
+            code: "PLAT-6",
+            path: `functions.${fnName}.permissions`,
+            message:
+              "Conflicting capability declaration: cannot declare both 'kv' and 'state' (PLAT-6)",
+          });
+        }
+        if (
+          permissions.objects !== undefined && permissions.data !== undefined
+        ) {
+          errors.push({
+            severity: "error",
+            code: "PLAT-6",
+            path: `functions.${fnName}.permissions`,
+            message:
+              "Conflicting capability declaration: cannot declare both 'objects' and 'data' (PLAT-6)",
+          });
+        }
+        if (
+          permissions.queues !== undefined && permissions.signal !== undefined
+        ) {
+          errors.push({
+            severity: "error",
+            code: "PLAT-6",
+            path: `functions.${fnName}.permissions`,
+            message:
+              "Conflicting capability declaration: cannot declare both 'queues' and 'signal' (PLAT-6)",
+          });
         }
 
-        // Objects bucket scoping: exactly one declared bucket allowed (PLAT-6)
-        if (permissions.objects !== undefined) {
-          if (!Array.isArray(permissions.objects)) {
+        const validateCapabilityArray = (
+          capKey: "kv" | "state" | "objects" | "data" | "queues" | "signal",
+          label: string,
+          pluralType: string,
+        ) => {
+          const val = (permissions as Record<string, unknown>)[capKey];
+          if (val === undefined) return;
+          if (!Array.isArray(val)) {
             errors.push({
               severity: "error",
               code: "PLAT-6",
-              path: `functions.${fnName}.permissions.objects`,
-              message:
-                `Objects permissions must be an array of strings (PLAT-6)`,
+              path: `functions.${fnName}.permissions.${capKey}`,
+              message: `${label} permissions must be an array of strings (PLAT-6)`,
             });
-          } else if (permissions.objects.length > 1) {
+          } else if (val.length > 1) {
             errors.push({
               severity: "error",
               code: "PLAT-6",
-              path: `functions.${fnName}.permissions.objects`,
+              path: `functions.${fnName}.permissions.${capKey}`,
               message:
-                `Ambiguous scope: function cannot declare multiple Object stores (PLAT-6)`,
+                `Ambiguous scope: function cannot declare multiple ${pluralType} (PLAT-6)`,
             });
           } else {
-            for (let i = 0; i < permissions.objects.length; i++) {
-              const o = permissions.objects[i];
-              if (typeof o !== "string" || o.trim() === "") {
+            for (let i = 0; i < val.length; i++) {
+              const item = val[i];
+              const path = `functions.${fnName}.permissions.${capKey}[${i}]`;
+              if (typeof item !== "string" || item.trim() === "") {
                 errors.push({
                   severity: "error",
                   code: "PLAT-6",
-                  path: `functions.${fnName}.permissions.objects[${i}]`,
+                  path,
                   message:
-                    `Objects permission entry must be a non-empty string identifier (PLAT-6)`,
+                    `${label} permission entry must be a non-empty string identifier (PLAT-6)`,
+                });
+              } else if (
+                item.includes("..") ||
+                item.includes("/") ||
+                item.includes("\\") ||
+                item.includes("\0")
+              ) {
+                // spec: contracts/platform.contract.md#PLAT-7 — Path traversal and separator protection
+                errors.push({
+                  severity: "error",
+                  code: "PLAT-7",
+                  path,
+                  message:
+                    "Invalid resource identifier: path traversal detected (PLAT-7)",
                 });
               }
             }
           }
-        }
+        };
 
-        // Queues capability scoping: exactly one declared target queue allowed (PLAT-6, FN-4)
-        if (permissions.queues !== undefined) {
-          if (!Array.isArray(permissions.queues)) {
-            errors.push({
-              severity: "error",
-              code: "PLAT-6",
-              path: `functions.${fnName}.permissions.queues`,
-              message:
-                `Queues permissions must be an array of strings (PLAT-6)`,
-            });
-          } else if (permissions.queues.length > 1) {
-            errors.push({
-              severity: "error",
-              code: "PLAT-6",
-              path: `functions.${fnName}.permissions.queues`,
-              message:
-                `Ambiguous scope: function cannot declare multiple Queues (PLAT-6)`,
-            });
-          } else {
-            for (let i = 0; i < permissions.queues.length; i++) {
-              const q = permissions.queues[i];
-              if (typeof q !== "string" || q.trim() === "") {
-                errors.push({
-                  severity: "error",
-                  code: "PLAT-6",
-                  path: `functions.${fnName}.permissions.queues[${i}]`,
-                  message:
-                    `Queue permission entry must be a non-empty string identifier (PLAT-6)`,
-                });
-              }
-            }
-          }
-        }
+        validateCapabilityArray("kv", "KV", "KV namespaces");
+        validateCapabilityArray("state", "State", "State namespaces");
+        validateCapabilityArray("objects", "Objects", "Object stores");
+        validateCapabilityArray("data", "Data", "Data stores");
+        validateCapabilityArray("queues", "Queues", "Queues");
+        validateCapabilityArray("signal", "Signal", "Signals");
 
         // Network permissions: SSRF block verification (PLAT-5)
         if (permissions.network !== undefined) {

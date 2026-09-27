@@ -95,8 +95,11 @@ interface FunctionConfig {
   auth?: "bearer" | "none";
   permissions?: {
     kv?: string[];
+    state?: string[];
     objects?: string[];
+    data?: string[];
     queues?: string[];
+    signal?: string[];
     network?: string[];
     secrets?: string[];
   };
@@ -360,13 +363,19 @@ export async function runDeploy(
           const lower = c.toLowerCase().trim();
           if (lower.startsWith("kv") || lower === "kv") {
             synth.kv = synth.kv ?? ["default"];
+          } else if (lower.startsWith("state") || lower === "state") {
+            synth.state = synth.state ?? ["default"];
           } else if (
             lower.startsWith("object") || lower.startsWith("s3") ||
             lower === "objects"
           ) {
             synth.objects = synth.objects ?? ["default"];
+          } else if (lower.startsWith("data") || lower === "data") {
+            synth.data = synth.data ?? ["default"];
           } else if (lower.startsWith("queue") || lower === "queues") {
             synth.queues = synth.queues ?? ["default"];
+          } else if (lower.startsWith("signal") || lower === "signal") {
+            synth.signal = synth.signal ?? ["default"];
           } else if (
             lower === "env" || lower === "secrets" ||
             lower.startsWith("env:") || lower.startsWith("secret:") ||
@@ -612,7 +621,16 @@ export async function runDeploy(
           );
         }
 
-        for (const key of ["kv", "objects", "queues"] as const) {
+        for (
+          const key of [
+            "kv",
+            "state",
+            "objects",
+            "data",
+            "queues",
+            "signal",
+          ] as const
+        ) {
           const val = (fnConfig.permissions as Record<string, unknown>)[key];
           if (val !== undefined && !Array.isArray(val)) {
             throw new ValidationFailedError(
@@ -671,7 +689,43 @@ export async function runDeploy(
           );
         }
 
-        for (const key of ["kv", "objects", "queues"] as const) {
+        // spec: contracts/platform.contract.md#PLAT-6 — Mutual exclusivity between primitive and conceptual aliases
+        // spec: contracts/concepts.contract.md#CONCEPT-6 — Conceptual capability aliases
+        if (
+          fnConfig.permissions.kv !== undefined &&
+          fnConfig.permissions.state !== undefined
+        ) {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Conflicting capability declaration: cannot declare both 'kv' and 'state' (PLAT-6)`,
+          );
+        }
+        if (
+          fnConfig.permissions.objects !== undefined &&
+          fnConfig.permissions.data !== undefined
+        ) {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Conflicting capability declaration: cannot declare both 'objects' and 'data' (PLAT-6)`,
+          );
+        }
+        if (
+          fnConfig.permissions.queues !== undefined &&
+          fnConfig.permissions.signal !== undefined
+        ) {
+          throw new ValidationFailedError(
+            `VALIDATION_FAILED: Conflicting capability declaration: cannot declare both 'queues' and 'signal' (PLAT-6)`,
+          );
+        }
+
+        const capSpecs = [
+          { key: "kv", label: "KV namespaces" },
+          { key: "state", label: "State namespaces" },
+          { key: "objects", label: "Objects buckets" },
+          { key: "data", label: "Data stores" },
+          { key: "queues", label: "Queues" },
+          { key: "signal", label: "Signals" },
+        ] as const;
+
+        for (const { key, label } of capSpecs) {
           const val = (fnConfig.permissions as Record<string, unknown>)[key];
           if (val !== undefined) {
             if (!Array.isArray(val)) {
@@ -681,19 +735,23 @@ export async function runDeploy(
             }
             if (val.length > 1) {
               throw new ValidationFailedError(
-                `VALIDATION_FAILED: Ambiguous scope: multiple ${
-                  key === "kv"
-                    ? "KV namespaces"
-                    : key === "objects"
-                    ? "Objects buckets"
-                    : "Queues"
-                } declared for function '${fnName}' (ambiguous per PLAT-6)`,
+                `VALIDATION_FAILED: Ambiguous scope: multiple ${label} declared for function '${fnName}' (ambiguous per PLAT-6)`,
               );
             }
             for (const item of val) {
               if (typeof item !== "string" || item.trim() === "") {
                 throw new ValidationFailedError(
                   `VALIDATION_FAILED: Permission '${key}' entries for function '${fnName}' must be non-empty strings (PLAT-6)`,
+                );
+              }
+              if (
+                item.includes("..") ||
+                item.includes("/") ||
+                item.includes("\\") ||
+                item.includes("\0")
+              ) {
+                throw new ValidationFailedError(
+                  `VALIDATION_FAILED: Invalid resource identifier in '${key}': path traversal detected (PLAT-7)`,
                 );
               }
             }
@@ -947,7 +1005,7 @@ export async function runDeploy(
         // back to)
         const rolledBack: string[] = [];
         for (
-          const [fnName, revId] of Object.entries(
+          const [fnName, _revId] of Object.entries(
             canInspectPointers ? functionRevisions : {},
           )
         ) {

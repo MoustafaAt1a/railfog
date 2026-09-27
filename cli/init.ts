@@ -167,20 +167,34 @@ dist/
 
   if (template === "worked-example") {
     // spec: contracts/worked-example.md — Canonical worked-example pipeline
-    const tomlContent = `name = ${JSON.stringify(projectName)}
+    // spec: contracts/concepts.contract.md#CONCEPT-1..4 — Four Primitives (Compute, State, Data, Signal)
+    const tomlContent = `# RailFog Configuration (CONCEPT-1..4)
+# Four-Primitives Architecture:
+# - Compute (transform)   -> Function execution
+# - State   (remember)    -> KV namespace (or permissions.state)
+# - Data    (persist)     -> Object store  (or permissions.data)
+# - Signal  (communicate) -> Queue channel (or permissions.signal)
 
+name = ${JSON.stringify(projectName)}
+
+# Compute: upload API (CONCEPT-1, FN-1)
 [functions.api]
 entry = "functions/api.ts"
 [functions.api.permissions]
+# Data primitive: upload bucket (CONCEPT-3, OBJ-2)
 objects = ["app:uploads"]
+# Signal primitive: asynchronous event channel (CONCEPT-4, Q-2)
 queues = ["app:jobs"]
 
+# Compute: background event processor (CONCEPT-1, FN-2)
 [functions.processor]
 entry = "functions/processor.ts"
 [functions.processor.triggers]
 queue = "app:jobs"
 [functions.processor.permissions]
+# Data primitive: uploaded object access (CONCEPT-3, OBJ-2)
 objects = ["app:uploads"]
+# State primitive: deduplication & file metadata (CONCEPT-2, KV-2)
 kv = ["app:files"]
 
 [[routes]]
@@ -188,27 +202,42 @@ pattern = "/upload"
 function = "api"
 `;
 
-    // spec: contracts/worked-example.md — API handler with object presigning & queue dispatch
+    // spec: docs/contracts/worked-example.md — Canonical upload API handler
+    // spec: docs/contracts/concepts.contract.md#CONCEPT-1 — Compute: execution & transformation
+    // spec: docs/contracts/concepts.contract.md#CONCEPT-3 — Data: durable bulk persistence (c.data / c.objects)
+    // spec: docs/contracts/concepts.contract.md#CONCEPT-4 — Signal: asynchronous communication (c.signal / c.queues)
+    // spec: docs/contracts/objects.contract.md#OBJ-2 — Object presigning
+    // spec: docs/contracts/queues.contract.md#Q-2 — Queue dispatch
     const apiContent =
       `// spec: docs/contracts/worked-example.md — Canonical upload API handler
+// spec: docs/contracts/concepts.contract.md#CONCEPT-1 — Compute: execution & transformation
+// spec: docs/contracts/concepts.contract.md#CONCEPT-3 — Data: durable bulk persistence (c.data / c.objects)
+// spec: docs/contracts/concepts.contract.md#CONCEPT-4 — Signal: asynchronous communication (c.signal / c.queues)
 // spec: docs/contracts/objects.contract.md#OBJ-2 — Object presigning
 // spec: docs/contracts/queues.contract.md#Q-2 — Queue dispatch
-import type { RailFogContext } from "@railfog/sdk";
+import { handle, type HandlerContext } from "@railfog/sdk";
 
-export default async function handler(
-  _req: Request,
-  ctx: RailFogContext,
+export default handle(async function handler(
+  c: HandlerContext,
 ): Promise<Response> {
   const key = crypto.randomUUID();
-  const { url } = await ctx.objects.presign(key, { method: "PUT" });
-  await ctx.queues.send({ key, uploadedAt: Date.now() });
-  return Response.json({ uploadUrl: url, key });
-}
+  // Data primitive: presign upload URL using conceptual c.data (aliasing c.objects)
+  const { url } = await c.data.presign(key, { method: "PUT" });
+  // Signal primitive: dispatch processing job using conceptual c.signal (aliasing c.queues)
+  await c.signal.send({ key, uploadedAt: Date.now() });
+  return c.json({ uploadUrl: url, key });
+});
 `;
 
     // spec: contracts/worked-example.md — Queue consumer with KV deduplication & TTL
+    // spec: docs/contracts/concepts.contract.md#CONCEPT-1 — Compute: asynchronous execution
+    // spec: docs/contracts/concepts.contract.md#CONCEPT-2 — State: remember application state (c.state / c.kv)
+    // spec: docs/contracts/concepts.contract.md#CONCEPT-3 — Data: durable bulk persistence (c.data / c.objects)
     const processorContent =
       `// spec: docs/contracts/worked-example.md — Canonical queue consumer handler
+// spec: docs/contracts/concepts.contract.md#CONCEPT-1 — Compute: asynchronous execution
+// spec: docs/contracts/concepts.contract.md#CONCEPT-2 — State: remember application state (ctx.kv)
+// spec: docs/contracts/concepts.contract.md#CONCEPT-3 — Data: durable bulk persistence (ctx.objects)
 // spec: docs/contracts/queues.contract.md#Q-4 — Idempotency deduplication with mandatory TTL
 // spec: docs/contracts/kv.contract.md#KV-2 — KV binding set
 // spec: docs/contracts/objects.contract.md#OBJ-2 — Object get
@@ -223,11 +252,14 @@ export default async function consume(
   if (!key) return;
 
   const dedupeKey = ["processed", key];
+  // State primitive: deduplication check (ctx.kv)
   if (await ctx.kv.get(dedupeKey)) return;
 
+  // Data primitive: retrieve object stream (ctx.objects)
   const stream = await ctx.objects.get(key);
   if (!stream) return;
 
+  // State primitive: update metadata & mark dedupe with TTL (ctx.kv)
   await ctx.kv.set(["files", key], { status: "processed" });
   await ctx.kv.set(dedupeKey, true, { ttl: 14 * 24 * 3600 });
 }
@@ -247,12 +279,23 @@ export default async function consume(
   } else {
     // Default minimal template
     // spec: contracts/platform.contract.md#PLAT-19, FN-1
-    const tomlContent = `name = ${JSON.stringify(projectName)}
+    // spec: contracts/concepts.contract.md#CONCEPT-1 — Compute: primary execution
+    // spec: contracts/concepts.contract.md#CONCEPT-2 — State: small addressable key-value state
+    const tomlContent = `# RailFog Configuration (CONCEPT-1..4)
+# Four-Primitives Architecture:
+# - Compute (transform)   -> Function execution
+# - State   (remember)    -> KV namespace (or permissions.state)
+# - Data    (persist)     -> Object store  (or permissions.data)
+# - Signal  (communicate) -> Queue channel (or permissions.signal)
 
+name = ${JSON.stringify(projectName)}
+
+# Compute: primary HTTP handler (CONCEPT-1, FN-1)
 [functions.api]
 entry = "functions/api.ts"
 
 [functions.api.permissions]
+# State: application state / key-value storage (CONCEPT-2, KV-2)
 kv = ["app:data"]
 network = ["api.example.com"]
 
@@ -262,7 +305,9 @@ function = "api"
 `;
 
     const apiContent =
-      `// spec: docs/contracts/functions.contract.md#FN-1 — Default exported fetch handler
+      `// spec: docs/contracts/concepts.contract.md#CONCEPT-1 — Compute: execution & transformation
+// spec: docs/contracts/concepts.contract.md#CONCEPT-2 — State: remember application state (c.state / c.kv)
+// spec: docs/contracts/functions.contract.md#FN-1 — Default exported fetch handler
 import { handle } from "@railfog/sdk";
 
 export default handle(async function handler(c) {

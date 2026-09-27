@@ -1601,3 +1601,268 @@ capabilities = ["kv", "objects", "env"]
     await Deno.remove(dir, { recursive: true });
   }
 });
+
+// ============================================================================
+// Group: Milestone 0.9.1 / T-0919 Conceptual Capability Validation (PLAT-6, PLAT-7, CONCEPT-2, CONCEPT-6)
+// ============================================================================
+
+Deno.test("T-0919 / AC1 (CONCEPT-2, CONCEPT-6, PLAT-6): checkProject validates configuration with conceptual permissions (state, data, signal)", async () => {
+  const toml = `
+name = "conceptual-app"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+state = ["sessions"]
+data = ["uploads"]
+signal = ["jobs"]
+`;
+
+  const dir = await createTempProject(toml, { "api.ts": DEFAULT_HANDLER_TS });
+  try {
+    const result = await checkProject(dir);
+    assertEquals(
+      result.valid,
+      true,
+      "Conceptual permissions state, data, signal must validate cleanly",
+    );
+    assertEquals(result.errors.length, 0);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("T-0919 / AC2 (PLAT-6): checkProject rejects multiple namespaces for conceptual capabilities (state, data, signal)", async () => {
+  const stateToml = `
+name = "bad-state"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+state = ["sessions", "cache"]
+`;
+
+  const dir = await createTempProject(stateToml, {
+    "api.ts": DEFAULT_HANDLER_TS,
+  });
+  try {
+    const result = await checkProject(dir);
+    assertEquals(result.valid, false);
+    const err = result.errors.find((e) =>
+      e.path === "functions.api.permissions.state"
+    );
+    assertExists(err);
+    assertEquals(err.code, "PLAT-6");
+    assertEquals(
+      err.message,
+      "Ambiguous scope: function cannot declare multiple State namespaces (PLAT-6)",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+
+  const dataToml = `
+name = "bad-data"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+data = ["bucket1", "bucket2"]
+`;
+
+  const dirData = await createTempProject(dataToml, {
+    "api.ts": DEFAULT_HANDLER_TS,
+  });
+  try {
+    const result = await checkProject(dirData);
+    assertEquals(result.valid, false);
+    const err = result.errors.find((e) =>
+      e.path === "functions.api.permissions.data"
+    );
+    assertExists(err);
+    assertEquals(err.code, "PLAT-6");
+    assertEquals(
+      err.message,
+      "Ambiguous scope: function cannot declare multiple Data stores (PLAT-6)",
+    );
+  } finally {
+    await Deno.remove(dirData, { recursive: true });
+  }
+
+  const signalToml = `
+name = "bad-signal"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+signal = ["q1", "q2"]
+`;
+
+  const dirSignal = await createTempProject(signalToml, {
+    "api.ts": DEFAULT_HANDLER_TS,
+  });
+  try {
+    const result = await checkProject(dirSignal);
+    assertEquals(result.valid, false);
+    const err = result.errors.find((e) =>
+      e.path === "functions.api.permissions.signal"
+    );
+    assertExists(err);
+    assertEquals(err.code, "PLAT-6");
+    assertEquals(
+      err.message,
+      "Ambiguous scope: function cannot declare multiple Signals (PLAT-6)",
+    );
+  } finally {
+    await Deno.remove(dirSignal, { recursive: true });
+  }
+});
+
+Deno.test("T-0919 / AC3 (PLAT-6): checkProject enforces mutual exclusivity between primitive and conceptual aliases", async () => {
+  const kvStateToml = `
+name = "conflict-app"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+kv = ["sessions"]
+state = ["sessions"]
+`;
+
+  const dirKv = await createTempProject(kvStateToml, {
+    "api.ts": DEFAULT_HANDLER_TS,
+  });
+  try {
+    const result = await checkProject(dirKv);
+    assertEquals(result.valid, false);
+    const err = result.errors.find((e) =>
+      e.message ===
+        "Conflicting capability declaration: cannot declare both 'kv' and 'state' (PLAT-6)"
+    );
+    assertExists(
+      err,
+      "Must report PLAT-6 conflicting declaration for kv and state",
+    );
+    assertEquals(err.code, "PLAT-6");
+  } finally {
+    await Deno.remove(dirKv, { recursive: true });
+  }
+
+  const objDataToml = `
+name = "conflict-obj-data"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+objects = ["uploads"]
+data = ["uploads"]
+`;
+
+  const dirObj = await createTempProject(objDataToml, {
+    "api.ts": DEFAULT_HANDLER_TS,
+  });
+  try {
+    const result = await checkProject(dirObj);
+    assertEquals(result.valid, false);
+    const err = result.errors.find((e) =>
+      e.message ===
+        "Conflicting capability declaration: cannot declare both 'objects' and 'data' (PLAT-6)"
+    );
+    assertExists(
+      err,
+      "Must report PLAT-6 conflicting declaration for objects and data",
+    );
+    assertEquals(err.code, "PLAT-6");
+  } finally {
+    await Deno.remove(dirObj, { recursive: true });
+  }
+
+  const queueSignalToml = `
+name = "conflict-queue-signal"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+queues = ["jobs"]
+signal = ["jobs"]
+`;
+
+  const dirQueue = await createTempProject(queueSignalToml, {
+    "api.ts": DEFAULT_HANDLER_TS,
+  });
+  try {
+    const result = await checkProject(dirQueue);
+    assertEquals(result.valid, false);
+    const err = result.errors.find((e) =>
+      e.message ===
+        "Conflicting capability declaration: cannot declare both 'queues' and 'signal' (PLAT-6)"
+    );
+    assertExists(
+      err,
+      "Must report PLAT-6 conflicting declaration for queues and signal",
+    );
+    assertEquals(err.code, "PLAT-6");
+  } finally {
+    await Deno.remove(dirQueue, { recursive: true });
+  }
+});
+
+Deno.test("T-0919 / AC4 / Security (PLAT-7): checkProject rejects resource identifiers with path traversal or illegal characters", async () => {
+  const badCases = [
+    { cap: "state", val: "../secret_store" },
+    { cap: "data", val: "foo/bar" },
+    { cap: "signal", val: "queue\\traversal" },
+    { cap: "kv", val: "null\0byte" },
+  ];
+
+  for (const { cap, val } of badCases) {
+    const toml = `
+name = "traversal-app"
+
+[functions.api]
+entry = "api.ts"
+route = "/api/*"
+
+[functions.api.permissions]
+${cap} = [${JSON.stringify(val)}]
+`;
+
+    const dir = await createTempProject(toml, {
+      "api.ts": DEFAULT_HANDLER_TS,
+    });
+    try {
+      const result = await checkProject(dir);
+      assertEquals(
+        result.valid,
+        false,
+        `Resource identifier '${val}' in '${cap}' must be rejected`,
+      );
+      const err = result.errors.find((e) =>
+        e.code === "PLAT-7" &&
+        e.message ===
+          "Invalid resource identifier: path traversal detected (PLAT-7)"
+      );
+      assertExists(
+        err,
+        `Must report PLAT-7 path traversal error for '${val}'`,
+      );
+    } finally {
+      await Deno.remove(dir, { recursive: true });
+    }
+  }
+});
+
