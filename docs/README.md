@@ -19,6 +19,10 @@ $$\begin{aligned}
 \mathbf{Signal} &\longrightarrow \text{Queue} && (\text{Communicate / } \textit{communicate})
 \end{aligned}$$
 
+<p align="center">
+  <img src="assets/demo.gif" alt="RailFog CLI Terminal Experience" width="850" />
+</p>
+
 ---
 
 ## Documentation Navigation Map

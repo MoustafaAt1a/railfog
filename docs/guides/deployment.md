@@ -76,6 +76,8 @@ Run `rail deploy` from the project root:
 rail deploy
 ```
 
+![RailFog Production Deployment](../assets/cli-deploy.gif)
+
 Sample output:
 
 ```text

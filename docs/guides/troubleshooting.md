@@ -22,6 +22,8 @@ performance:
 rail doctor
 ```
 
+![RailFog Doctor Platform Diagnostics](../assets/cli-doctor.gif)
+
 Sample output:
 
 ```text

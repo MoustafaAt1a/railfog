@@ -9,6 +9,17 @@ This guide walks you through installing the RailFog CLI, creating a project,
 running the local development server with SQLite backing services, and deploying
 to production.
 
+## Interactive Terminal Experience
+
+![RailFog Terminal Walkthrough](../assets/demo.gif)
+
+> [!TIP]
+> Reproduce or customize this terminal demo using Charm VHS:
+>
+> ```bash
+> vhs docs/assets/demo.tape
+> ```
+
 ---
 
 ## Step 1: Install the RailFog CLI (`rail`)

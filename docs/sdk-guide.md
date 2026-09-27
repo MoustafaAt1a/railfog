@@ -427,7 +427,7 @@ export default async function consume(
 ### 7.1 Minimalist Compute Handler (`compute` / `handle`)
 
 Eliminates boilerplate with auto-destructured context and automatic JSON
-response serialization. In v0.9.1, `compute` is the canonical conceptual entrypoint,
+response serialization. In v0.9.2, `compute` is the canonical conceptual entrypoint,
 aliasing `handle`:
 
 ```typescript

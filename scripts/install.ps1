@@ -291,7 +291,7 @@ Write-CardLine -Content "  Preflight Signal Board:"
 
 # Preflight: rail --version
 if ($IsDryRun) {
-    Write-CardLine -Content "    [+] rail --version .............. 0.9.0 (beta)"
+    Write-CardLine -Content "    [+] rail --version .............. 0.9.2 (beta)"
     Write-CardLine -Content "    [+] PATH ........................ simulated"
 } else {
     if ($RailVersion) {

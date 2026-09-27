@@ -1105,8 +1105,9 @@ Deno.test("AC2 (T-0806): runInteractiveInit scaffolds worked-example template wi
       join(targetDir, "functions", "processor.ts"),
     );
     assert(
-      procCode.includes("kv.get") && procCode.includes("kv.set"),
-      "Worked-example processor.ts must use KV per KV-2/Q-4",
+      (procCode.includes("state.get") || procCode.includes("kv.get")) &&
+        (procCode.includes("state.set") || procCode.includes("kv.set")),
+      "Worked-example processor.ts must use State/KV per CONCEPT-2/KV-2/Q-4",
     );
 
     // 3. Verify checkProject passes cleanly

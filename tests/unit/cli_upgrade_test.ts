@@ -226,7 +226,7 @@ Deno.test(
 
         return Promise.resolve(
           new Response(
-            'export const CLI_VERSION = "0.9.0";\n',
+            'export const CLI_VERSION = "0.9.2";\n',
             { status: 200, headers: { "content-type": "text/plain" } },
           ),
         );
@@ -241,7 +241,7 @@ Deno.test(
         fetchedUrl.includes("main"),
         `Fetched URL should reference default ref 'main'. Got: ${fetchedUrl}`,
       );
-      assertEquals(latest, "0.9.0");
+      assertEquals(latest, "0.9.2");
     } finally {
       globalThis.fetch = originalFetch;
     }

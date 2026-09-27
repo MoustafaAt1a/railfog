@@ -6,7 +6,7 @@
  *
  * @spec docs/contracts/platform.contract.md#PLAT-19
  */
-export const CLI_VERSION = "0.9.0";
+export const CLI_VERSION = "0.9.2";
 
 // Repo coordinates used to build pinned remote-source URLs. Scaffolds and
 // reinstall hints reference the v{CLI_VERSION} TAG, never a mutable branch —

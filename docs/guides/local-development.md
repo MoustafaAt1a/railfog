@@ -19,6 +19,8 @@ Start the local server from your project root:
 rail dev
 ```
 
+![RailFog Local Dev Server](../assets/cli-dev.gif)
+
 By default, the server binds to `http://localhost:8000` and displays the startup
 banner:
 

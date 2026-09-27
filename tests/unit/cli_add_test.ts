@@ -10,6 +10,7 @@ import {
 } from "@std/assert";
 import { join, resolve } from "@std/path";
 import { type AddOptions, type AddResult, runAdd } from "../../cli/add.ts";
+import { CLI_VERSION } from "../../cli/version.ts";
 
 // ============================================================================
 // Group 1: Adding @railfog/sdk to existing deno.json (AC 1, PLAT-19)
@@ -280,7 +281,7 @@ Deno.test("AC3 (PLAT-19): runAdd completes idempotently when @railfog/sdk is alr
   try {
     const denoJsonPath = join(tempDir, "deno.json");
     const canonicalSdkUrl =
-      "https://raw.githubusercontent.com/MoustafaAt1a/railfog/v0.9.0/sdk/typescript/mod.ts";
+      `https://raw.githubusercontent.com/MoustafaAt1a/railfog/v${CLI_VERSION}/sdk/typescript/mod.ts`;
 
     const initialConfig = {
       tasks: {

@@ -25,7 +25,7 @@ This injects `@railfog/sdk` into your `deno.json` imports map.
 
 ## Ergonomic Handlers (`compute()`, `handle()` & `api()`)
 
-Write minimal functions with zero boilerplate using the v0.9.1 Four-Primitives model.
+Write minimal functions with zero boilerplate using the v0.9.2 Four-Primitives model.
 
 ### Ultra-Minimalist Compute Handler: `compute()` / `handle()`
 
@@ -169,7 +169,7 @@ export interface RailFogContext {
   queues: QueueBinding; // Capability-scoped Queue sender (Q-2)
   env: EnvBinding; // Capability-scoped secrets access (PLAT-15)
 
-  // Canonical Conceptual Aliases (v0.9.1 Unified Specification)
+  // Canonical Conceptual Aliases (v0.9.2 Unified Specification)
   state?: KVBinding; // Conceptual State binding (alias to kv)
   data?: ObjectBinding; // Conceptual Data binding (alias to objects)
   signal?: QueueBinding; // Conceptual Signal binding (alias to queues)

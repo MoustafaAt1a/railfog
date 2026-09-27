@@ -3,7 +3,7 @@
 > [!NOTE]
 > **Documentation**: [Docs Home](../README.md) &nbsp;|&nbsp; **Specification**:
 > [`PLAT-19`](../contracts/platform.contract.md#PLAT-19) &nbsp;|&nbsp; **CLI
-> Version**: `0.9.0`
+> Version**: `0.9.2`
 
 This is the comprehensive reference for all commands, options, environment
 variables, and exit codes supported by the RailFog command-line interface
@@ -48,6 +48,8 @@ variables, and exit codes supported by the RailFog command-line interface
 Scaffolds a new project directory with `railfog.toml`, `deno.json`, and starter
 function handlers.
 
+![rail init](../assets/cli-init.gif)
+
 ```bash
 rail init [directory] [options]
 ```
@@ -65,6 +67,8 @@ rail init [directory] [options]
 ### 2. `rail dev`
 
 Boots the local development server with SQLite backing services (`PLAT-17`).
+
+![rail dev](../assets/cli-dev.gif)
 
 ```bash
 rail dev [options]
@@ -84,6 +88,8 @@ rail dev [options]
 Performs static analysis on `railfog.toml`, entrypoint files, and capability
 declarations.
 
+![rail check](../assets/cli-check.gif)
+
 ```bash
 rail check [path]
 ```
@@ -101,6 +107,8 @@ rail check [path]
 Packages TypeScript sources into content-addressed immutable artifacts
 (`OBJ-4`), creates a revision record (`FN-3`), pre-warms runtime sandboxes, and
 activates live traffic.
+
+![rail deploy](../assets/cli-deploy.gif)
 
 ```bash
 rail deploy [options]
@@ -190,6 +198,8 @@ rail import --input backup.rfz
 
 Inspects Deno version, file read/write permissions, network connectivity, and
 isolate cold-start latency.
+
+![rail doctor](../assets/cli-doctor.gif)
 
 ```bash
 rail doctor

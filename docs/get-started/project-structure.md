@@ -11,8 +11,11 @@ RailFog application.
 
 ## Standard Directory Layout
 
-When you initialize a project using `rail init`, the following directory
-structure is created:
+When you initialize a project using `rail init`, the interactive terminal ticket scaffolds your application:
+
+![RailFog Project Scaffolding](../assets/cli-init.gif)
+
+The following directory structure is created:
 
 ```text
 my-project/

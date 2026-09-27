@@ -64,6 +64,12 @@ $$\text{score} = (\text{literal\_segments} \times 2) + (\text{wildcard\_segments
 | `/api/*`                | 1             | 1                    | $(1 \times 2) + (1 \times 1)$ | **3** | 4th                  |
 | `/*`                    | 0             | 1                    | $(0 \times 2) + (1 \times 1)$ | **1** | 5th (Lowest)         |
 
+### Visual Route Resolution & Specificity Inspection (`rail check`)
+
+Run `rail check` to statically validate your route table and calculate specificity scores:
+
+![RailFog Route Specificity Resolution](../assets/cli-check.gif)
+
 ---
 
 ## 3. Testing Route Matching with `rail simulate`

@@ -215,9 +215,9 @@ function = "api"
 // spec: docs/contracts/concepts.contract.md#CONCEPT-4 — Signal: asynchronous communication (c.signal / c.queues)
 // spec: docs/contracts/objects.contract.md#OBJ-2 — Object presigning
 // spec: docs/contracts/queues.contract.md#Q-2 — Queue dispatch
-import { handle, type HandlerContext } from "@railfog/sdk";
+import { compute, type HandlerContext } from "@railfog/sdk";
 
-export default handle(async function handler(
+export default compute(async function handler(
   c: HandlerContext,
 ): Promise<Response> {
   const key = crypto.randomUUID();
@@ -236,8 +236,8 @@ export default handle(async function handler(
     const processorContent =
       `// spec: docs/contracts/worked-example.md — Canonical queue consumer handler
 // spec: docs/contracts/concepts.contract.md#CONCEPT-1 — Compute: asynchronous execution
-// spec: docs/contracts/concepts.contract.md#CONCEPT-2 — State: remember application state (ctx.kv)
-// spec: docs/contracts/concepts.contract.md#CONCEPT-3 — Data: durable bulk persistence (ctx.objects)
+// spec: docs/contracts/concepts.contract.md#CONCEPT-2 — State: remember application state (ctx.state / ctx.kv)
+// spec: docs/contracts/concepts.contract.md#CONCEPT-3 — Data: durable bulk persistence (ctx.data / ctx.objects)
 // spec: docs/contracts/queues.contract.md#Q-4 — Idempotency deduplication with mandatory TTL
 // spec: docs/contracts/kv.contract.md#KV-2 — KV binding set
 // spec: docs/contracts/objects.contract.md#OBJ-2 — Object get
@@ -252,16 +252,16 @@ export default async function consume(
   if (!key) return;
 
   const dedupeKey = ["processed", key];
-  // State primitive: deduplication check (ctx.kv)
-  if (await ctx.kv.get(dedupeKey)) return;
+  // State primitive: deduplication check (ctx.state / ctx.kv)
+  if (await ctx.state.get(dedupeKey)) return;
 
-  // Data primitive: retrieve object stream (ctx.objects)
-  const stream = await ctx.objects.get(key);
+  // Data primitive: retrieve object stream (ctx.data / ctx.objects)
+  const stream = await ctx.data.get(key);
   if (!stream) return;
 
-  // State primitive: update metadata & mark dedupe with TTL (ctx.kv)
-  await ctx.kv.set(["files", key], { status: "processed" });
-  await ctx.kv.set(dedupeKey, true, { ttl: 14 * 24 * 3600 });
+  // State primitive: update metadata & mark dedupe with TTL (ctx.state / ctx.kv)
+  await ctx.state.set(["files", key], { status: "processed" });
+  await ctx.state.set(dedupeKey, true, { ttl: 14 * 24 * 3600 });
 }
 `;
 
@@ -308,9 +308,9 @@ function = "api"
       `// spec: docs/contracts/concepts.contract.md#CONCEPT-1 — Compute: execution & transformation
 // spec: docs/contracts/concepts.contract.md#CONCEPT-2 — State: remember application state (c.state / c.kv)
 // spec: docs/contracts/functions.contract.md#FN-1 — Default exported fetch handler
-import { handle } from "@railfog/sdk";
+import { compute } from "@railfog/sdk";
 
-export default handle(async function handler(c) {
+export default compute(async function handler(c) {
   return c.text("Hello from RailFog!");
 });
 `;

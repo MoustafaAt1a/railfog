@@ -17,6 +17,10 @@ primitives: **Functions**, **KV**, **Objects**, and **Queues**.
 
 $$\mathbf{Compute} \ (\text{Function}) \longleftrightarrow \mathbf{State} \ (\text{KV}) \longleftrightarrow \mathbf{Data} \ (\text{Object}) \longleftrightarrow \mathbf{Signal} \ (\text{Queue})$$
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="RailFog CLI Terminal Experience" width="850" />
+</p>
+
 ---
 
 ## Architecture Overview
