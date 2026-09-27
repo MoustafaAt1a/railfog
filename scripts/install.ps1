@@ -149,10 +149,16 @@ if ($IsDryRun) {
 
             if (Get-Command deno -ErrorAction SilentlyContinue) {
                 Write-Info "Compiling RailFog via Deno..."
+                $TempConfig = Join-Path ([System.IO.Path]::GetTempPath()) "railfog-deno-$([System.Guid]::NewGuid().ToString('N')).json"
                 try {
-                    deno compile -A --config "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json" -o $BinaryPath "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts"
+                    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json" -OutFile $TempConfig -UseBasicParsing
+                    deno compile -A --config "$TempConfig" -o $BinaryPath "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts"
                 } catch {
                     $InstallOk = $false
+                } finally {
+                    if (Test-Path $TempConfig) {
+                        Remove-Item -Path $TempConfig -Force -ErrorAction SilentlyContinue
+                    }
                 }
             } else {
                 $InstallOk = $false

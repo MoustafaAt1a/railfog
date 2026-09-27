@@ -171,7 +171,18 @@ else
 
     if command -v deno >/dev/null 2>&1; then
       printf "         ${CYAN}[i]${RESET} Compiling RailFog via Deno...\n"
-      deno install -g -A -f --config https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json -n rail https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts 2>/dev/null || INSTALL_OK="no"
+      TMP_CONFIG="/tmp/railfog-deno-$$.json"
+      if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json" -o "$TMP_CONFIG" 2>/dev/null || true
+      elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$TMP_CONFIG" "https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/deno.json" 2>/dev/null || true
+      fi
+      if [ -s "$TMP_CONFIG" ]; then
+        deno install -g -A -f --config "$TMP_CONFIG" -n rail https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts 2>/dev/null || INSTALL_OK="no"
+        rm -f "$TMP_CONFIG"
+      else
+        deno install -g -A -f -n rail https://raw.githubusercontent.com/MoustafaAt1a/railfog/main/cli/main.ts 2>/dev/null || INSTALL_OK="no"
+      fi
     else
       printf "         ${YELLOW}[!]${RESET} Deno is required to install RailFog from source.\n"
       printf "         ${YELLOW}[!]${RESET} Install Deno from https://deno.land and re-run this script.\n"

@@ -213,6 +213,7 @@ export async function runInstaller(options: InstallerOptions): Promise<{
   try {
     let configPath: string;
     let target: string;
+    let remoteDenoJsonContent = "";
 
     if (!isLocal) {
       // spec: contracts/platform.contract.md#PLAT-19, PLAT-15 — Remote GitHub config validation
@@ -300,7 +301,29 @@ export async function runInstaller(options: InstallerOptions): Promise<{
         };
       }
 
-      const denoJsonContent = await response.text();
+      let denoJsonContent = await response.text();
+
+      // Ensure any relative package / SDK import paths are rewritten to full immutable raw URLs
+      // so when Deno runs the remote script shim, it resolves dependencies remotely rather than
+      // attempting to resolve against a deleted temporary directory.
+      try {
+        const parsed = JSON.parse(denoJsonContent);
+        if (parsed.imports && typeof parsed.imports === "object") {
+          for (const [k, v] of Object.entries(parsed.imports)) {
+            if (typeof v === "string" && v.startsWith("./")) {
+              parsed.imports[k] =
+                `https://raw.githubusercontent.com/${repo}/${pinnedRef}/${
+                  v.replace(/^\.\//, "")
+                }`;
+            }
+          }
+          denoJsonContent = JSON.stringify(parsed, null, 2);
+        }
+      } catch {
+        // Fallback to raw content if parse fails
+      }
+
+      remoteDenoJsonContent = denoJsonContent;
       tempDir = await Deno.makeTempDir({ prefix: "railfog-install-" });
       configPath = join(tempDir, "deno.json");
       await Deno.writeTextFile(configPath, denoJsonContent);
@@ -398,6 +421,24 @@ export async function runInstaller(options: InstallerOptions): Promise<{
         await Deno.remove(exePath);
       } catch {
         // Best effort: may not exist or may be locked
+      }
+    }
+
+    // For non-compiled script shims (rail.cmd / rail), persist the resolved config to .rail/deno.json
+    // in the bin directory so that bare imports (@std/toml, @std/path, etc.) are always resolvable.
+    if (!options.compile) {
+      try {
+        const railConfigDir = join(paths.binDir, ".rail");
+        await Deno.mkdir(railConfigDir, { recursive: true });
+        const configToPersist = isLocal
+          ? await Deno.readTextFile(configPath)
+          : remoteDenoJsonContent;
+        await Deno.writeTextFile(
+          join(railConfigDir, "deno.json"),
+          configToPersist,
+        );
+      } catch {
+        // Best-effort config synchronization
       }
     }
 

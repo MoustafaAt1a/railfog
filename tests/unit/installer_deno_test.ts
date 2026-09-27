@@ -382,6 +382,21 @@ Deno.test(
         "RailFog CLI",
         "Installed executable --help stdout must contain 'RailFog CLI'",
       );
+
+      // Verify that bin/.rail/deno.json exists and contains imports for @std/toml and @std/path
+      const railConfigPath = join(expectedBinDir, ".rail", "deno.json");
+      const railConfigStat = await Deno.stat(railConfigPath);
+      assert(railConfigStat.isFile, ".rail/deno.json must exist in binDir");
+      const railConfigText = await Deno.readTextFile(railConfigPath);
+      const parsedRailConfig = JSON.parse(railConfigText);
+      assert(
+        parsedRailConfig.imports?.["@std/toml"],
+        ".rail/deno.json must include '@std/toml' import",
+      );
+      assert(
+        parsedRailConfig.imports?.["@std/path"],
+        ".rail/deno.json must include '@std/path' import",
+      );
     } finally {
       try {
         await Deno.remove(tempRoot, { recursive: true });
