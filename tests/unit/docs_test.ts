@@ -175,7 +175,10 @@ function prepareSnippetForCheck(snippet: string, sdkModUrl: string): string {
   }
 
   // Declare ambient variables if used as free variables in expressions/statements
-  const codeWithoutComments = prepared.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+  const codeWithoutComments = prepared.replace(
+    /\/\*[\s\S]*?\*\/|\/\/.*$/gm,
+    "",
+  );
   const ambientDeclarations: string[] = [];
   if (
     /(?<![\.\w])\bctx\b/.test(codeWithoutComments) &&
@@ -248,9 +251,12 @@ function prepareSnippetForCheck(snippet: string, sdkModUrl: string): string {
     );
     let ambientTypesImport = "";
     if (ambientTypes.length > 0) {
-      ambientTypesImport = `import type { ${ambientTypes.join(", ")} } from "${sdkModUrl}";\n`;
+      ambientTypesImport = `import type { ${
+        ambientTypes.join(", ")
+      } } from "${sdkModUrl}";\n`;
     }
-    prepared = ambientTypesImport + ambientDeclarations.join("\n") + "\n" + prepared;
+    prepared = ambientTypesImport + ambientDeclarations.join("\n") + "\n" +
+      prepared;
   }
 
   return prepared;

@@ -1592,7 +1592,11 @@ Deno.test("CONCEPT-2: compute() is an exact functional alias for handle() establ
   const handler = compute(async ({ state, data, signal, json }) => {
     await state.set(["item", "1"], "apple");
     const val = await state.get(["item", "1"]);
-    return json({ val, hasData: data !== undefined, hasSignal: signal !== undefined });
+    return json({
+      val,
+      hasData: data !== undefined,
+      hasSignal: signal !== undefined,
+    });
   });
 
   const ctx = createMockRailFogContext();
@@ -1628,4 +1632,3 @@ Deno.test("CONCEPT-2 & Q-2: consumer() provides c.state, c.data, and c.signal to
   assertEquals(executed, true);
   assertEquals(await ctx.kv.get(["processed", "msg_conceptual_001"]), true);
 });
-
