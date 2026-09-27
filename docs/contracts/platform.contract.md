@@ -24,7 +24,8 @@ it makes the threat model meaningless (`docs/00-deep-analysis.md` §3).
 
 HTTP, cron, queue consumption are all triggers targeting a Function. No
 separate Worker/API/Cron service exists or should be created
-(functions.contract.md FN-2).
+(functions.contract.md FN-2). Trigger invokes Compute-as-Function
+(`docs/contracts/concepts.contract.md` CONCEPT-1); it is not a fifth primitive.
 
 ## PLAT-3 — Deployment pipeline
 
