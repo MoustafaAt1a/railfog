@@ -19,6 +19,7 @@ since correct task sizing depends on what's already built
 | **0.75 Backing Services & Auth** | PostgreSQL persistence, Redis cache, persistent API key auth middleware | Connect Railway backing infrastructure and secure daemons |
 | **0.8 Developer Experience & UX Polish** | Zero-copy callback auth, interactive TUI (spinners/prompts), universal 1-line installers | Railway/Vercel-tier frictionless developer experience |
 | **0.9 Deep System Audit & Hardening** | Exhaustive architecture audit, DFA lexical analysis, loopback rate-limiting tuning, 100% test pass rate | Mathematically grounded, slop-free, rock-solid release candidate |
+| **0.9.1 Unified Four-Primitives & SDK Specification** | Formalized conceptual layer (Compute, State, Data, Signal), ADR-0005, schema aliases, packager normalization, CLI validation/scaffolding, SDK context ergonomics | Unify developer mental model and lock concepts contract with zero regressions |
 | **1.0.0 LTS** | Full verification suite, leak elimination, payload limits, DOD route cache, param groups | API stable, runtime stable, security tested, rollback reliable, export works, docs complete |
 
 ## Dependency notes for decomposition

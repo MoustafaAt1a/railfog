@@ -1,0 +1,109 @@
+# Deno & Build outputs
+.deno/
+deno.lock.bak
+coverage/
+*.lcov
+bin/
+dist/
+build/
+out/
+target/
+*.exe
+*.bin
+*.dll
+*.dylib
+*.so
+
+# Local dev data & runtime caches (SQLite-backed local providers, T-0104/T-0106)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.railfog/
+.railfog/local/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Editor & IDE
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+
+# Environment variables & secrets (PLAT-15)
+.env
+.env.*
+!.env.example
+
+# Temporary, scratch, and log files
+tmp/
+.tmp/
+scratch/
+*.log
+*.heapsnapshot
+*.cpuprofile
+
+# AI Assistants, Agents & Artifacts (Prevent AI artifacts from being pushed to GitHub)
+.serena/
+.gemini/
+.claude/
+.cursor/
+.cursorrules
+.windsurf/
+.codeium/
+.aider*
+.copilot/
+.antigravity/
+brain/
+.brain/
+artifacts/
+.artifacts/
+*.artifact.*
+*.transcript.jsonl
+*.transcript.json
+.system_generated/
+.agents/scratch/
+.agents/artifacts/
+.agents/tmp/
+.agents/logs/
+.agents/docs/
+graphify-out/
+.graphify/
+
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+node_modules/
+bower_components/
+jspm_packages/
+__pycache__/
+site-packages/
+venv/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）
