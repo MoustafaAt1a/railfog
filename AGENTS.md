@@ -117,6 +117,22 @@ Skills auto-trigger by description, but here's the map (full detail in
 - `deep-system-testing` — exhaustive boundary, concurrency, and leak testing methodology.
 - `root-cause-debugging` — 6-step hypothesis-driven forensic debugging and surgical bug fixing.
 - `use-railway` — Railway deployment, environments, services, buckets, and CLI operation.
+- `charm-vhs` — terminal demo recording with Charmbracelet VHS.
+- `cloud-foundation-fabric` — Google Cloud CFF Terraform infrastructure composition.
+- `d2` — text-defined declarative architecture and sequence diagrams.
+- `duckdb` — local and embedded analytical data queries and transformations.
+- `github-profile-architect` — digital magazine aesthetic and SVG profile architecture.
+- `graphify` — AST codebase knowledge graph indexing, queries, and path extraction.
+- `jq` — JSON query, slice, and stream transformations.
+- `opencode-dev` — agent workflows, MCP configuration, and tool management.
+- `playwright-cli` — browser automation, form submission, and end-to-end testing.
+- `skill-crawler` — crawls documentation into reusable agent skills.
+- `skill-registry-sync` — synchronizes README skill references from registry lockfiles.
+- `tech-writer` — technical solutions design, RFPs, and documentation manuals.
+- `terminal-ui-engineer` — terminal UX workflows and prompts with Charmbracelet Gum.
+- `terraform` — infrastructure as code composition, providers, and modules.
+- `worktrunk` — git worktree coordination for parallel agent workflows.
+- `writing` — clear, structured technical prose and documentation.
 
 This list is expected to grow. If you find a skill under `.agents/skills/`
 that isn't listed here, that's a registration gap — fix it per
