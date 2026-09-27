@@ -763,7 +763,7 @@ export function consumer<T = unknown>(
         ? options.dedupeKey(message as QueueMessage)
         : ["railfog_dedupe", message.id];
       await withIdempotency(
-        conceptualCtx.kv,
+        conceptualCtx.state,
         key,
         () => fn(message, conceptualCtx),
         { ttlSeconds: options.ttlSeconds },
